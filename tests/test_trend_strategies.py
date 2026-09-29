@@ -18,6 +18,7 @@ from scripts.trend_strategies import (
     load_csv,
     load_csv_dated,
     main,
+    portfolio_vol_target,
     run_portfolio,
     sma,
     supertrend,
@@ -417,3 +418,63 @@ def test_cli_vol_target_and_exclusive_sizing(capsys):
     assert "trend_ensemble" in capsys.readouterr().out
     with pytest.raises(SystemExit):
         main(["--demo", "--risk", "0.01", "--vol-target", "0.15"])
+
+
+def _random_walk(seed, n=800, sigma=0.01):
+    rng = __import__("random").Random(seed)
+    close = [100.0]
+    for _ in range(n - 1):
+        close.append(close[-1] * math.exp(rng.gauss(0, sigma)))
+    return close
+
+
+def test_portfolio_vol_target_hits_target_with_room():
+    closes = [_random_walk(1), _random_walk(2)]  # ~16 % anual cada uno, independientes
+    weights = [[0.5] * 800, [0.5] * 800]
+    scaled = portfolio_vol_target(closes, weights, target_vol=0.10, max_gross=10,
+                                  buffer=0.0)
+    assert scaled[0][:32] == [0.0] * 32
+    # Vol de la cartera 50/50 ~ 16 % / sqrt(2) ~ 11 %: el factor ronda 0.9.
+    gross = [scaled[0][i] + scaled[1][i] for i in range(100, 800)]
+    assert sum(gross) / len(gross) == pytest.approx(0.1 / (0.01 * math.sqrt(252) / math.sqrt(2)),
+                                                    rel=0.15)
+
+
+def test_portfolio_vol_target_respects_max_gross_and_zero():
+    closes = [_random_walk(3), _random_walk(4)]
+    weights = [[0.25] * 800, [-0.25] * 800]
+    scaled = portfolio_vol_target(closes, weights, target_vol=1.0, max_gross=1.5,
+                                  buffer=0.0)
+    assert max(abs(a) + abs(b) for a, b in zip(*scaled)) == pytest.approx(1.5)
+    assert all(a <= 0 for a in scaled[1])
+    zero = portfolio_vol_target(closes, [[0.0] * 800] * 2)
+    assert zero == [[0.0] * 800] * 2
+
+
+def test_portfolio_vol_target_has_no_lookahead():
+    closes = [_random_walk(5), _random_walk(6)]
+    weights = [[0.5] * 800, [0.5] * 800]
+    base = portfolio_vol_target(closes, weights)
+    changed = [c[:500] + [x * 2 for x in c[500:]] for c in closes]
+    moved = portfolio_vol_target(changed, weights)
+    assert [w[:500] for w in moved] == [w[:500] for w in base]
+
+
+def test_run_portfolio_with_portfolio_vol():
+    assets = {f"s{k}": synthetic_data(n=600, seed=k) for k in range(3)}
+    result = run_portfolio(assets, "trend_ensemble", sizing={"target_vol": 0.15},
+                           portfolio_vol={"target_vol": 0.10, "max_gross": 1.0})
+    gross = [sum(abs(d["positions"][i]) for d in result["assets"].values())
+             for i in range(600)]
+    assert max(gross) <= 1.0 + 1e-9
+    assert max(gross) > 0
+
+
+def test_cli_portfolio_vol(tmp_path, capsys):
+    _write_asset(tmp_path / "uno.csv", 1)
+    _write_asset(tmp_path / "dos.csv", 2)
+    main([str(tmp_path / "uno.csv"), str(tmp_path / "dos.csv"), "--strategy",
+          "trend_ensemble", "--vol-target", "0.15", "--portfolio-vol", "0.10"])
+    assert "trend_ensemble" in capsys.readouterr().out
+    with pytest.raises(SystemExit):
+        main(["--demo", "--portfolio-vol", "0.10"])

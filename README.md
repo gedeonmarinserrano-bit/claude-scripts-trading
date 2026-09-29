@@ -33,6 +33,11 @@ python -m scripts.trend_strategies --demo --walk-forward --train 756 --test 252
 # Estrategia recomendada: conjunto de cruces con objetivo de volatilidad del 15 %
 python -m scripts.trend_strategies spx.csv --strategy trend_ensemble --vol-target 0.15 --cash-rate 0.02
 
+# Configuración recomendada para carteras: conjunto de cruces, paridad de riesgo por
+# activo y objetivo de volatilidad del 10 % para la cartera completa
+python -m scripts.trend_strategies spx.csv bonos.csv wti.csv --strategy trend_ensemble \
+    --vol-target 0.15 --portfolio-vol 0.10 --cash-rate 0.02
+
 # Cartera de varios activos (un CSV por activo) con un 2 % anual para el efectivo
 python -m scripts.trend_strategies spx.csv ndx.csv wti.csv --cash-rate 0.02 --walk-forward
 ```
@@ -47,6 +52,10 @@ python -m scripts.trend_strategies spx.csv ndx.csv wti.csv --cash-rate 0.02 --wa
 - `--vol-target V`: exposición = señal × V / volatilidad reciente (media exponencial de
   `--vol-span` barras), limitada por `--max-leverage`; solo se rebalancea si la exposición
   cambia al menos `--rebalance-buffer` (0,1 por defecto). Excluye `--risk`.
+- `--portfolio-vol V` (solo carteras): escala todas las posiciones por un mismo factor
+  para que la volatilidad de la cartera, estimada con una matriz de covarianzas
+  exponencial, ronde V. La exposición bruta no pasa de `--max-gross` (1 por defecto,
+  sin apalancamiento). Sube la exposición cuando la diversificación reduce el riesgo.
 - `--cash-rate R`: el efectivo no invertido en largos cobra R anual (los cortos no
   consumen efectivo; el apalancamiento por encima del 100 % paga R). El Sharpe se
   calcula sobre la rentabilidad en exceso de R.

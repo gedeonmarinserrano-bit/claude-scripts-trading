@@ -19,6 +19,8 @@ Uso:
     python -m scripts.trend_strategies --demo --walk-forward
     python -m scripts.trend_strategies spx.csv --strategy trend_ensemble --vol-target 0.15
     python -m scripts.trend_strategies spx.csv ndx.csv oro.csv --cash-rate 0.02
+    python -m scripts.trend_strategies spx.csv bonos.csv oro.csv \\
+        --strategy trend_ensemble --vol-target 0.15 --portfolio-vol 0.10
 
 El CSV debe tener columna close y, idealmente, date, high y low (open es
 opcional). Con varios CSV se evalúa una cartera en sus fechas comunes.
@@ -574,6 +576,61 @@ def walk_forward(high, low, close, strategy, param_grid=None, train=756, test=25
 # Cartera
 # --------------------------------------------------------------------------
 
+def portfolio_vol_target(closes, positions, target_vol=0.10, span=32, max_gross=1.0,
+                         buffer=0.05, periods_per_year=252):
+    """Escala todas las posiciones de una cartera por un mismo factor.
+
+    La volatilidad de la cartera se estima con los pesos de cada barra y
+    una matriz de covarianzas exponencial (`span` barras) de los retornos
+    de los activos, con datos hasta esa barra. Factor = target_vol /
+    volatilidad, limitado para que la exposición bruta no supere
+    `max_gross`. Así la cartera sube la exposición cuando la
+    diversificación reduce el riesgo y la baja cuando los activos se
+    mueven juntos. Cada peso solo se cambia si se aleja `buffer` o más
+    del actual (o si pasa a 0), salvo que eso deje la exposición bruta por
+    encima de `max_gross`. Hasta tener `span` retornos, los pesos son 0.
+    """
+    if target_vol <= 0 or span <= 0 or max_gross <= 0 or buffer < 0:
+        raise ValueError("target_vol, span and max_gross must be positive")
+    k, n = len(closes), len(closes[0])
+    alpha = 2 / (span + 1)
+    cov, seed = None, []
+    current = [0.0] * k
+    out = [[0.0] * n for _ in range(k)]
+    for i in range(1, n):
+        r = [closes[a][i] / closes[a][i - 1] - 1 for a in range(k)]
+        if cov is None:
+            seed.append(r)
+            if len(seed) == span:
+                cov = [[sum(x[a] * x[b] for x in seed) / span for b in range(k)]
+                       for a in range(k)]
+            if cov is None:
+                continue
+        else:
+            cov = [[alpha * r[a] * r[b] + (1 - alpha) * cov[a][b] for b in range(k)]
+                   for a in range(k)]
+        w = [positions[a][i] for a in range(k)]
+        gross = sum(abs(x) for x in w)
+        variance = sum(w[a] * w[b] * cov[a][b] for a in range(k) for b in range(k))
+        if gross == 0:
+            factor = 0.0
+        else:
+            vol = math.sqrt(max(variance, 0.0) * periods_per_year)
+            factor = target_vol / vol if vol > 0 else math.inf
+            factor = min(factor, max_gross / gross)
+        desired = [x * factor for x in w]
+        for a in range(k):
+            if desired[a] == 0 or abs(desired[a] - current[a]) >= buffer:
+                current[a] = desired[a]
+        # Con el buffer, los pesos que no se tocan pueden dejar la cartera
+        # por encima del límite: entonces se rebalancea todo.
+        if sum(abs(x) for x in current) > max_gross + 1e-12:
+            current = desired
+        for a in range(k):
+            out[a][i] = current[a]
+    return out
+
+
 def align_assets(assets):
     """Recorta varios activos a las fechas que tienen todos en común.
 
@@ -596,7 +653,8 @@ def align_assets(assets):
 
 
 def run_portfolio(assets, strategy, allow_short=False, sizing=None, cost=0.001,
-                  periods_per_year=252, cash_rate=0.0, walk_forward_args=None):
+                  periods_per_year=252, cash_rate=0.0, walk_forward_args=None,
+                  portfolio_vol=None):
     """Aplica una estrategia a cada activo y los combina en una cartera.
 
     `assets` es {nombre: (high, low, close)} ya alineado (ver align_assets).
@@ -607,8 +665,10 @@ def run_portfolio(assets, strategy, allow_short=False, sizing=None, cost=0.001,
 
     Con `walk_forward_args` (dict con train, test, objective) los
     parámetros se eligen por activo y bloque, y las métricas empiezan en
-    la barra `train`. Devuelve las métricas de la cartera y, por activo,
-    las posiciones y las métricas del activo por separado.
+    la barra `train`. Con `portfolio_vol` (dict de argumentos para
+    portfolio_vol_target) se escala además la cartera completa.
+    Devuelve las métricas de la cartera y, por activo, las posiciones y
+    las métricas del activo por separado.
     """
     names = list(assets)
     atr_sizing = bool(sizing) and "target_vol" not in sizing
@@ -630,6 +690,12 @@ def run_portfolio(assets, strategy, allow_short=False, sizing=None, cost=0.001,
                               periods_per_year, cash_rate)
         per_asset[name] = {"positions": [p * weight for p in positions],
                            "stats": standalone}
+    if portfolio_vol:
+        scaled = portfolio_vol_target([assets[n][2] for n in names],
+                                      [per_asset[n]["positions"] for n in names],
+                                      **portfolio_vol)
+        for name, positions in zip(names, scaled):
+            per_asset[name]["positions"] = positions
     stats = backtest_portfolio(
         [assets[n][2][start:] for n in names],
         [per_asset[n]["positions"][start:] for n in names],
@@ -735,6 +801,12 @@ def format_report(name, stats):
 
 
 def _run_portfolio_cli(args, paths, sizing_args, names):
+    portfolio_vol = None
+    if args.portfolio_vol is not None:
+        portfolio_vol = {"target_vol": args.portfolio_vol, "span": args.vol_span,
+                         "max_gross": args.max_gross,
+                         "buffer": args.rebalance_buffer / len(paths),
+                         "periods_per_year": args.periods_per_year}
     assets = {}
     for path in paths:
         name = os.path.splitext(os.path.basename(path))[0]
@@ -762,7 +834,8 @@ def _run_portfolio_cli(args, paths, sizing_args, names):
         result = run_portfolio(aligned, name, allow_short=args.short,
                                sizing=sizing_args, cost=args.cost,
                                periods_per_year=args.periods_per_year,
-                               cash_rate=args.cash_rate, walk_forward_args=wf_args)
+                               cash_rate=args.cash_rate, walk_forward_args=wf_args,
+                               portfolio_vol=portfolio_vol)
         print(format_report(name, result["stats"]))
         for asset, data in result["assets"].items():
             print("    " + format_report(asset, data["stats"]))
@@ -795,6 +868,12 @@ def main(argv=None):
                         help="cambio mínimo de exposición para rebalancear (defecto 0.1)")
     sizing.add_argument("--max-leverage", type=float, default=1.0,
                         help="exposición máxima por activo (defecto 1)")
+    sizing.add_argument("--portfolio-vol", type=float,
+                        help="solo carteras: volatilidad anual objetivo de la cartera "
+                             "completa, p. ej. 0.10")
+    sizing.add_argument("--max-gross", type=float, default=1.0,
+                        help="solo carteras: exposición bruta máxima con "
+                             "--portfolio-vol (defecto 1)")
     wf = parser.add_argument_group("walk-forward")
     wf.add_argument("--walk-forward", action="store_true",
                     help="optimizar por bloques y evaluar fuera de muestra")
@@ -825,6 +904,8 @@ def main(argv=None):
     if len(args.csv) > 1:
         _run_portfolio_cli(args, args.csv, sizing_args, names)
         return
+    if args.portfolio_vol is not None:
+        parser.error("--portfolio-vol necesita dos o más CSV")
 
     if args.demo:
         high, low, close = synthetic_data()
