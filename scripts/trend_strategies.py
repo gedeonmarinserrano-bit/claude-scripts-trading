@@ -1,4 +1,4 @@
-"""Tres estrategias tendenciales con backtest, sizing por ATR y walk-forward.
+"""Tres estrategias tendenciales con backtest, sizing por ATR, walk-forward y carteras.
 
 Estrategias (solo largos por defecto; --short activa los cortos):
     - ma_crossover:       cruce EMA rápida/lenta + filtro SMA 200 + stop ATR.
@@ -14,15 +14,19 @@ Uso:
     python -m scripts.trend_strategies datos.csv --strategy donchian
     python -m scripts.trend_strategies --demo --short --risk 0.01
     python -m scripts.trend_strategies --demo --walk-forward
+    python -m scripts.trend_strategies spx.csv ndx.csv oro.csv --cash-rate 0.02
 
-El CSV debe tener columnas high, low y close (date/open son opcionales).
+El CSV debe tener columna close y, idealmente, date, high y low (open es
+opcional). Con varios CSV se evalúa una cartera en sus fechas comunes.
 Solo usa la librería estándar.
 """
 
 import argparse
 import csv
+import datetime
 import itertools
 import math
+import os
 import random
 
 
@@ -306,16 +310,50 @@ def _sign(x):
     return (x > 0) - (x < 0)
 
 
-def backtest(close, positions, cost=0.001, periods_per_year=252):
+def _bar_rate(annual_rate, periods_per_year):
+    return (1 + annual_rate) ** (1 / periods_per_year) - 1
+
+
+def _cash_return(positions, rf):
+    """Interés del efectivo no usado en largos.
+
+    Los largos consumen efectivo; los cortos no (el colateral y lo obtenido
+    con la venta siguen cobrando interés). Si los largos superan el 100 %
+    del capital, el exceso paga el mismo tipo como financiación.
+    """
+    return (1 - sum(max(p, 0) for p in positions)) * rf
+
+
+def _summary(equity, returns, rf, periods_per_year):
+    peak, max_dd = equity[0], 0.0
+    for v in equity:
+        peak = max(peak, v)
+        max_dd = max(max_dd, 1 - v / peak)
+    years = (len(equity) - 1) / periods_per_year
+    cagr = equity[-1] ** (1 / years) - 1 if years > 0 and equity[-1] > 0 else 0.0
+    sharpe = 0.0
+    if len(returns) > 1:
+        excess = [r - rf for r in returns]
+        mean = sum(excess) / len(excess)
+        std = math.sqrt(sum((r - mean) ** 2 for r in excess) / (len(excess) - 1))
+        sharpe = mean / std * math.sqrt(periods_per_year) if std > 1e-12 else 0.0
+    return {"total_return": equity[-1] - 1, "cagr": cagr, "sharpe": sharpe,
+            "max_drawdown": max_dd, "equity": equity}
+
+
+def backtest(close, positions, cost=0.001, periods_per_year=252, cash_rate=0.0):
     """Backtest de una exposición por barra sobre precios de cierre.
 
     `positions[i]` es la fracción del capital expuesta (negativa = corto)
     desde el cierre de i hasta el de i+1; admite tamaños fraccionarios.
     `cost` es comisión + slippage por lado sobre el nocional operado.
+    `cash_rate` es el tipo anual que cobra el efectivo no invertido; el
+    Sharpe se calcula sobre la rentabilidad en exceso de ese tipo.
     La exposición se mantiene constante respecto al capital en cada barra.
     """
     if len(close) != len(positions):
         raise ValueError("close and positions must have the same length")
+    rf = _bar_rate(cash_rate, periods_per_year)
     equity = [1.0]
     returns, trades = [], []
     entry_equity, prev = None, 0
@@ -332,7 +370,7 @@ def backtest(close, positions, cost=0.001, periods_per_year=252):
                 entry_equity = value
         elif pos != prev:
             value *= 1 - cost * abs(pos - prev)
-        value *= 1 + pos * (close[i + 1] / close[i] - 1)
+        value *= 1 + pos * (close[i + 1] / close[i] - 1) + _cash_return([pos], rf)
         returns.append(value / equity[-1] - 1)
         equity.append(value)
         prev = pos
@@ -340,34 +378,54 @@ def backtest(close, positions, cost=0.001, periods_per_year=252):
         equity[-1] *= 1 - cost * abs(prev)
         trades.append(equity[-1] / entry_equity - 1)
 
-    peak, max_dd = equity[0], 0.0
-    for v in equity:
-        peak = max(peak, v)
-        max_dd = max(max_dd, 1 - v / peak)
-
-    years = (len(equity) - 1) / periods_per_year
-    total_return = equity[-1] - 1
-    cagr = equity[-1] ** (1 / years) - 1 if years > 0 and equity[-1] > 0 else 0.0
-    sharpe = 0.0
-    if len(returns) > 1:
-        mean = sum(returns) / len(returns)
-        std = math.sqrt(sum((r - mean) ** 2 for r in returns) / (len(returns) - 1))
-        sharpe = mean / std * math.sqrt(periods_per_year) if std > 0 else 0.0
+    stats = _summary(equity, returns, rf, periods_per_year)
     wins = [t for t in trades if t > 0]
     losses = [t for t in trades if t <= 0]
     exposed = positions[:-1]
-    return {
-        "total_return": total_return,
-        "cagr": cagr,
-        "sharpe": sharpe,
-        "max_drawdown": max_dd,
+    stats.update({
         "trades": len(trades),
         "win_rate": len(wins) / len(trades) if trades else 0.0,
         "avg_win": sum(wins) / len(wins) if wins else 0.0,
         "avg_loss": sum(losses) / len(losses) if losses else 0.0,
         "exposure": sum(abs(p) for p in exposed) / max(len(exposed), 1),
-        "equity": equity,
-    }
+    })
+    return stats
+
+
+def backtest_portfolio(closes, positions, cost=0.001, periods_per_year=252,
+                       cash_rate=0.0):
+    """Backtest de varios activos alineados en las mismas fechas.
+
+    `closes` y `positions` son listas (una por activo) de igual longitud;
+    cada posición es la fracción del capital total en ese activo. Los
+    pesos se mantienen constantes respecto al capital en cada barra.
+    Devuelve las mismas métricas que backtest() salvo las de operaciones
+    ganadoras/perdedoras; `trades` cuenta las aperturas.
+    """
+    if len(closes) != len(positions) or not closes:
+        raise ValueError("need one positions list per asset")
+    n = len(closes[0])
+    if any(len(c) != n for c in closes) or any(len(p) != n for p in positions):
+        raise ValueError("all series must have the same length")
+    rf = _bar_rate(cash_rate, periods_per_year)
+    equity, returns = [1.0], []
+    prev = [0] * len(closes)
+    trades, gross = 0, 0.0
+    for i in range(n - 1):
+        pos = [p[i] for p in positions]
+        turnover = sum(abs(a - b) for a, b in zip(pos, prev))
+        trades += sum(1 for a, b in zip(pos, prev) if a and _sign(a) != _sign(b))
+        value = equity[-1] * (1 - cost * turnover)
+        market = sum(p * (c[i + 1] / c[i] - 1) for p, c in zip(pos, closes))
+        value *= 1 + market + _cash_return(pos, rf)
+        returns.append(value / equity[-1] - 1)
+        equity.append(value)
+        gross += sum(abs(p) for p in pos)
+        prev = pos
+    equity[-1] *= 1 - cost * sum(abs(p) for p in prev)
+    stats = _summary(equity, returns, rf, periods_per_year)
+    stats.update({"trades": trades, "exposure": gross / max(n - 1, 1)})
+    return stats
 
 
 # --------------------------------------------------------------------------
@@ -385,7 +443,7 @@ def _param_combinations(grid):
 
 def walk_forward(high, low, close, strategy, param_grid=None, train=756, test=252,
                  objective="sharpe", cost=0.001, periods_per_year=252,
-                 allow_short=False, sizing=None):
+                 allow_short=False, sizing=None, cash_rate=0.0):
     """Optimiza en una ventana de entrenamiento y evalúa en la siguiente.
 
     Por cada bloque: prueba todas las combinaciones de `param_grid` sobre
@@ -417,34 +475,154 @@ def walk_forward(high, low, close, strategy, param_grid=None, train=756, test=25
             pos = func(h, l, c, allow_short=allow_short, **params)
             if sizing:
                 pos = atr_position_sizing(pos, h, l, c, **sizing)
-            score = backtest(c[:train], pos[:train], cost, periods_per_year)[objective]
+            score = backtest(c[:train], pos[:train], cost, periods_per_year,
+                             cash_rate)[objective]
             if best is None or score > best[0]:
                 best = (score, params, pos)
         score, params, pos = best
         positions[start:hi] = pos[train:]
         folds.append({"start": start, "end": hi, "params": params, "train_score": score})
 
-    stats = backtest(close[train:], positions[train:], cost, periods_per_year)
+    stats = backtest(close[train:], positions[train:], cost, periods_per_year, cash_rate)
     return {"stats": stats, "positions": positions, "folds": folds}
+
+
+# --------------------------------------------------------------------------
+# Cartera
+# --------------------------------------------------------------------------
+
+def align_assets(assets):
+    """Recorta varios activos a las fechas que tienen todos en común.
+
+    `assets` es {nombre: (fechas, high, low, close)}. Devuelve
+    (fechas, {nombre: (high, low, close)}).
+    """
+    if not assets:
+        raise ValueError("no assets")
+    common = set.intersection(*(set(a[0]) for a in assets.values()))
+    dates = sorted(common)
+    if not dates:
+        raise ValueError("assets have no dates in common")
+    aligned = {}
+    for name, (asset_dates, high, low, close) in assets.items():
+        index = {d: i for i, d in enumerate(asset_dates)}
+        rows = [index[d] for d in dates]
+        aligned[name] = ([high[i] for i in rows], [low[i] for i in rows],
+                         [close[i] for i in rows])
+    return dates, aligned
+
+
+def run_portfolio(assets, strategy, allow_short=False, sizing=None, cost=0.001,
+                  periods_per_year=252, cash_rate=0.0, walk_forward_args=None):
+    """Aplica una estrategia a cada activo y los combina en una cartera.
+
+    `assets` es {nombre: (high, low, close)} ya alineado (ver align_assets).
+    Sin sizing, cada activo recibe 1/N del capital. Con sizing, cada
+    operación arriesga `risk` del capital total, como en el sistema Turtle,
+    así que la exposición bruta puede superar el 100 % (el exceso se
+    financia al tipo del efectivo).
+
+    Con `walk_forward_args` (dict con train, test, objective) los
+    parámetros se eligen por activo y bloque, y las métricas empiezan en
+    la barra `train`. Devuelve las métricas de la cartera y, por activo,
+    las posiciones y las métricas del activo por separado.
+    """
+    names = list(assets)
+    weight = 1.0 if sizing else 1.0 / len(names)
+    start = walk_forward_args["train"] if walk_forward_args else 0
+    per_asset = {}
+    for name in names:
+        high, low, close = assets[name]
+        if walk_forward_args:
+            result = walk_forward(high, low, close, strategy, cost=cost,
+                                  periods_per_year=periods_per_year,
+                                  allow_short=allow_short, sizing=sizing,
+                                  cash_rate=cash_rate, **walk_forward_args)
+            positions = result["positions"]
+        else:
+            positions = STRATEGIES[strategy](high, low, close, allow_short=allow_short)
+            if sizing:
+                positions = atr_position_sizing(positions, high, low, close, **sizing)
+        standalone = backtest(close[start:], positions[start:], cost,
+                              periods_per_year, cash_rate)
+        per_asset[name] = {"positions": [p * weight for p in positions],
+                           "stats": standalone}
+    stats = backtest_portfolio(
+        [assets[n][2][start:] for n in names],
+        [per_asset[n]["positions"][start:] for n in names],
+        cost, periods_per_year, cash_rate)
+    return {"stats": stats, "assets": per_asset}
 
 
 # --------------------------------------------------------------------------
 # Datos y CLI
 # --------------------------------------------------------------------------
 
-def load_csv(path):
-    with open(path, newline="") as f:
+_DATE_FORMATS = ["%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y", "%Y/%m/%d", "%d-%m-%Y", "%Y%m%d"]
+
+
+def _parse_dates(values):
+    """Detecta el formato que sirve para todas las fechas del archivo."""
+    for fmt in _DATE_FORMATS:
+        try:
+            return [datetime.datetime.strptime(v.strip(), fmt).date() for v in values]
+        except ValueError:
+            continue
+    raise ValueError(f"unrecognised date format, e.g. {values[0]!r}")
+
+
+def _read_csv(path):
+    """Lee las columnas de precios; devuelve (fechas en texto o None, high, low, close)."""
+    with open(path, newline="", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
         fields = {name.strip().lower(): name for name in reader.fieldnames or []}
-        missing = {"high", "low", "close"} - fields.keys()
-        if missing:
-            raise ValueError(f"missing columns: {', '.join(sorted(missing))}")
-        high, low, close = [], [], []
+        close_col = fields.get("close") or fields.get("adj close")
+        if close_col is None:
+            raise ValueError("missing columns: close")
+        high_col = fields.get("high", close_col)
+        low_col = fields.get("low", close_col)
+        date_col = fields.get("date")
+        raw_dates, high, low, close = [], [], [], []
         for row in reader:
-            high.append(float(row[fields["high"]]))
-            low.append(float(row[fields["low"]]))
-            close.append(float(row[fields["close"]]))
-    return high, low, close
+            try:
+                values = (float(row[high_col]), float(row[low_col]), float(row[close_col]))
+            except (TypeError, ValueError):
+                continue
+            if values[2] <= 0:
+                continue
+            high.append(values[0])
+            low.append(values[1])
+            close.append(values[2])
+            raw_dates.append(row[date_col] if date_col else None)
+    if not close:
+        raise ValueError(f"{path}: no valid rows")
+    return (raw_dates if date_col else None), high, low, close
+
+
+def load_csv(path):
+    """Lee un CSV de precios y devuelve (high, low, close) en el orden del archivo.
+
+    Necesita una columna `close` (o `adj close` si no hay `close`); si
+    faltan `high`/`low` se usa el cierre (el ATR será entonces el rango
+    entre cierres). Las filas con valores no numéricos (p. ej. "null" o
+    ".") se descartan.
+    """
+    return _read_csv(path)[1:]
+
+
+def load_csv_dated(path):
+    """Como load_csv, pero exige columna `date` y devuelve
+    (fechas, high, low, close) ordenado por fecha."""
+    raw_dates, high, low, close = _read_csv(path)
+    if raw_dates is None:
+        raise ValueError(f"{path}: missing columns: date")
+    dates = _parse_dates(raw_dates)
+    order = sorted(range(len(dates)), key=dates.__getitem__)
+    dates = [dates[i] for i in order]
+    if any(a == b for a, b in zip(dates, dates[1:])):
+        raise ValueError(f"{path}: duplicated dates")
+    return (dates, [high[i] for i in order], [low[i] for i in order],
+            [close[i] for i in order])
 
 
 def synthetic_data(n=2000, seed=42):
@@ -465,19 +643,59 @@ def synthetic_data(n=2000, seed=42):
 
 
 def format_report(name, stats):
-    return (f"{name:<16} ret {stats['total_return']:>8.1%}  "
+    line = (f"{name:<16} ret {stats['total_return']:>8.1%}  "
             f"CAGR {stats['cagr']:>6.1%}  sharpe {stats['sharpe']:>5.2f}  "
-            f"maxDD {stats['max_drawdown']:>6.1%}  trades {stats['trades']:>4}  "
-            f"win {stats['win_rate']:>5.1%}  expo {stats['exposure']:>5.1%}")
+            f"maxDD {stats['max_drawdown']:>6.1%}  trades {stats['trades']:>4}  ")
+    if "win_rate" in stats:
+        line += f"win {stats['win_rate']:>5.1%}  "
+    return line + f"expo {stats['exposure']:>5.1%}"
+
+
+def _run_portfolio_cli(args, paths, sizing_args, names):
+    assets = {}
+    for path in paths:
+        name = os.path.splitext(os.path.basename(path))[0]
+        if name in assets:
+            raise SystemExit(f"duplicated asset name: {name}")
+        assets[name] = load_csv_dated(path)
+    dates, aligned = align_assets(assets)
+    wf_args = None
+    start = 0
+    if args.walk_forward:
+        wf_args = {"train": args.train, "test": args.test, "objective": args.objective}
+        start = args.train
+    if len(dates) <= start + 1:
+        raise SystemExit("not enough common dates")
+    print(f"Cartera de {len(aligned)} activos: {', '.join(aligned)}")
+    print(f"Fechas comunes: {dates[0]} a {dates[-1]} ({len(dates)} barras); "
+          f"métricas desde {dates[start]}"
+          + (" (fuera de muestra)" if wf_args else ""))
+    bh = backtest_portfolio(
+        [a[2][start:] for a in aligned.values()],
+        [[1 / len(aligned)] * (len(dates) - start) for _ in aligned],
+        args.cost, args.periods_per_year, args.cash_rate)
+    print(format_report("buy_and_hold", bh))
+    for name in names:
+        result = run_portfolio(aligned, name, allow_short=args.short,
+                               sizing=sizing_args, cost=args.cost,
+                               periods_per_year=args.periods_per_year,
+                               cash_rate=args.cash_rate, walk_forward_args=wf_args)
+        print(format_report(name, result["stats"]))
+        for asset, data in result["assets"].items():
+            print("    " + format_report(asset, data["stats"]))
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("csv", nargs="?", help="CSV con columnas high, low, close")
+    parser.add_argument("csv", nargs="*",
+                        help="CSV con columnas date, high, low, close; con varios "
+                             "archivos se evalúa una cartera")
     parser.add_argument("--demo", action="store_true", help="usar datos sintéticos")
     parser.add_argument("--strategy", choices=["all", *STRATEGIES], default="all")
     parser.add_argument("--cost", type=float, default=0.001,
                         help="coste por lado (comisión + slippage), por defecto 0.001")
+    parser.add_argument("--cash-rate", type=float, default=0.0,
+                        help="interés anual del efectivo no invertido, p. ej. 0.02")
     parser.add_argument("--periods-per-year", type=int, default=252)
     parser.add_argument("--short", action="store_true", help="permitir cortos")
     sizing = parser.add_argument_group("tamaño por ATR (se activa con --risk)")
@@ -496,12 +714,10 @@ def main(argv=None):
                     choices=["sharpe", "cagr", "total_return"])
     args = parser.parse_args(argv)
 
-    if args.demo:
-        high, low, close = synthetic_data()
-    elif args.csv:
-        high, low, close = load_csv(args.csv)
-    else:
-        parser.error("indica un CSV o usa --demo")
+    if args.demo and args.csv:
+        parser.error("usa --demo o archivos CSV, no ambos")
+    if not args.demo and not args.csv:
+        parser.error("indica uno o más CSV o usa --demo")
 
     sizing_args = None
     if args.risk is not None:
@@ -509,16 +725,27 @@ def main(argv=None):
                        "max_leverage": args.max_leverage}
     names = list(STRATEGIES) if args.strategy == "all" else [args.strategy]
 
+    if len(args.csv) > 1:
+        _run_portfolio_cli(args, args.csv, sizing_args, names)
+        return
+
+    if args.demo:
+        high, low, close = synthetic_data()
+    else:
+        high, low, close = load_csv(args.csv[0])
+
     if args.walk_forward:
         oos = slice(args.train, None)
-        bh = backtest(close[oos], [1] * len(close[oos]), args.cost, args.periods_per_year)
+        bh = backtest(close[oos], [1] * len(close[oos]), args.cost,
+                      args.periods_per_year, args.cash_rate)
         print(f"Fuera de muestra: barras {args.train}-{len(close) - 1}")
         print(format_report("buy_and_hold", bh))
         for name in names:
             result = walk_forward(high, low, close, name, train=args.train,
                                   test=args.test, objective=args.objective,
                                   cost=args.cost, periods_per_year=args.periods_per_year,
-                                  allow_short=args.short, sizing=sizing_args)
+                                  allow_short=args.short, sizing=sizing_args,
+                                  cash_rate=args.cash_rate)
             print(format_report(name, result["stats"]))
             for fold in result["folds"]:
                 params = ", ".join(f"{k}={v}" for k, v in fold["params"].items())
@@ -526,14 +753,15 @@ def main(argv=None):
                       f"({args.objective} train {fold['train_score']:.2f})")
         return
 
-    bh = backtest(close, [1] * len(close), args.cost, args.periods_per_year)
+    bh = backtest(close, [1] * len(close), args.cost, args.periods_per_year,
+                  args.cash_rate)
     print(format_report("buy_and_hold", bh))
     for name in names:
         positions = STRATEGIES[name](high, low, close, allow_short=args.short)
         if sizing_args:
             positions = atr_position_sizing(positions, high, low, close, **sizing_args)
         print(format_report(name, backtest(close, positions, args.cost,
-                                           args.periods_per_year)))
+                                           args.periods_per_year, args.cash_rate)))
 
 
 if __name__ == "__main__":

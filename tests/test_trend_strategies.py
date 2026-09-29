@@ -2,16 +2,22 @@ import math
 
 import pytest
 
+import datetime
+
 from scripts.trend_strategies import (
     STRATEGIES,
     adx,
+    align_assets,
     atr,
     atr_position_sizing,
     backtest,
+    backtest_portfolio,
     donchian_breakout,
     ema,
     load_csv,
+    load_csv_dated,
     main,
+    run_portfolio,
     sma,
     supertrend,
     synthetic_data,
@@ -115,11 +121,17 @@ def test_load_csv_and_cli(tmp_path, capsys):
     assert "buy_and_hold" in out and "donchian" in out
 
 
-def test_load_csv_missing_columns(tmp_path):
+def test_load_csv_missing_close(tmp_path):
     path = tmp_path / "bad.csv"
-    path.write_text("date,close\n1,10\n")
-    with pytest.raises(ValueError, match="high"):
+    path.write_text("date,high,low\n1,10,9\n")
+    with pytest.raises(ValueError, match="close"):
         load_csv(path)
+
+
+def test_load_csv_close_only_and_bad_rows(tmp_path):
+    path = tmp_path / "wti.csv"
+    path.write_text("DATE,Close\n2020-01-02,10\n2020-01-03,.\n2020-01-06,11\n")
+    assert load_csv(path) == ([10.0, 11.0], [10.0, 11.0], [10.0, 11.0])
 
 
 def _mirror(high, low, close):
@@ -229,3 +241,108 @@ def test_cli_short_sizing_and_walk_forward(capsys):
           "--walk-forward", "--train", "1000", "--test", "500"])
     out = capsys.readouterr().out
     assert "Fuera de muestra" in out and "entry=" in out
+
+
+def test_cash_interest_on_idle_capital():
+    close = [100.0] * 253
+    stats = backtest(close, [0] * 253, cost=0, cash_rate=0.05)
+    assert stats["total_return"] == pytest.approx(0.05)
+    # Invertido al 100 % no cobra intereses.
+    assert backtest(close, [1] * 253, cost=0, cash_rate=0.05)["total_return"] == \
+        pytest.approx(0)
+
+
+def test_cash_interest_partial_short_and_leverage():
+    close = [100.0] * 253
+    half = backtest(close, [0.5] * 253, cost=0, cash_rate=0.05)["total_return"]
+    assert half == pytest.approx(1.05 ** 0.5 - 1, rel=1e-3)
+    short = backtest(close, [-1] * 253, cost=0, cash_rate=0.05)["total_return"]
+    assert short == pytest.approx(0.05)
+    levered = backtest(close, [2] * 253, cost=0, cash_rate=0.05)["total_return"]
+    assert levered < -0.04  # paga financiación por el 100 % extra
+
+
+def test_sharpe_is_in_excess_of_cash_rate():
+    close = [100.0] * 300
+    assert backtest(close, [0] * 300, cost=0, cash_rate=0.05)["sharpe"] == 0.0
+
+
+def test_portfolio_matches_single_asset():
+    high, low, close = synthetic_data(n=400, seed=2)
+    positions = donchian_breakout(high, low, close)
+    single = backtest(close, positions, cost=0.001, cash_rate=0.02)
+    combo = backtest_portfolio([close], [positions], cost=0.001, cash_rate=0.02)
+    assert combo["total_return"] == pytest.approx(single["total_return"], rel=1e-6)
+    assert combo["max_drawdown"] == pytest.approx(single["max_drawdown"], rel=1e-6)
+
+
+def test_portfolio_equal_weights():
+    a = [100.0, 110.0]
+    b = [100.0, 90.0]
+    stats = backtest_portfolio([a, b], [[0.5, 0.5], [0.5, 0.5]], cost=0)
+    assert stats["total_return"] == pytest.approx(0.0)
+    assert stats["exposure"] == pytest.approx(1.0)
+    assert stats["trades"] == 2
+
+
+def test_portfolio_rejects_mismatched_lengths():
+    with pytest.raises(ValueError):
+        backtest_portfolio([[1.0, 2.0]], [[1, 1, 1]])
+
+
+def test_align_assets_uses_common_dates():
+    d = [datetime.date(2020, 1, i) for i in range(1, 6)]
+    assets = {
+        "a": (d, [1, 2, 3, 4, 5], [1, 2, 3, 4, 5], [1, 2, 3, 4, 5]),
+        "b": ([d[0], d[2], d[4]], [10, 30, 50], [10, 30, 50], [10, 30, 50]),
+    }
+    dates, aligned = align_assets(assets)
+    assert dates == [d[0], d[2], d[4]]
+    assert aligned["a"][2] == [1, 3, 5]
+    assert aligned["b"][2] == [10, 30, 50]
+
+
+def test_load_csv_dated_detects_format_and_sorts(tmp_path):
+    path = tmp_path / "x.csv"
+    path.write_text("Date,High,Low,Close\n1/13/2020,3,1,2\n1/2/2020,5,3,4\n")
+    dates, high, low, close = load_csv_dated(path)
+    assert dates == [datetime.date(2020, 1, 2), datetime.date(2020, 1, 13)]
+    assert close == [4.0, 2.0]
+
+
+def test_load_csv_dated_requires_dates(tmp_path):
+    path = tmp_path / "x.csv"
+    path.write_text("close\n1\n2\n")
+    with pytest.raises(ValueError, match="date"):
+        load_csv_dated(path)
+
+
+def test_run_portfolio_weights_and_walk_forward():
+    assets = {f"s{k}": synthetic_data(n=900, seed=k) for k in range(3)}
+    plain = run_portfolio(assets, "donchian")
+    for data in plain["assets"].values():
+        assert set(data["positions"]) <= {0, 1 / 3}
+    wf = run_portfolio(assets, "donchian", sizing={"risk": 0.01},
+                       walk_forward_args={"train": 500, "test": 200})
+    assert len(wf["stats"]["equity"]) == 400
+    assert all(p == 0 for d in wf["assets"].values() for p in d["positions"][:500])
+
+
+def _write_asset(path, seed, start=0):
+    high, low, close = synthetic_data(n=600, seed=seed)
+    base = datetime.date(2000, 1, 3)
+    lines = ["Date,High,Low,Close"]
+    for i, (h, l, c) in enumerate(zip(high, low, close)):
+        lines.append(f"{base + datetime.timedelta(days=i + start)},{h},{l},{c}")
+    path.write_text("\n".join(lines))
+
+
+def test_cli_portfolio(tmp_path, capsys):
+    _write_asset(tmp_path / "uno.csv", 1)
+    _write_asset(tmp_path / "dos.csv", 2, start=10)
+    main([str(tmp_path / "uno.csv"), str(tmp_path / "dos.csv"),
+          "--strategy", "supertrend_adx", "--cash-rate", "0.02"])
+    out = capsys.readouterr().out
+    assert "Cartera de 2 activos: uno, dos" in out
+    assert "590 barras" in out
+    assert "supertrend_adx" in out and "    uno" in out
