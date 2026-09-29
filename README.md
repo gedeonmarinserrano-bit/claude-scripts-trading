@@ -78,7 +78,7 @@ claude mcp add ctrader \
 
 **Claude Desktop**: copia el bloque de `.mcp.json.example` dentro de
 `claude_desktop_config.json` (Ajustes → Desarrollador → Editar configuración), ajusta
-`cwd` a la ruta del repo y reinicia Claude.
+`PYTHONPATH` a la ruta del repo y reinicia Claude.
 
 ### Variables de entorno
 

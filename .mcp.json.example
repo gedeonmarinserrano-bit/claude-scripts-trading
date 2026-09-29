@@ -3,8 +3,8 @@
     "ctrader": {
       "command": "python",
       "args": ["-m", "ctrader_mcp"],
-      "cwd": "/ruta/a/claude-scripts-trading",
       "env": {
+        "PYTHONPATH": "/ruta/a/claude-scripts-trading",
         "CTRADER_CLIENT_ID": "tu_client_id",
         "CTRADER_CLIENT_SECRET": "tu_client_secret",
         "CTRADER_ACCESS_TOKEN": "tu_access_token",
