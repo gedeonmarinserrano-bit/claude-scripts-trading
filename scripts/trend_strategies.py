@@ -1,12 +1,15 @@
-"""Tres estrategias tendenciales con backtest, sizing por ATR, walk-forward y carteras.
+"""Estrategias tendenciales con backtest, sizing, walk-forward y carteras.
 
 Estrategias (solo largos por defecto; --short activa los cortos):
     - ma_crossover:       cruce EMA rápida/lenta + filtro SMA 200 + stop ATR.
     - donchian_breakout:  ruptura de canal Donchian (tipo Turtle).
     - supertrend_adx:     Supertrend filtrado por ADX + Chandelier Exit.
+    - trend_ensemble:     media de 4 cruces de EMAs (8/32 ... 64/256); pensada
+                          para usarse con objetivo de volatilidad (--vol-target).
 
 Cada estrategia devuelve una lista de posiciones (1 = largo, -1 = corto,
-0 = fuera), calculada con datos hasta el cierre de cada barra. El backtest
+0 = fuera; trend_ensemble da valores intermedios), calculada con datos
+hasta el cierre de cada barra. El backtest
 aplica la posición de la barra i al retorno de i a i+1, así que no hay
 lookahead.
 
@@ -14,6 +17,7 @@ Uso:
     python -m scripts.trend_strategies datos.csv --strategy donchian
     python -m scripts.trend_strategies --demo --short --risk 0.01
     python -m scripts.trend_strategies --demo --walk-forward
+    python -m scripts.trend_strategies spx.csv --strategy trend_ensemble --vol-target 0.15
     python -m scripts.trend_strategies spx.csv ndx.csv oro.csv --cash-rate 0.02
 
 El CSV debe tener columna close y, idealmente, date, high y low (open es
@@ -258,10 +262,39 @@ def supertrend_adx(high, low, close, st_window=10, st_mult=3.0,
     return positions
 
 
+def trend_ensemble(high, low, close, pairs=((8, 32), (16, 64), (32, 128), (64, 256)),
+                   allow_short=False):
+    """Conjunto de cruces de EMAs: la posición es la media de sus votos.
+
+    Cada par (rápida, lenta) vota 1 si la EMA rápida está por encima de la
+    lenta y 0 si no (-1 con allow_short). La posición resultante va de 0 a
+    1 (o de -1 a 1) y cambia de forma gradual: no depende de acertar con un
+    único par de medias. Sin stops: el riesgo lo controla el sizing
+    (pensada para usarse con volatility_target()).
+    """
+    if not pairs:
+        raise ValueError("pairs must not be empty")
+    averages = [(ema(close, fast), ema(close, slow)) for fast, slow in pairs]
+    positions = [0.0] * len(close)
+    for i in range(len(close)):
+        votes = []
+        for fast, slow in averages:
+            if fast[i] is None or slow[i] is None:
+                break
+            if fast[i] > slow[i]:
+                votes.append(1)
+            else:
+                votes.append(-1 if allow_short and fast[i] < slow[i] else 0)
+        else:
+            positions[i] = sum(votes) / len(votes)
+    return positions
+
+
 STRATEGIES = {
     "ma_crossover": ma_crossover,
     "donchian": donchian_breakout,
     "supertrend_adx": supertrend_adx,
+    "trend_ensemble": trend_ensemble,
 }
 
 # Rejillas de parámetros que prueba el walk-forward.
@@ -269,6 +302,8 @@ PARAM_GRIDS = {
     "ma_crossover": {"fast": [10, 20, 30], "slow": [50, 100], "trend": [150, 200]},
     "donchian": {"entry": [20, 55, 100], "exit": [10, 20]},
     "supertrend_adx": {"st_mult": [2.0, 3.0, 4.0], "adx_threshold": [20.0, 25.0]},
+    # El conjunto ya promedia varios horizontes: no se optimiza.
+    "trend_ensemble": {},
 }
 
 
@@ -300,6 +335,55 @@ def atr_position_sizing(positions, high, low, close, risk=0.01, atr_window=20,
         sized[i] = signal * size
         prev = signal
     return sized
+
+
+def volatility_target(positions, close, target_vol=0.15, span=32, max_leverage=1.0,
+                      buffer=0.1, periods_per_year=252):
+    """Escala las señales para que la volatilidad anual ronde `target_vol`.
+
+    La volatilidad se estima con una media exponencial (`span` barras) de
+    los retornos logarítmicos al cuadrado, usando datos hasta la barra
+    actual. Exposición = señal * target_vol / volatilidad, con un máximo
+    de `max_leverage` en valor absoluto. Para no operar a diario, la
+    exposición solo se cambia si se aleja `buffer` o más de la actual (o
+    si la señal pasa a 0). Hasta tener `span` retornos la exposición es 0.
+    """
+    if target_vol <= 0 or span <= 0 or max_leverage <= 0 or buffer < 0:
+        raise ValueError("target_vol, span and max_leverage must be positive")
+    alpha = 2 / (span + 1)
+    sized = [0.0] * len(positions)
+    variance, current = None, 0.0
+    squared = []
+    for i in range(1, len(positions)):
+        r2 = math.log(close[i] / close[i - 1]) ** 2
+        if variance is None:
+            squared.append(r2)
+            if len(squared) == span:
+                variance = sum(squared) / span
+        else:
+            variance = alpha * r2 + (1 - alpha) * variance
+        if variance is None:
+            continue
+        vol = math.sqrt(variance * periods_per_year)
+        scale = target_vol / vol if vol > 0 else max_leverage
+        desired = max(-max_leverage, min(max_leverage, positions[i] * scale))
+        if desired == 0 or abs(desired - current) >= buffer:
+            current = desired
+        sized[i] = current
+    return sized
+
+
+def apply_sizing(positions, high, low, close, sizing=None):
+    """Aplica el sizing indicado en el dict `sizing`.
+
+    Con la clave `target_vol` usa volatility_target(); si no, los
+    argumentos van a atr_position_sizing(). None deja las señales igual.
+    """
+    if not sizing:
+        return positions
+    if "target_vol" in sizing:
+        return volatility_target(positions, close, **sizing)
+    return atr_position_sizing(positions, high, low, close, **sizing)
 
 
 # --------------------------------------------------------------------------
@@ -453,7 +537,7 @@ def walk_forward(high, low, close, strategy, param_grid=None, train=756, test=25
     ventana de entrenamiento, así que el bloque de test arranca con los
     indicadores ya calientes, pero nunca con datos futuros.
 
-    `sizing` es un dict opcional con argumentos para atr_position_sizing().
+    `sizing` es un dict opcional para apply_sizing().
     Devuelve las estadísticas fuera de muestra (desde la barra `train`),
     las posiciones concatenadas y los parámetros elegidos en cada bloque.
     """
@@ -473,8 +557,7 @@ def walk_forward(high, low, close, strategy, param_grid=None, train=756, test=25
         best = None
         for params in _param_combinations(param_grid):
             pos = func(h, l, c, allow_short=allow_short, **params)
-            if sizing:
-                pos = atr_position_sizing(pos, h, l, c, **sizing)
+            pos = apply_sizing(pos, h, l, c, sizing)
             score = backtest(c[:train], pos[:train], cost, periods_per_year,
                              cash_rate)[objective]
             if best is None or score > best[0]:
@@ -517,10 +600,10 @@ def run_portfolio(assets, strategy, allow_short=False, sizing=None, cost=0.001,
     """Aplica una estrategia a cada activo y los combina en una cartera.
 
     `assets` es {nombre: (high, low, close)} ya alineado (ver align_assets).
-    Sin sizing, cada activo recibe 1/N del capital. Con sizing, cada
-    operación arriesga `risk` del capital total, como en el sistema Turtle,
-    así que la exposición bruta puede superar el 100 % (el exceso se
-    financia al tipo del efectivo).
+    Sin sizing o con objetivo de volatilidad, cada activo recibe 1/N del
+    capital. Con sizing por ATR, cada operación arriesga `risk` del capital
+    total, como en el sistema Turtle, así que la exposición bruta puede
+    superar el 100 % (el exceso se financia al tipo del efectivo).
 
     Con `walk_forward_args` (dict con train, test, objective) los
     parámetros se eligen por activo y bloque, y las métricas empiezan en
@@ -528,7 +611,8 @@ def run_portfolio(assets, strategy, allow_short=False, sizing=None, cost=0.001,
     las posiciones y las métricas del activo por separado.
     """
     names = list(assets)
-    weight = 1.0 if sizing else 1.0 / len(names)
+    atr_sizing = bool(sizing) and "target_vol" not in sizing
+    weight = 1.0 if atr_sizing else 1.0 / len(names)
     start = walk_forward_args["train"] if walk_forward_args else 0
     per_asset = {}
     for name in names:
@@ -541,8 +625,7 @@ def run_portfolio(assets, strategy, allow_short=False, sizing=None, cost=0.001,
             positions = result["positions"]
         else:
             positions = STRATEGIES[strategy](high, low, close, allow_short=allow_short)
-            if sizing:
-                positions = atr_position_sizing(positions, high, low, close, **sizing)
+            positions = apply_sizing(positions, high, low, close, sizing)
         standalone = backtest(close[start:], positions[start:], cost,
                               periods_per_year, cash_rate)
         per_asset[name] = {"positions": [p * weight for p in positions],
@@ -698,13 +781,20 @@ def main(argv=None):
                         help="interés anual del efectivo no invertido, p. ej. 0.02")
     parser.add_argument("--periods-per-year", type=int, default=252)
     parser.add_argument("--short", action="store_true", help="permitir cortos")
-    sizing = parser.add_argument_group("tamaño por ATR (se activa con --risk)")
+    sizing = parser.add_argument_group(
+        "tamaño de posición (--risk para ATR o --vol-target para volatilidad)")
     sizing.add_argument("--risk", type=float,
                         help="fracción del capital arriesgada por operación, p. ej. 0.01")
     sizing.add_argument("--stop-mult", type=float, default=2.0,
                         help="stop de referencia en múltiplos de ATR (defecto 2)")
+    sizing.add_argument("--vol-target", type=float,
+                        help="volatilidad anual objetivo por activo, p. ej. 0.15")
+    sizing.add_argument("--vol-span", type=int, default=32,
+                        help="barras de la media exponencial de volatilidad (defecto 32)")
+    sizing.add_argument("--rebalance-buffer", type=float, default=0.1,
+                        help="cambio mínimo de exposición para rebalancear (defecto 0.1)")
     sizing.add_argument("--max-leverage", type=float, default=1.0,
-                        help="exposición máxima por operación (defecto 1)")
+                        help="exposición máxima por activo (defecto 1)")
     wf = parser.add_argument_group("walk-forward")
     wf.add_argument("--walk-forward", action="store_true",
                     help="optimizar por bloques y evaluar fuera de muestra")
@@ -719,10 +809,17 @@ def main(argv=None):
     if not args.demo and not args.csv:
         parser.error("indica uno o más CSV o usa --demo")
 
+    if args.risk is not None and args.vol_target is not None:
+        parser.error("usa --risk o --vol-target, no ambos")
     sizing_args = None
     if args.risk is not None:
         sizing_args = {"risk": args.risk, "stop_mult": args.stop_mult,
                        "max_leverage": args.max_leverage}
+    elif args.vol_target is not None:
+        sizing_args = {"target_vol": args.vol_target, "span": args.vol_span,
+                       "buffer": args.rebalance_buffer,
+                       "max_leverage": args.max_leverage,
+                       "periods_per_year": args.periods_per_year}
     names = list(STRATEGIES) if args.strategy == "all" else [args.strategy]
 
     if len(args.csv) > 1:
@@ -758,8 +855,7 @@ def main(argv=None):
     print(format_report("buy_and_hold", bh))
     for name in names:
         positions = STRATEGIES[name](high, low, close, allow_short=args.short)
-        if sizing_args:
-            positions = atr_position_sizing(positions, high, low, close, **sizing_args)
+        positions = apply_sizing(positions, high, low, close, sizing_args)
         print(format_report(name, backtest(close, positions, args.cost,
                                            args.periods_per_year, args.cash_rate)))
 

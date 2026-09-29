@@ -8,6 +8,7 @@ from scripts.trend_strategies import (
     STRATEGIES,
     adx,
     align_assets,
+    apply_sizing,
     atr,
     atr_position_sizing,
     backtest,
@@ -21,6 +22,8 @@ from scripts.trend_strategies import (
     sma,
     supertrend,
     synthetic_data,
+    trend_ensemble,
+    volatility_target,
     walk_forward,
 )
 
@@ -104,8 +107,8 @@ def test_strategies_produce_valid_positions(name):
     high, low, close = synthetic_data(n=600, seed=1)
     positions = STRATEGIES[name](high, low, close)
     assert len(positions) == len(close)
-    assert set(positions) <= {0, 1}
-    assert 1 in positions
+    assert all(0 <= p <= 1 for p in positions)
+    assert any(p > 0 for p in positions)
 
 
 def test_load_csv_and_cli(tmp_path, capsys):
@@ -346,3 +349,71 @@ def test_cli_portfolio(tmp_path, capsys):
     assert "Cartera de 2 activos: uno, dos" in out
     assert "590 barras" in out
     assert "supertrend_adx" in out and "    uno" in out
+
+
+def test_trend_ensemble_is_vote_average():
+    # Sube 300 barras y luego baja: al principio del giro solo los pares
+    # rápidos se dan la vuelta, así que la posición baja por escalones.
+    close = [100 + i for i in range(300)] + [400 - 2 * i for i in range(1, 120)]
+    positions = trend_ensemble(close, close, close)
+    assert positions[299] == 1.0
+    assert set(positions[300:]) >= {0.75, 0.5}
+    assert positions[-1] == 0.0
+    shorts = trend_ensemble(close, close, close, allow_short=True)
+    assert shorts[-1] == -1.0
+
+
+def test_trend_ensemble_waits_for_slowest_average():
+    close = [100 + i for i in range(300)]
+    positions = trend_ensemble(close, close, close)
+    assert positions[254] == 0.0
+    assert positions[255] == 1.0
+
+
+def test_volatility_target_scales_to_target():
+    rng = __import__("random").Random(0)
+    close = [100.0]
+    for _ in range(1500):
+        close.append(close[-1] * math.exp(rng.gauss(0, 0.02)))  # ~32 % anual
+    sized = volatility_target([1.0] * len(close), close, target_vol=0.16,
+                              span=32, max_leverage=2.0, buffer=0.0)
+    assert sized[:32] == [0.0] * 32
+    average = sum(sized[100:]) / len(sized[100:])
+    assert average == pytest.approx(0.5, rel=0.15)
+
+
+def test_volatility_target_caps_leverage_and_buffers():
+    close = [100 * (1.0001 if i % 2 else 0.9999) ** i for i in range(200)]
+    sized = volatility_target([1.0] * 200, close, target_vol=0.5, max_leverage=1.5)
+    assert max(sized) == 1.5
+    signal = [1.0] * 100 + [0.0] * 100
+    sized = volatility_target(signal, close, target_vol=0.5, max_leverage=1.5)
+    assert sized[-1] == 0.0
+
+
+def test_volatility_target_buffer_limits_rebalancing():
+    rng = __import__("random").Random(1)
+    close = [100.0]
+    for _ in range(600):
+        close.append(close[-1] * math.exp(rng.gauss(0, 0.01)))
+    tight = volatility_target([1.0] * len(close), close, buffer=0.0)
+    loose = volatility_target([1.0] * len(close), close, buffer=0.1)
+    changes = lambda xs: sum(1 for a, b in zip(xs, xs[1:]) if a != b)
+    assert changes(loose) < changes(tight) / 5
+
+
+def test_apply_sizing_dispatch():
+    high, low, close = synthetic_data(n=300, seed=4)
+    signal = [1] * 300
+    assert apply_sizing(signal, high, low, close, None) is signal
+    by_vol = apply_sizing(signal, high, low, close, {"target_vol": 0.1})
+    by_atr = apply_sizing([0] + [1] * 299, high, low, close, {"risk": 0.01})
+    assert by_vol == volatility_target(signal, close, target_vol=0.1)
+    assert len(set(by_atr[1:])) == 1
+
+
+def test_cli_vol_target_and_exclusive_sizing(capsys):
+    main(["--demo", "--strategy", "trend_ensemble", "--vol-target", "0.15"])
+    assert "trend_ensemble" in capsys.readouterr().out
+    with pytest.raises(SystemExit):
+        main(["--demo", "--risk", "0.01", "--vol-target", "0.15"])
