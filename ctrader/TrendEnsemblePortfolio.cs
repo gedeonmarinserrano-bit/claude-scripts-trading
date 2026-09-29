@@ -20,8 +20,9 @@
 //
 // Uso: añade este archivo como cBot en cTrader (Automate), compílalo y
 // ejecútalo en cualquier gráfico. Pon en "Símbolos" la lista separada por
-// comas con los nombres de tu bróker (vacío = símbolo del gráfico). Empieza
-// con "Solo simular" activado y revisa el registro antes de operar.
+// comas con los nombres de tu bróker (vacío = símbolo del gráfico). En cuenta
+// real empieza con "Solo simular" activado y revisa el registro (Log) antes de
+// operar; en backtest ese parámetro se ignora.
 
 using System;
 using System.Collections.Generic;
@@ -67,17 +68,21 @@ namespace cAlgo.Robots
         [Parameter("Parar si la caída desde máximos supera (%)", DefaultValue = 30, MinValue = 0, MaxValue = 100, Group = "Seguridad")]
         public double MaxDrawdownPercent { get; set; }
 
-        [Parameter("Solo simular (no enviar órdenes)", DefaultValue = true, Group = "Seguridad")]
+        // En backtest se ignora: allí siempre se opera.
+        [Parameter("Solo simular en cuenta real (no enviar órdenes)", DefaultValue = true, Group = "Seguridad")]
         public bool DryRun { get; set; }
 
-        [Parameter("Velas diarias mínimas de historia", DefaultValue = 600, MinValue = 300, MaxValue = 5000, Group = "Datos")]
+        [Parameter("Velas diarias mínimas de historia", DefaultValue = 300, MinValue = 260, MaxValue = 5000, Group = "Datos")]
         public int MinHistoryBars { get; set; }
 
         private readonly List<Symbol> _symbols = new List<Symbol>();
         private readonly Dictionary<string, Bars> _bars = new Dictionary<string, Bars>();
         private readonly Dictionary<string, double> _pendingWeights = new Dictionary<string, double>();
         private DateTime _lastSignalDate = DateTime.MinValue;
+        private DateTime _lastWaitLog = DateTime.MinValue;
         private double _peakEquity;
+
+        private bool Simulating => DryRun && !IsBacktesting;
 
         protected override void OnStart()
         {
@@ -105,7 +110,9 @@ namespace cAlgo.Robots
             }
 
             _peakEquity = Account.Equity;
-            Print("Cartera: {0}. {1}", string.Join(", ", names), DryRun ? "MODO SIMULACIÓN: no se envían órdenes." : "Operando en real.");
+            Print("Cartera: {0}. {1}", string.Join(", ", names),
+                Simulating ? "MODO SIMULACIÓN: no se envían órdenes (desactiva 'Solo simular' para operar)."
+                : IsBacktesting ? "Backtest: se envían órdenes." : "Operando en real.");
             Timer.Start(TimeSpan.FromMinutes(15));
             Rebalance();
         }
@@ -120,9 +127,18 @@ namespace cAlgo.Robots
             if (CheckDrawdown())
                 return;
 
-            var aligned = AlignClosedBars(out var lastDate);
+            var aligned = AlignClosedBars(out var lastDate, out var commonDays);
             if (aligned == null)
+            {
+                if (Server.Time.Date > _lastWaitLog)
+                {
+                    _lastWaitLog = Server.Time.Date;
+                    Print("Esperando historia: {0} días comunes a todos los símbolos de {1} necesarios ({2}).",
+                        commonDays, MinHistoryBars,
+                        string.Join(", ", _symbols.Select(sym => string.Format("{0}: {1} velas", sym.Name, _bars[sym.Name].Count))));
+                }
                 return;
+            }
 
             if (lastDate > _lastSignalDate)
             {
@@ -189,7 +205,14 @@ namespace cAlgo.Robots
             double targetUnits = weight * Account.Equity / unitValue;
             double volume = symbol.NormalizeVolumeInUnits(Math.Abs(targetUnits), RoundingMode.ToNearest);
             if (volume < symbol.VolumeInUnitsMin)
+            {
+                if (targetUnits != 0)
+                    Print("{0}: el objetivo ({1:P1} del capital = {2:0.##} unidades) es menor que el volumen mínimo " +
+                          "del bróker ({3} unidades = {4:P1} del capital). Queda sin posición; hace falta más capital.",
+                        symbol.Name, weight, Math.Abs(targetUnits), symbol.VolumeInUnitsMin,
+                        symbol.VolumeInUnitsMin * unitValue / Account.Equity);
                 volume = 0;
+            }
             volume = Math.Min(volume, symbol.VolumeInUnitsMax);
             var direction = targetUnits >= 0 ? TradeType.Buy : TradeType.Sell;
 
@@ -200,7 +223,7 @@ namespace cAlgo.Robots
                 return true;
 
             Print("{0}: objetivo {1:P1} del capital -> {2} unidades (ahora {3}).", symbol.Name, weight, desiredUnits, netUnits);
-            if (DryRun)
+            if (Simulating)
                 return true;
 
             bool ok = true;
@@ -262,7 +285,7 @@ namespace cAlgo.Robots
                 return false;
             Print("Caída del {0:P1} desde el máximo: se cierran las posiciones y se detiene el cBot.",
                 1 - Account.Equity / _peakEquity);
-            if (!DryRun)
+            if (!Simulating)
                 foreach (var p in Positions.FindAll(Label))
                     ClosePosition(p);
             Stop();
@@ -271,7 +294,7 @@ namespace cAlgo.Robots
 
         // Cierres de velas diarias ya terminadas, en las fechas comunes a
         // todos los símbolos. Devuelve null si aún no hay historia suficiente.
-        private double[][] AlignClosedBars(out DateTime lastDate)
+        private double[][] AlignClosedBars(out DateTime lastDate, out int commonDays)
         {
             lastDate = DateTime.MinValue;
             var series = new List<Dictionary<DateTime, double>>();
@@ -285,6 +308,7 @@ namespace cAlgo.Robots
                 series.Add(closes);
             }
             var dates = series[0].Keys.Where(d => series.All(s => s.ContainsKey(d))).OrderBy(d => d).ToList();
+            commonDays = dates.Count;
             if (dates.Count < MinHistoryBars)
                 return null;
             lastDate = dates[dates.Count - 1];

@@ -43,7 +43,22 @@ extra, si la cuenta cae más de un 30 % desde su máximo, cierra todo y se detie
 | Exposición bruta máx. de la cartera | 1,0 | 1 = sin apalancamiento |
 | Umbral de rebalanceo | 0,1 | Evita operar por cambios pequeños (se divide entre el nº de símbolos) |
 | Parar si la caída supera (%) | 30 | Cierra todo y detiene el cBot |
-| Solo simular | **Sí** | Registra lo que haría sin enviar órdenes |
+| Solo simular en cuenta real | **Sí** | Registra lo que haría sin enviar órdenes. En backtest se ignora |
+
+## Si no abre operaciones
+
+Mira la pestaña **Log** del cBot. Siempre indica el motivo:
+
+| Mensaje en el Log | Qué pasa | Solución |
+|---|---|---|
+| `MODO SIMULACIÓN: no se envían órdenes` | "Solo simular" está activado (cuenta real o demo) | Desactívalo cuando hayas revisado las señales |
+| `Esperando historia: N días comunes…` | Aún no hay 300 días diarios comunes a todos los símbolos | En backtest, empieza al menos 15 meses después del inicio de los datos; si un símbolo tiene poca historia, quítalo |
+| `…es menor que el volumen mínimo del bróker…` | Con tu capital, la posición calculada es más pequeña que el lote mínimo | Más capital o menos símbolos (cada uno recibe 1/N) |
+| `Señal del …: US500 0,0 %, …` | Todas las señales están a 0: ninguna tendencia alcista | Es correcto: la estrategia está fuera del mercado |
+| `Símbolo no encontrado…` | El nombre no coincide con el de tu bróker | Copia el nombre exacto de la lista de símbolos de cTrader |
+
+Las órdenes de un símbolo se envían solo cuando su mercado está abierto. Si la
+señal sale en fin de semana, se ejecutan al abrir.
 
 ## Qué símbolos usar
 
