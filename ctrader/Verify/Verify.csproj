@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Compila el cBot contra la API oficial de cTrader y permite comparar sus
+       cálculos con los de scripts/trend_strategies.py (ver ctrader/README.md). -->
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <RollForward>Major</RollForward>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="cTrader.Automate" Version="1.0.21" />
+    <Compile Include="../TrendEnsemblePortfolio.cs" />
+  </ItemGroup>
+</Project>
