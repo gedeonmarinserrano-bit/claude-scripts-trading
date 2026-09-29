@@ -13,6 +13,9 @@ Colección de pequeños scripts de utilidad para análisis de trading, desarroll
     es la fracción de pares alcistas. Sin stops ni optimización; pensada para usarse con
     `--vol-target`. Es la versión recomendada.
 
+- `ctrader/TrendEnsemblePortfolio.cs`: cBot para cTrader con la estrategia `trend_ensemble`,
+  paridad de riesgo y objetivo de volatilidad de cartera. Instrucciones en `ctrader/README.md`.
+
 ## Uso
 
 ```bash
