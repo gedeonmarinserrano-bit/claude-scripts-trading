@@ -1,0 +1,169 @@
+//@version=5
+indicator("CHoCH PRO - High Contrast + FVG/IFVG", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=500)
+
+// ─────────────────────────────
+// CONFIGURACIÓN
+// ─────────────────────────────
+periodo      = input.int(4, "Sensibilidad Pivotes", minval=1)
+vol_mult     = input.float(1.1, "Mult. Volumen Base", step=0.1)
+vol_top      = input.float(2.0, "Mult. Alto Volumen (🔥)", step=0.1)
+vol_len      = input.int(20, "Media de Volumen", minval=1)
+offset_x     = input.int(2, "Desplazamiento Texto", minval=0)
+
+mostrar_fvg     = input.bool(true, "Mostrar FVG", group="FVG / IFVG")
+mostrar_ifvg    = input.bool(true, "Mostrar IFVG", group="FVG / IFVG")
+fvg_min_pct     = input.float(0.0, "Tamaño mínimo FVG (% precio)", minval=0, step=0.05, group="FVG / IFVG")
+ocultar_mitig   = input.bool(false, "Ocultar FVG mitigados", group="FVG / IFVG")
+max_zonas       = input.int(50, "Máx. zonas vigiladas", minval=1, maxval=250, group="FVG / IFVG")
+
+// Colores Sólidos Neón
+color_alcista = #00ffbb
+color_bajista = #ff0055
+color_ifvg_alc = #00b3ff   // IFVG alcista (soporte)
+color_ifvg_baj = #ff9900   // IFVG bajista (resistencia)
+
+// ─────────────────────────────
+// DETECCIÓN DE PIVOTES
+// ─────────────────────────────
+pico  = ta.pivothigh(high, periodo, periodo)
+valle = ta.pivotlow(low, periodo, periodo)
+
+var float ultimo_pico  = na
+var int bar_pico       = na
+var float ultimo_valle = na
+var int bar_valle      = na
+var int tendencia      = 0 
+
+if not na(pico)
+    ultimo_pico := pico
+    bar_pico    := bar_index[periodo]
+if not na(valle)
+    ultimo_valle := valle
+    bar_valle    := bar_index[periodo]
+
+// ─────────────────────────────
+// LÓGICA DE VOLUMEN
+// ─────────────────────────────
+avg_vol = ta.sma(volume, vol_len)
+vol_ok  = volume > (avg_vol * vol_mult)
+vol_top_confirm = volume > (avg_vol * vol_top)
+
+// ─────────────────────────────
+// SEÑALES
+// ─────────────────────────────
+cruce_arriba = ta.crossover(close, ultimo_pico) and vol_ok
+cruce_abajo  = ta.crossunder(close, ultimo_valle) and vol_ok
+choch_alcista = cruce_arriba and not na(ultimo_pico) and tendencia <= 0
+choch_bajista = cruce_abajo and not na(ultimo_valle) and tendencia >= 0
+
+// --- ALCISTA (BUY) ---
+if cruce_arriba and not na(ultimo_pico)
+    bool es_choch = (tendencia <= 0)
+    string texto = es_choch ? (vol_top_confirm ? "🔥 CHoCH" : "CHoCH") : "BOS"
+    
+    if es_choch
+        line.new(bar_pico, ultimo_pico, bar_index, ultimo_pico, color=color_alcista, width=1)
+        label.new(bar_index - offset_x, ultimo_pico, texto, style=label.style_label_down, color=color.new(color.white, 100), textcolor=color_alcista, size=size.small)
+    else
+        label.new(bar_index, high, texto, yloc=yloc.abovebar, style=label.style_none, textcolor=color_alcista, size=size.small)
+    
+    tendencia := 1
+    ultimo_pico := na 
+
+// --- BAJISTA (SELL) ---
+if cruce_abajo and not na(ultimo_valle)
+    bool es_choch = (tendencia >= 0)
+    string texto = es_choch ? (vol_top_confirm ? "🔥 CHoCH" : "CHoCH") : "BOS"
+    
+    if es_choch
+        line.new(bar_valle, ultimo_valle, bar_index, ultimo_valle, color=color_bajista, width=1)
+        label.new(bar_index - offset_x, ultimo_valle, texto, style=label.style_label_up, color=color.new(color.white, 100), textcolor=color_bajista, size=size.small)
+    else
+        label.new(bar_index, low, texto, yloc=yloc.belowbar, style=label.style_none, textcolor=color_bajista, size=size.small)
+    
+    tendencia := -1
+    ultimo_valle := na 
+
+// FONDO MÁS VISIBLE (Opacidad 93)
+bgcolor(tendencia == 1 ? color.new(color_alcista, 93) : tendencia == -1 ? color.new(color_bajista, 93) : na)
+
+// ─────────────────────────────
+// FVG / IFVG
+// FVG: patrón de 3 velas (low > high[2] alcista, high < low[2] bajista).
+// IFVG: un FVG se invierte cuando una vela CIERRA al otro lado del hueco.
+// ─────────────────────────────
+type Zona
+    box   bx
+    float techo
+    float suelo
+    int   dir        // 1 alcista, -1 bajista
+    bool  inversa    // true = IFVG
+    bool  mitigada   // FVG rellenado con mecha (se sigue vigilando por si se invierte)
+
+var zonas = array.new<Zona>()
+nuevo_ifvg_alc = false
+nuevo_ifvg_baj = false
+
+// Actualizar zonas existentes antes de añadir las de esta vela
+if zonas.size() > 0
+    for i = zonas.size() - 1 to 0
+        z = zonas.get(i)
+        if not z.inversa
+            invertida = z.dir == 1 ? close < z.suelo : close > z.techo
+            if invertida
+                if not z.mitigada
+                    z.bx.set_right(bar_index)
+                nueva_dir = -z.dir
+                if nueva_dir == 1
+                    nuevo_ifvg_alc := true
+                else
+                    nuevo_ifvg_baj := true
+                if mostrar_ifvg
+                    col = nueva_dir == 1 ? color_ifvg_alc : color_ifvg_baj
+                    b = box.new(bar_index, z.techo, bar_index + 1, z.suelo, border_color=col, bgcolor=color.new(col, 75), text="IFVG", text_size=size.tiny, text_color=col, text_halign=text.align_right)
+                    zonas.set(i, Zona.new(b, z.techo, z.suelo, nueva_dir, true, false))
+                else
+                    zonas.remove(i)
+            else if not z.mitigada
+                rellena = z.dir == 1 ? low <= z.suelo : high >= z.techo
+                if rellena
+                    z.mitigada := true
+                    if ocultar_mitig
+                        z.bx.delete()
+                    else
+                        z.bx.set_right(bar_index)
+                else
+                    z.bx.set_right(bar_index + 1)
+        else
+            // IFVG invalidado cuando el precio vuelve a cerrar al otro lado
+            invalida = z.dir == 1 ? close < z.suelo : close > z.techo
+            if invalida
+                z.bx.set_right(bar_index)
+                zonas.remove(i)
+            else
+                z.bx.set_right(bar_index + 1)
+
+fvg_alcista = low > high[2] and (low - high[2]) / close * 100 > fvg_min_pct
+fvg_bajista = high < low[2] and (low[2] - high) / close * 100 > fvg_min_pct
+
+agregar_fvg(float techo, float suelo, int dir) =>
+    col = dir == 1 ? color_alcista : color_bajista
+    b = mostrar_fvg ? box.new(bar_index - 2, techo, bar_index + 1, suelo, border_color=na, bgcolor=color.new(col, 82), text="FVG", text_size=size.tiny, text_color=col, text_halign=text.align_right) : na
+    zonas.push(Zona.new(b, techo, suelo, dir, false, false))
+    if zonas.size() > max_zonas
+        zonas.shift()
+
+if fvg_alcista
+    agregar_fvg(low, high[2], 1)
+else if fvg_bajista
+    agregar_fvg(low[2], high, -1)
+
+// ─────────────────────────────
+// ALERTAS
+// ─────────────────────────────
+alertcondition(choch_alcista, "CHoCH alcista", "CHoCH alcista en {{ticker}} ({{interval}})")
+alertcondition(choch_bajista, "CHoCH bajista", "CHoCH bajista en {{ticker}} ({{interval}})")
+alertcondition(fvg_alcista, "FVG alcista", "Nuevo FVG alcista en {{ticker}} ({{interval}})")
+alertcondition(fvg_bajista, "FVG bajista", "Nuevo FVG bajista en {{ticker}} ({{interval}})")
+alertcondition(nuevo_ifvg_alc, "IFVG alcista creado", "Nuevo IFVG alcista (soporte) en {{ticker}} ({{interval}})")
+alertcondition(nuevo_ifvg_baj, "IFVG bajista creado", "Nuevo IFVG bajista (resistencia) en {{ticker}} ({{interval}})")
