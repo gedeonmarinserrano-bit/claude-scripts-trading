@@ -9,6 +9,7 @@ Colección de pequeños scripts de utilidad para análisis de trading, desarroll
   - `find_fvgs`: Fair Value Gaps (alcistas/bajistas) con vela de mitigación e inversión.
   - `find_ifvgs`: Inverse FVG, creados cuando una vela cierra al otro lado de un FVG.
   - `find_structure_breaks` / `find_choch`: rupturas de estructura (BOS) y Change of Character (CHoCH) a partir de swings confirmados, sin mirar al futuro.
+- `pine/choch_fvg_ifvg.pine`: indicador de TradingView que **marca en el gráfico** CHoCH/BOS (línea + etiqueta), FVG (cajas) e IFVG (caja nueva al invertirse), con alertas para cada evento. Copiar el contenido en el editor de Pine y pulsar «Añadir al gráfico».
 
 ## Uso
 
