@@ -1,0 +1,371 @@
+//@version=6
+// ═══════════════════════════════════════════════════════════════════════════
+//  Estrategia: RUPTURA DE NIVEL CLAVE + FVG  (estructura en M5, entrada en M1)
+// ───────────────────────────────────────────────────────────────────────────
+//  Pensada para MNQ en la apertura de Nueva York (15:30-17:00 hora España).
+//  PONER EL GRÁFICO EN 1 MINUTO: las velas de 5 minutos se construyen dentro
+//  del propio script, así no hay repintado.
+//
+//  Reglas:
+//   1. Niveles clave: máximo/mínimo del día (overnight hasta la apertura) y
+//      máximo/mínimo de la sesión anterior (día previo).
+//   2. En M5 el precio rompe un nivel con fuerza (vela de cuerpo grande),
+//      opcionalmente después de una acumulación, y deja un FVG en la ruptura.
+//   3. Se espera un retroceso al FVG de M5. Si el precio atraviesa el FVG y
+//      una vela M5 cierra al otro lado, el setup se anula.
+//   4. Al tocar el FVG se pasa a M1: se busca un IFVG, es decir, una vela M1
+//      con fuerza que cierra atravesando un FVG contrario creado durante el
+//      retroceso.
+//   5. Entrada al cierre de esa vela, stop detrás del extremo del retroceso,
+//      objetivo 1:3 (configurable).
+// ═══════════════════════════════════════════════════════════════════════════
+strategy("Ruptura Nivel Clave + FVG (M5 → M1)", shorttitle = "RNC+FVG", overlay = true,
+     initial_capital = 50000, default_qty_type = strategy.fixed, default_qty_value = 1,
+     commission_type = strategy.commission.cash_per_contract, commission_value = 0.62,
+     slippage = 1, process_orders_on_close = true,
+     max_boxes_count = 500, max_lines_count = 500, max_labels_count = 500)
+
+// ─── Entradas ──────────────────────────────────────────────────────────────
+string G_SES = "1 · Sesión"
+string tz        = input.string("America/New_York", "Zona horaria de las sesiones", group = G_SES)
+string sesTrade  = input.session("0930-1100", "Ventana de operativa (09:30-11:00 NY = 15:30-17:00 España)", group = G_SES)
+string sesOvn    = input.session("1800-0930", "Sesión overnight (define el Máx/Mín del día)", group = G_SES)
+string sesFlat   = input.session("1555-1600", "Cierre forzado de posiciones", group = G_SES)
+int    maxTrades = input.int(2, "Máx. operaciones por día", minval = 1, group = G_SES)
+
+string G_LVL = "2 · Niveles clave"
+bool useOvn  = input.bool(true, "Máx/Mín del día (overnight hasta la apertura)", group = G_LVL)
+bool usePrev = input.bool(true, "Máx/Mín de la sesión anterior (día previo)", group = G_LVL)
+
+string G_BRK = "3 · Ruptura en M5"
+int   atrLen    = input.int(14, "Periodo ATR", minval = 1, group = G_BRK)
+float brkBody   = input.float(0.8, "Cuerpo mínimo de la vela de ruptura (× ATR M5)", minval = 0, step = 0.1, group = G_BRK)
+int   fvgMinTk  = input.int(4, "Tamaño mínimo del FVG M5 (ticks)", minval = 1, group = G_BRK)
+bool  useAcc    = input.bool(true, "Exigir acumulación antes de la ruptura", group = G_BRK)
+int   accBars   = input.int(6, "Velas M5 de acumulación", minval = 2, group = G_BRK)
+float accMaxAtr = input.float(3.0, "Rango máximo de la acumulación (× ATR M5)", minval = 0.5, step = 0.1, group = G_BRK)
+int   waitRet   = input.int(12, "Máx. velas M5 esperando el retroceso", minval = 1, group = G_BRK)
+
+string G_ENT = "4 · Entrada en M1 (IFVG)"
+float ifvgBody   = input.float(0.5, "Cuerpo mínimo de la vela IFVG (× ATR M1)", minval = 0, step = 0.1, group = G_ENT)
+int   waitEnt    = input.int(30, "Máx. velas M1 buscando el IFVG tras tocar el FVG", minval = 1, group = G_ENT)
+float rr         = input.float(3.0, "Ratio beneficio/riesgo", minval = 0.5, step = 0.5, group = G_ENT)
+int   slBufTk    = input.int(4, "Margen del stop (ticks)", minval = 0, group = G_ENT)
+bool  allowLong  = input.bool(true, "Permitir largos", group = G_ENT)
+bool  allowShort = input.bool(true, "Permitir cortos", group = G_ENT)
+
+string G_RSK = "5 · Tamaño de posición"
+string sizeMode = input.string("Contratos fijos", "Modo", options = ["Contratos fijos", "Riesgo fijo en $"], group = G_RSK)
+int    fixQty   = input.int(1, "Contratos (modo fijo)", minval = 1, group = G_RSK)
+float  riskUsd  = input.float(200, "Riesgo por operación en $ (modo riesgo)", minval = 1, group = G_RSK)
+int    maxQty   = input.int(10, "Máx. contratos (modo riesgo)", minval = 1, group = G_RSK)
+
+string G_VIS = "6 · Visual"
+bool showLvls  = input.bool(true, "Mostrar niveles clave", group = G_VIS)
+bool showPanel = input.bool(true, "Mostrar panel", group = G_VIS)
+
+// ─── Sesiones ──────────────────────────────────────────────────────────────
+inSes(string s) =>
+    not na(time(timeframe.period, s, tz))
+
+bool inTrade = inSes(sesTrade)
+bool inOvn   = inSes(sesOvn)
+bool inFlat  = inSes(sesFlat)
+bool newDay  = inTrade and not inTrade[1]
+
+// ─── Niveles clave ─────────────────────────────────────────────────────────
+float prevH = request.security(syminfo.tickerid, "D", high[1], lookahead = barmerge.lookahead_on)
+float prevL = request.security(syminfo.tickerid, "D", low[1],  lookahead = barmerge.lookahead_on)
+
+var float ovnH  = na
+var float ovnL  = na
+var float curOH = na
+var float curOL = na
+if inOvn and not inOvn[1]
+    curOH := high
+    curOL := low
+else if inOvn
+    curOH := math.max(curOH, high)
+    curOL := math.min(curOL, low)
+if not inOvn and inOvn[1]
+    ovnH := curOH
+    ovnL := curOL
+
+var bool usedOH = false
+var bool usedOL = false
+var bool usedPH = false
+var bool usedPL = false
+var int  tradesToday = 0
+if newDay
+    usedOH := false
+    usedOL := false
+    usedPH := false
+    usedPL := false
+    tradesToday := 0
+
+// ─── Velas de 5 minutos construidas desde M1 ───────────────────────────────
+const int TF5 = 300000  // 5 minutos en milisegundos
+var array<float> cO = array.new_float()
+var array<float> cH = array.new_float()
+var array<float> cL = array.new_float()
+var array<float> cC = array.new_float()
+
+pushCandle(float o, float h, float l, float c) =>
+    cO.push(o)
+    cH.push(h)
+    cL.push(l)
+    cC.push(c)
+    if cC.size() > 200
+        cO.shift()
+        cH.shift()
+        cL.shift()
+        cC.shift()
+    true
+
+var int   bT    = na
+var float bO    = na
+var float bH    = na
+var float bL    = na
+var float bC    = na
+var bool  bDone = true
+bool m5Closed = false
+
+int blk = math.floor(time / TF5) * TF5
+if na(bT) or blk != bT
+    // Si faltó la última vela M1 del bloque anterior, se cierra ahora
+    if not bDone
+        pushCandle(bO, bH, bL, bC)
+        m5Closed := true
+    bT    := blk
+    bO    := open
+    bH    := high
+    bL    := low
+    bC    := close
+    bDone := false
+else
+    bH := math.max(bH, high)
+    bL := math.min(bL, low)
+    bC := close
+if not bDone and time_close >= bT + TF5
+    pushCandle(bO, bH, bL, bC)
+    bDone    := true
+    m5Closed := true
+
+// ATR de M5 (media de Wilder sobre las velas construidas) y ATR de M1
+var float atr5 = na
+if m5Closed
+    int   n  = cC.size()
+    float h  = cH.get(n - 1)
+    float l  = cL.get(n - 1)
+    float tr = n > 1 ? math.max(h - l, math.abs(h - cC.get(n - 2)), math.abs(l - cC.get(n - 2))) : h - l
+    atr5 := na(atr5) ? tr : atr5 + (tr - atr5) / atrLen
+float atr1 = ta.atr(atrLen)
+
+// ─── Estado del setup ──────────────────────────────────────────────────────
+// st: 0 = esperando ruptura · 1 = esperando retroceso al FVG M5 · 2 = buscando IFVG en M1
+var int   st    = 0
+var int   dir   = 0
+var float zTop  = na
+var float zBot  = na
+var float ext   = na
+var int   cnt5  = 0
+var int   cnt1  = 0
+var box   zBox  = na
+var array<float> oTop = array.new_float()  // FVG M1 contrarios creados en el retroceso
+var array<float> oBot = array.new_float()
+
+bool cancel   = false
+bool justSet  = false
+color colBull = color.new(color.teal, 80)
+color colBear = color.new(color.red, 80)
+
+// 1) Ruptura con FVG en M5
+if st == 0 and m5Closed and inTrade and not na(atr5) and cC.size() >= accBars + 3
+    int   n  = cC.size()
+    float h1 = cH.get(n - 3)
+    float l1 = cL.get(n - 3)
+    float c1 = cC.get(n - 3)
+    float o2 = cO.get(n - 2)
+    float c2 = cC.get(n - 2)
+    float h3 = cH.get(n - 1)
+    float l3 = cL.get(n - 1)
+
+    float accHi = h1
+    float accLo = l1
+    for i = n - 2 - accBars to n - 3
+        accHi := math.max(accHi, cH.get(i))
+        accLo := math.min(accLo, cL.get(i))
+    bool accOk   = not useAcc or (accHi - accLo) <= accMaxAtr * atr5
+    bool bodyOk  = math.abs(c2 - o2) >= brkBody * atr5
+    float minGap = fvgMinTk * syminfo.mintick
+    bool bullFvg = c2 > o2 and l3 - h1 >= minGap
+    bool bearFvg = c2 < o2 and l1 - h3 >= minGap
+
+    string lvlName = ""
+    float  lvl     = na
+    if allowLong and bullFvg and bodyOk and accOk
+        if useOvn and not usedOH and not na(ovnH) and c1 <= ovnH and c2 > ovnH
+            lvl     := ovnH
+            lvlName := "Máx día"
+            usedOH  := true
+        else if usePrev and not usedPH and not na(prevH) and c1 <= prevH and c2 > prevH
+            lvl     := prevH
+            lvlName := "Máx sesión ant."
+            usedPH  := true
+        if not na(lvl)
+            dir  := 1
+            zTop := l3
+            zBot := h1
+    if na(lvl) and allowShort and bearFvg and bodyOk and accOk
+        if useOvn and not usedOL and not na(ovnL) and c1 >= ovnL and c2 < ovnL
+            lvl     := ovnL
+            lvlName := "Mín día"
+            usedOL  := true
+        else if usePrev and not usedPL and not na(prevL) and c1 >= prevL and c2 < prevL
+            lvl     := prevL
+            lvlName := "Mín sesión ant."
+            usedPL  := true
+        if not na(lvl)
+            dir  := -1
+            zTop := l1
+            zBot := h3
+
+    if not na(lvl)
+        st      := 1
+        cnt5    := 0
+        cnt1    := 0
+        ext     := na
+        justSet := true
+        oTop.clear()
+        oBot.clear()
+        zBox := box.new(time - 2 * TF5, zTop, time, zBot, xloc = xloc.bar_time,
+             bgcolor = dir == 1 ? colBull : colBear, border_color = na)
+        label.new(bar_index, dir == 1 ? high : low, "Ruptura " + lvlName,
+             style = dir == 1 ? label.style_label_down : label.style_label_up,
+             color = dir == 1 ? color.teal : color.red, textcolor = color.white, size = size.small)
+
+// 2) Seguimiento del setup en M1
+if st > 0 and not justSet
+    if not na(zBox)
+        zBox.set_right(time)
+
+    // FVG contrarios en M1 (los que se forman mientras el precio retrocede)
+    if dir == 1 and low[2] - high >= syminfo.mintick
+        oTop.push(low[2])
+        oBot.push(high)
+    if dir == -1 and low - high[2] >= syminfo.mintick
+        oTop.push(low)
+        oBot.push(high[2])
+
+    // Fase 1: esperando que el precio vuelva al FVG de M5
+    if st == 1
+        bool touched = dir == 1 ? low <= zTop : high >= zBot
+        if touched
+            st   := 2
+            cnt1 := 0
+            ext  := dir == 1 ? low : high
+        else if oTop.size() > 0
+            // Los FVG contrarios que se rellenan antes de llegar a la zona no sirven
+            for i = oTop.size() - 1 to 0
+                if (dir == 1 and close > oTop.get(i)) or (dir == -1 and close < oBot.get(i))
+                    oTop.remove(i)
+                    oBot.remove(i)
+        if m5Closed
+            cnt5 += 1
+            if cnt5 > waitRet and st == 1
+                cancel := true
+
+    // Fase 2: en la zona, buscando el IFVG en M1
+    if st == 2
+        ext := dir == 1 ? math.min(ext, low) : math.max(ext, high)
+        bool sig = false
+        if oTop.size() > 0
+            for i = oTop.size() - 1 to 0
+                float t = oTop.get(i)
+                float b = oBot.get(i)
+                if dir == 1 and close > t
+                    if close > open and open <= t and close - open >= ifvgBody * atr1
+                        sig := true
+                    oTop.remove(i)
+                    oBot.remove(i)
+                else if dir == -1 and close < b
+                    if close < open and open >= b and open - close >= ifvgBody * atr1
+                        sig := true
+                    oTop.remove(i)
+                    oBot.remove(i)
+
+        if sig and inTrade and tradesToday < maxTrades and strategy.position_size == 0
+            float sl   = dir == 1 ? ext - slBufTk * syminfo.mintick : ext + slBufTk * syminfo.mintick
+            float risk = math.abs(close - sl)
+            float tp   = dir == 1 ? close + rr * risk : close - rr * risk
+            int   qty  = sizeMode == "Contratos fijos" ? fixQty : math.min(maxQty, int(math.floor(riskUsd / (risk * syminfo.pointvalue))))
+            if risk > 0 and qty >= 1
+                string id = dir == 1 ? "Largo" : "Corto"
+                strategy.entry(id, dir == 1 ? strategy.long : strategy.short, qty = qty)
+                strategy.exit("Salida " + id, from_entry = id, stop = sl, limit = tp)
+                tradesToday += 1
+                line.new(bar_index, sl, bar_index + 30, sl, color = color.red, width = 2)
+                line.new(bar_index, tp, bar_index + 30, tp, color = color.green, width = 2)
+                line.new(bar_index, close, bar_index + 30, close, color = color.gray, style = line.style_dashed)
+                label.new(bar_index, close, "IFVG " + (dir == 1 ? "▲" : "▼"),
+                     style = dir == 1 ? label.style_label_up : label.style_label_down,
+                     color = dir == 1 ? color.green : color.maroon, textcolor = color.white, size = size.small)
+                st := 0
+                oTop.clear()
+                oBot.clear()
+        if st == 2
+            cnt1 += 1
+            if cnt1 > waitEnt
+                cancel := true
+
+    // Anulación: una vela M5 cierra al otro lado del FVG (lo atravesó con fuerza)
+    if st > 0 and m5Closed
+        float lastC = cC.get(cC.size() - 1)
+        if (dir == 1 and lastC < zBot) or (dir == -1 and lastC > zTop)
+            cancel := true
+
+// Fuera de la ventana no se mantiene ningún setup
+if st > 0 and not inTrade
+    cancel := true
+
+if cancel
+    st := 0
+    oTop.clear()
+    oBot.clear()
+    if not na(zBox)
+        zBox.set_bgcolor(color.new(color.gray, 85))
+
+// Cierre horario
+if inFlat and strategy.position_size != 0
+    strategy.close_all(comment = "Cierre horario")
+
+// ─── Dibujo ────────────────────────────────────────────────────────────────
+plot(showLvls and useOvn  ? ovnH  : na, "Máx día",          color.new(color.orange, 0),  1, plot.style_stepline)
+plot(showLvls and useOvn  ? ovnL  : na, "Mín día",          color.new(color.orange, 0),  1, plot.style_stepline)
+plot(showLvls and usePrev ? prevH : na, "Máx sesión ant.",  color.new(color.fuchsia, 0), 1, plot.style_stepline)
+plot(showLvls and usePrev ? prevL : na, "Mín sesión ant.",  color.new(color.fuchsia, 0), 1, plot.style_stepline)
+bgcolor(inTrade ? color.new(color.blue, 94) : na, title = "Ventana de operativa")
+
+// ─── Panel ─────────────────────────────────────────────────────────────────
+var table panel = table.new(position.top_right, 2, 8, bgcolor = color.new(color.black, 15),
+     border_color = color.new(color.gray, 60), border_width = 1)
+
+cell(int r, string k, string v, color vc) =>
+    panel.cell(0, r, k, text_color = color.silver, text_size = size.small, text_halign = text.align_left)
+    panel.cell(1, r, v, text_color = vc, text_size = size.small, text_halign = text.align_right)
+
+if showPanel and barstate.islast
+    int   tot = strategy.closedtrades
+    float wr  = tot > 0 ? 100.0 * strategy.wintrades / tot : na
+    float pf  = strategy.grossloss > 0 ? strategy.grossprofit / strategy.grossloss : na
+    string stTxt = st == 0 ? "Esperando ruptura" : st == 1 ? "Esperando retroceso" : "Buscando IFVG M1"
+    bool   isM1  = timeframe.isminutes and timeframe.multiplier == 1
+    panel.cell(0, 0, "RUPTURA NIVEL + FVG", text_color = color.white, text_size = size.small)
+    panel.merge_cells(0, 0, 1, 0)
+    cell(1, "Operaciones",     str.tostring(tot), color.white)
+    cell(2, "% acierto",       na(wr) ? "-" : str.tostring(wr, "#.0") + " %", color.white)
+    cell(3, "Profit factor",   na(pf) ? "-" : str.tostring(pf, "#.00"), na(pf) ? color.white : pf >= 1 ? color.lime : color.red)
+    cell(4, "Beneficio neto",  str.tostring(strategy.netprofit, "#,##0") + " $", strategy.netprofit >= 0 ? color.lime : color.red)
+    cell(5, "Máx. drawdown",   str.tostring(strategy.max_drawdown, "#,##0") + " $", color.orange)
+    cell(6, "Estado",          stTxt, color.aqua)
+    cell(7, "Temporalidad",    isM1 ? "M1 ✓" : "⚠ Usa gráfico de 1 min", isM1 ? color.lime : color.yellow)
