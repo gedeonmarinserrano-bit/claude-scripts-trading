@@ -9,6 +9,7 @@ vol_mult     = input.float(1.1, "Mult. Volumen Base", step=0.1)
 vol_top      = input.float(2.0, "Mult. Alto Volumen (🔥)", step=0.1)
 vol_len      = input.int(20, "Media de Volumen", minval=1)
 offset_x     = input.int(2, "Desplazamiento Texto", minval=0)
+fondo_blanco = input.bool(true, "Fondo blanco")
 
 mostrar_fvg     = input.bool(true, "Mostrar FVG", group="FVG / IFVG")
 mostrar_ifvg    = input.bool(true, "Mostrar IFVG", group="FVG / IFVG")
@@ -83,8 +84,8 @@ if cruce_abajo and not na(ultimo_valle)
     tendencia := -1
     ultimo_valle := na 
 
-// FONDO MÁS VISIBLE (Opacidad 93)
-bgcolor(tendencia == 1 ? color.new(color_alcista, 93) : tendencia == -1 ? color.new(color_bajista, 93) : na)
+// FONDO BLANCO (sin colorear por tendencia)
+bgcolor(fondo_blanco ? color.white : na)
 
 // ─────────────────────────────
 // FVG / IFVG
