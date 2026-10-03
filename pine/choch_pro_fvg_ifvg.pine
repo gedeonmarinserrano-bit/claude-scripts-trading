@@ -121,7 +121,7 @@ if zonas.size() > 0
                     nuevo_ifvg_baj := true
                 if mostrar_ifvg
                     col = nueva_dir == 1 ? color_ifvg_alc : color_ifvg_baj
-                    b = box.new(bar_index, z.techo, bar_index + 1, z.suelo, border_color=col, bgcolor=color.new(col, 75), text="IFVG", text_size=size.tiny, text_color=col, text_halign=text.align_right)
+                    b = box.new(bar_index, z.techo, bar_index + 1, z.suelo, border_color=col, bgcolor=color.new(col, 75), text="IFVG", text_size=size.tiny, text_color=color.black, text_halign=text.align_right)
                     zonas.set(i, Zona.new(b, z.techo, z.suelo, nueva_dir, true))
                 else
                     zonas.remove(i)
