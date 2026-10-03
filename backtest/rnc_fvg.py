@@ -47,6 +47,7 @@ class Params:
     commission: float = 0.62       # $ por contrato y lado
     slippage_tk: int = 1           # ticks por lado
     qty: int = 1
+    bar_sec: int = 60              # duración de cada vela de los datos (300 = todo en M5)
 
 
 @dataclass
@@ -153,7 +154,7 @@ def run(df: pd.DataFrame, p: Params) -> list[Trade]:
             bT, bO, bH, bL, bC, bDone = blk, o[i], h[i], l[i], c[i], False
         else:
             bH, bL, bC = max(bH, h[i]), min(bL, l[i]), c[i]
-        if not bDone and ns[i] + 60 * 10**9 >= bT + TF5:
+        if not bDone and ns[i] + p.bar_sec * 10**9 >= bT + TF5:
             cO.append(bO); cH.append(bH); cL.append(bL); cC.append(bC); bDone = True; m5_closed = True
         if m5_closed:
             n = len(cC)

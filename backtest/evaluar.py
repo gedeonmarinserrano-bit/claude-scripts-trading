@@ -1,6 +1,7 @@
 """Pruebas de robustez de la estrategia RNC+FVG.
 
     python backtest/evaluar.py datos_1m.csv [--oos 0.3]
+    python backtest/evaluar.py datos_5m.csv --bar-sec 300   # todo en 5 minutos
 
 1. Backtest con los parámetros por defecto (los mismos del script Pine).
 2. Separación dentro de muestra (IS, primeras fechas) / fuera de muestra (OOS, últimas).
@@ -50,6 +51,7 @@ def monte_carlo_dd(pnls: list[float], n: int = 2000, seed: int = 1) -> tuple[flo
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("csv")
+    ap.add_argument("--bar-sec", type=int, default=60, help="duración de las velas del CSV en segundos (300 = todo en M5)")
     ap.add_argument("--oos", type=float, default=0.3, help="fracción final de días para fuera de muestra")
     a = ap.parse_args()
 
@@ -60,7 +62,7 @@ def main() -> None:
     oos_df = df[df.index.date >= cut]
     print(f"Datos: {df.index[0]} → {df.index[-1]} ({len(days)} días). Corte IS/OOS: {cut}\n")
 
-    base = R.Params()
+    base = R.Params(bar_sec=a.bar_sec)
     for name, part in (("TODO", df), ("IS", is_df), ("OOS", oos_df)):
         print(f"Parámetros por defecto · {name}: {R.stats(R.run(part, base))}")
 
