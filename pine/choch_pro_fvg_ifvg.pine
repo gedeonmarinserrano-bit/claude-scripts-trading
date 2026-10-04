@@ -10,7 +10,7 @@ vol_top      = input.float(2.0, "Mult. Alto Volumen (🔥)", step=0.1)
 vol_len      = input.int(20, "Media de Volumen", minval=1)
 offset_x     = input.int(2, "Desplazamiento Texto", minval=0)
 fondo_blanco = input.bool(true, "Fondo blanco")
-mostrar_bos  = input.bool(false, "Mostrar BOS")
+mostrar_bos  = input.bool(true, "Mostrar BOS (salvo con tendencia invalidada)")
 
 mostrar_fvg     = input.bool(true, "Mostrar FVG", group="FVG / IFVG")
 mostrar_ifvg    = input.bool(true, "Mostrar IFVG", group="FVG / IFVG")
@@ -129,12 +129,15 @@ var int   choch_dir     = 0
 var float choch_nivel   = na
 var int   choch_bar_piv = na
 var int   tend_previa   = 0
+// true desde que un CHoCH falla hasta el siguiente CHoCH: mientras tanto no se dibujan BOS
+var bool  tendencia_invalidada = false
 
 choch_fallido_alc = false
 choch_fallido_baj = false
 if not na(choch_bar) and bar_index == choch_bar + 1
     fallido = choch_dir == 1 ? close < choch_nivel : close > choch_nivel
     if fallido
+        tendencia_invalidada := true
         if choch_dir == 1
             choch_fallido_alc := true
         else
@@ -184,7 +187,8 @@ if cruce_arriba and not na(ultimo_pico)
         choch_nivel   := ultimo_pico
         choch_bar_piv := bar_pico
         tend_previa   := tendencia
-    else if mostrar_bos
+        tendencia_invalidada := false
+    else if mostrar_bos and not tendencia_invalidada
         label.new(bar_index, high, texto, yloc=yloc.abovebar, style=label.style_none, textcolor=color_alcista, size=size.small)
     
     tendencia := 1
@@ -208,7 +212,8 @@ if cruce_abajo and not na(ultimo_valle)
         choch_nivel   := ultimo_valle
         choch_bar_piv := bar_valle
         tend_previa   := tendencia
-    else if mostrar_bos
+        tendencia_invalidada := false
+    else if mostrar_bos and not tendencia_invalidada
         label.new(bar_index, low, texto, yloc=yloc.belowbar, style=label.style_none, textcolor=color_bajista, size=size.small)
     
     tendencia := -1
