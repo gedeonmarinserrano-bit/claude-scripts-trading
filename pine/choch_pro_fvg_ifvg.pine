@@ -145,6 +145,8 @@ borrar_bos_contrario(int dir_choch, int bar_choch) =>
         ultimo_bos_lbl.delete()
 var int   dir_invalidada       = 0
 var float nivel_invalidado     = na
+var label lbl_invalidado       = na
+var line  ln_invalidado        = na
 
 choch_fallido_alc = false
 choch_fallido_baj = false
@@ -154,6 +156,8 @@ if not na(choch_bar) and bar_index == choch_bar + 1
         tendencia_invalidada := true
         dir_invalidada       := choch_dir
         nivel_invalidado     := choch_nivel
+        lbl_invalidado       := choch_lbl
+        ln_invalidado        := choch_ln
         if choch_dir == 1
             choch_fallido_alc := true
         else
@@ -261,6 +265,16 @@ if tendencia_invalidada
             ultimo_valle := na
     if reactivada_alc or reactivada_baj
         tendencia_invalidada := false
+        // El CHoCH que parecía fallido era bueno: vuelve a dibujarse como CHoCH válido
+        // y se borra el BOS contrario previo, igual que en un CHoCH confirmado
+        col_ok = dir_invalidada == 1 ? color_alcista : color_bajista
+        txt_ok = str.replace_all(str.replace_all(lbl_invalidado.get_text(), "✗ ", ""), "⚠ ", "")
+        lbl_invalidado.set_text(txt_ok)
+        lbl_invalidado.set_textcolor(col_ok)
+        lbl_invalidado.set_tooltip("CHoCH confirmado tras recuperar el nivel")
+        ln_invalidado.set_color(col_ok)
+        ln_invalidado.set_style(line.style_solid)
+        borrar_bos_contrario(dir_invalidada, bar_index)
 
 // FONDO BLANCO (sin colorear por tendencia)
 bgcolor(fondo_blanco ? color.white : na)
