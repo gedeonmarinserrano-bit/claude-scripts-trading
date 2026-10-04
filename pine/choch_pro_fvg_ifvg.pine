@@ -1,5 +1,12 @@
-//@version=5
-indicator("CHoCH PRO - High Contrast + FVG/IFVG", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=500)
+// CHoCH PRO + FVG/IFVG + EMAs + Rangos
+//
+// Incluye "Auto Range Detector [QuantAlgo]" © QuantAlgo, licenciado bajo
+// Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
+// https://creativecommons.org/licenses/by-nc-sa/4.0/
+// Por esa licencia, este script combinado se distribuye bajo la misma licencia (CC BY-NC-SA 4.0).
+
+//@version=6
+indicator("CHoCH PRO - High Contrast + FVG/IFVG + Rangos", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=500, max_bars_back=2000)
 
 // ─────────────────────────────
 // CONFIGURACIÓN
@@ -13,6 +20,7 @@ fondo_blanco = input.bool(true, "Fondo blanco")
 mostrar_bos  = input.bool(true, "Mostrar BOS (salvo con tendencia invalidada)")
 borrar_bos_giro = input.bool(true, "Borrar el BOS contrario previo al CHoCH (modifica el pasado)")
 bos_ventana  = input.int(0, "Borrar BOS previo al CHoCH: máx. velas (0 = sin límite)", minval=0)
+filtro_rango = input.bool(true, "Sin CHoCH ni BOS dentro de un rango (hasta el breakout)")
 
 mostrar_fvg     = input.bool(true, "Mostrar FVG", group="FVG / IFVG")
 mostrar_ifvg    = input.bool(true, "Mostrar IFVG", group="FVG / IFVG")
@@ -61,6 +69,452 @@ ema_rapida = ta.ema(close, ema_rap_len)
 ema_media  = ta.ema(close, ema_med_len)
 ema_lenta  = ta.ema(close, ema_len_len)
 atr_val    = ta.atr(atr_len)
+
+//              ╔════════════════════════════════╗              //
+//              ║  AUTO RANGE DETECTOR [QuantAlgo] ║            //
+//              ║      USER-DEFINED SETTINGS     ║              //
+//              ╚════════════════════════════════╝              //
+
+var string group_detect    = '════════ Detection ════════'
+var string group_structure = '════════ Structure Filters ════════'
+var string group_range     = '════════ Range Behavior ════════'
+var string group_visual    = '════════ Visual Settings ════════'
+
+tooltip_scaling      = 'Number of window sizes tested on each bar. Base only tests a single lookback and finds structures near that length. Base + 2x also tests double the base length. Base + 2x + 3x adds triple, and the longest window that passes every filter defines the range, so short coils and long consolidations are both covered by one configuration.'
+tooltip_base_length  = 'Shortest window tested, and the length the larger windows are multiplied from. This is the smallest structure the detector can find. Lower values capture brief pauses inside a trend and open boxes sooner. Higher values reserve detection for extended consolidation and produce fewer, larger boxes.'
+tooltip_boundary     = 'Determines where the two boundaries sit and how range height is measured. Percentile band uses a high percentile of highs and the mirrored percentile of lows, so outlying spikes do not define the box. That value is interpolated between the two nearest bars, so a boundary can rest slightly away from any single wick. Absolute extremes uses the highest high and lowest low, placing the edges on the extreme wicks and measuring height peak to trough. Body extremes uses opens and closes only, which suits instruments with erratic wicks such as thin crypto pairs.'
+tooltip_band_pct     = 'Percentile used for the upper boundary, mirrored for the lower one. At 100 the band matches the absolute extremes. Lower values trim more of the outlying wicks from the boundary, tightening the box onto the working range and producing more boundary tags. Only applies when Boundary Basis is set to Percentile band.'
+tooltip_timing       = 'Bar close waits for the bar to close before a range forms, breaks, or fires an alert, so nothing on the chart changes once drawn. This is the setting to use when acting on signals mechanically.\n\nLive bar evaluates the forming bar for earlier signals. Two behaviors follow from that. A box or marker can move or disappear before the bar closes, since the reading it came from is still forming. And when Absorb Overshoot is enabled, a boundary that stretches to take in an intrabar wick keeps that position after the tick passes, so a boundary can sit slightly wider than the closed candles behind it. Both resolve as the structure develops: subsequent bars re-evaluate the boundary against real extremes, and the breakout buffer measures from wherever it sits. Switch to Bar close for a chart that never revises itself.'
+tooltip_atr_length   = 'ATR lookback behind the compression measurement, touch tolerance, breakout buffer and overshoot allowance. Since those four are expressed in ATR, this scales them together. Shorter values follow recent volatility. Longer values hold a steadier reference across regimes. The compression ranking begins once this lookback has filled, so the setting also decides how early in a chart detection can start.'
+
+tooltip_compression  = 'Volatility gate for the candidate band. Band height is ranked against its own history on the current symbol and interval, so the setting carries the same meaning on any instrument and is unaffected by the surrounding volatility regime. At 40, a window qualifies when it is tighter than 60 percent of what that market normally produces. Higher values accept wider structures and produce more boxes. Lower values isolate tight coiling.'
+tooltip_calibration  = 'History the compression reading is ranked against. Longer windows hold a steadier reference and an even detection rate over time. Shorter windows re-baseline faster after a volatility shift, so the working threshold follows recent conditions. The ranking uses whichever is smaller, this setting or the history available past the ATR lookback, so higher timeframes and recent listings rank against the bars they have.'
+tooltip_rotation     = 'Midline crossings per bar required from the window. Width alone does not separate a range from a reversal, since a V shaped move can span the same distance as a rectangle while crossing its midline about twice, where price rotating between two boundaries crosses repeatedly. Higher values require busier two sided rotation and filter out reversals. Lower values also accept quieter consolidation. Three crossings acts as a floor, so on short windows the lowest settings resolve to that.'
+tooltip_touch_basis  = 'Wick reaches counts any bar whose high or low entered the tolerance band. Close reaches counts only bars that closed inside it, isolating bars that were rejected at the boundary rather than spiked through, and registers fewer touches on the same data.'
+tooltip_min_touches  = 'Bars that must reach each boundary before the structure is accepted. At 2 and above, a single spike high paired with a single spike low no longer forms a range. Higher values require a box defended repeatedly, which forms the range later with more structure behind it.'
+tooltip_touch_tol    = 'Half width of the zone around each boundary that registers as a touch, in ATR. Tighter values count precise tests only, suiting instruments that hold their levels closely. Wider values also count approaches into the boundary area, suiting noisier instruments. The same tolerance decides how far a wick may extend past a boundary and still let that bar anchor the left edge of a box.'
+tooltip_drift        = 'Maximum tilt of the window mean, measured as the regression slope across the window as a fraction of band height. At 0 the structure is perfectly flat. At 1 the trend line traveled the full height of the box. Higher values also accept rising and falling channels. Lower values isolate a flat range with a stable mean.'
+tooltip_containment  = 'Share of closes that must sit between the two boundaries. Rotation establishes that price turned repeatedly, containment establishes that it did so inside the band rather than passing through it. The same share governs how much excursion the left edge may cross while anchoring back, so higher values produce a tighter box over less history and lower values allow more excursion on both counts.'
+
+tooltip_anchoring    = 'Scan window only draws the box across the window that was tested, so the drawn structure matches the bars the filters evaluated exactly. Extend to containment walks back from that window while earlier bars stay inside the band, allowing the excursion that Min Containment permits before it stops. The edge lands only on a bar held inside the boundaries wick and all, so a box begins on a candle that belonged to the structure rather than one that arrived into it.'
+tooltip_anchor_back  = 'Maximum distance the left edge may travel backwards. The walk stops on its own once earlier history leaves the band, so this acts as a ceiling rather than a target. Higher values let a box cover a long consolidation in full. Lower values keep it on the most recent portion of the structure. Only applies when Range Anchoring is set to Extend to containment.'
+tooltip_min_bars     = 'Bars the box must span before the structure is confirmed. Until then it is provisional and drawn with a dashed border, and a break at that stage clears it without a marker, so only structures that held remain on the chart. The count runs from the left edge, so a box anchored back over earlier history can satisfy this immediately. Values above the anchored span are where this takes effect.'
+tooltip_absorb       = 'Allows a boundary to stretch and take in a wick that pokes marginally outside instead of ending the range there, keeping one structure intact where a rigid box would close and reform a few ticks away. Applies under Close beyond confirmation only, since Wick beyond treats any trade through the boundary as a break.'
+tooltip_overshoot    = 'Largest wick excursion that can be taken into a boundary, in ATR. Beyond this distance the move registers as genuine expansion and the range ends. Only applies when Absorb Overshoot is enabled and Break Confirmation is set to Close beyond.'
+tooltip_confirm      = 'Close beyond ends the range when a bar closes past the boundary, which ignores intrabar spikes. Wick beyond ends it on any trade through the boundary, which closes boxes earlier and captures stop runs, including spikes that reverse. This governs how a range ends. What qualifies as a range is set in Structure Filters.'
+tooltip_break_buffer = 'Distance past the boundary that price must clear for the break to register, in ATR. At 0 the boundary itself is the line. Higher values filter marginal breaks that cleared the level without force, and confirm genuine breaks later in the move.'
+tooltip_merge        = 'Governs a break that closes back inside the range. When enabled, the broken range is held open briefly and a close back between the boundaries revives it: the box resumes from its original left edge, the breakout marker is withdrawn, and the excursion is marked at its extreme, leaving one structure with a failed break inside it. When disabled, every break is final, which matches trading breaks mechanically.'
+tooltip_deviation    = 'Bars a broken range waits for price to return inside it. Longer windows recover deeper and slower excursions into the parent structure. Shorter windows recover an immediate rejection only. No new range opens while one is waiting, so this scales with the interval traded. Only applies when Merge Deviations is enabled.'
+tooltip_cooldown     = 'Bars before a new range can open after one ends. This keeps a fresh box from forming inside the breakout leg of the range that just resolved. Higher values suit faster intervals where breaks run for several bars.'
+tooltip_max_age      = 'Retires a range once it has been open this many bars, whether or not price broke it. The count runs from the bar the range formed, so anchoring back over earlier history never retires a box early. At 0 a range runs for as long as the structure holds, which suits swing charts. A positive value resets the detector periodically rather than carrying one box across sessions.'
+
+tooltip_color_pre    = 'Pre configured color schemes for different chart themes. Classic uses traditional green and red. Aqua uses ocean blue and orange. Cosmic uses mint and purple. Cyber uses teal and warm orange. Neon uses high contrast yellow and magenta. Custom uses the bullish, bearish, and range colors you set below.'
+tooltip_bullish      = 'Color applied to an upside break, its marker, and the shading of the range that gave way upward. Also applied to a deviation below the range, since a failed break of support resolves bullish. Every element drawn in this color is contrast corrected against the chart background, so any choice stays visible.'
+tooltip_bearish      = 'Color applied to a downside break, its marker, and the shading of the range that gave way downward. Also applied to a deviation above the range, since a failed break of resistance resolves bearish. Every element drawn in this color is contrast corrected against the chart background, so any choice stays visible.'
+tooltip_range_color  = 'Color applied to a live range: its border, its shading, the equilibrium and quartile levels, and the range tag. This sits outside the preset so the range stays neutral against whichever bullish and bearish pair is active. Every element is contrast corrected against the chart background, so a color close to the background lifts far enough to read while the shading stays light enough to keep price action visible.'
+tooltip_gradient     = 'Horizontal slices the range shading is built from. Higher values fade more smoothly from the boundaries toward equilibrium. Each slice is a drawing object, so lower values leave room for more completed boxes in chart history.'
+tooltip_fill_trans   = 'Transparency of the range shading. The center is always lighter than the edges so the fade stays visible at any setting. Higher values keep price action fully exposed.'
+tooltip_equilibrium  = 'Show the midpoint of the range, which is the line the rotation filter counts crossings against.'
+tooltip_quartiles    = 'Show the 25 and 75 percent levels inside the range, marking where a rotation is already extended relative to the structure.'
+tooltip_range_label  = 'Show a tag on each range with its state, the bars it has held, and its height as a percentage of price.\n\nThe bar count is the number of candles the structure contained. While a range is live that is every candle from the left edge to the current bar. When a break ends it, the box still extends over the bar that broke it so the marker sits on that candle, but the bar itself is not counted, so the figure on the retired box matches the last reading it showed while live. A range retired by Max Range Age counts its final bar, since no break occurred. TradingView measurement tools count the intervals between bars rather than the bars themselves, so a ruler dragged across a box reads one lower than a candle count.'
+tooltip_breakouts    = 'Show a marker on the bar that resolves a confirmed range. An upside break prints below the bar and a downside break above it. Provisional structures produce no marker, and the marker is withdrawn if the break is later merged back in as a deviation.'
+tooltip_deviations   = 'Show a marker at the extreme of a failed break once price returns inside the range. It sits on the high or low of the excursion rather than the bar price returned on, marking the level that was swept. Requires Merge Deviations.'
+tooltip_label_size   = 'Text size for range tags, breakout markers and deviation markers. Tiny and Small stay readable on crowded charts. Normal and Large suit presentation and screen recording.'
+
+scan_scaling      = input.string('Base + 2x + 3x', 'Scan Scaling', options = ['Base only', 'Base + 2x', 'Base + 2x + 3x'], group = group_detect, tooltip = tooltip_scaling)
+base_length       = input.int(20, 'Base Scan Length', minval = 8, maxval = 100, group = group_detect, tooltip = tooltip_base_length)
+boundary_basis    = input.string('Percentile band', 'Boundary Basis', options = ['Percentile band', 'Absolute extremes', 'Body extremes'], group = group_detect, tooltip = tooltip_boundary)
+band_percentile   = input.float(90.0, 'Boundary Percentile', minval = 70.0, maxval = 100.0, step = 1.0, group = group_detect, tooltip = tooltip_band_pct)
+signal_timing     = input.string('Bar close', 'Signal Timing', options = ['Bar close', 'Live bar'], group = group_detect, tooltip = tooltip_timing)
+atr_length        = input.int(200, 'ATR Length', minval = 14, maxval = 1000, group = group_detect, tooltip = tooltip_atr_length)
+
+compression_pct   = input.float(40.0, 'Compression Percentile', minval = 5.0, maxval = 95.0, step = 5.0, group = group_structure, tooltip = tooltip_compression)
+calibration_len   = input.int(500, 'Calibration Lookback', minval = 100, maxval = 2000, group = group_structure, tooltip = tooltip_calibration)
+min_rotation      = input.float(0.18, 'Min Rotation Rate', minval = 0.05, maxval = 0.60, step = 0.01, group = group_structure, tooltip = tooltip_rotation)
+touch_basis       = input.string('Wick reaches', 'Touch Definition', options = ['Wick reaches', 'Close reaches'], group = group_structure, tooltip = tooltip_touch_basis)
+min_touches       = input.int(2, 'Min Boundary Touches', minval = 1, maxval = 10, group = group_structure, tooltip = tooltip_min_touches)
+touch_tolerance   = input.float(0.10, 'Touch Tolerance (ATR)', minval = 0.02, maxval = 1.0, step = 0.02, group = group_structure, tooltip = tooltip_touch_tol)
+max_drift         = input.float(0.45, 'Max Drift', minval = 0.05, maxval = 2.0, step = 0.05, group = group_structure, tooltip = tooltip_drift)
+min_containment   = input.float(0.70, 'Min Containment', minval = 0.40, maxval = 1.0, step = 0.05, group = group_structure, tooltip = tooltip_containment)
+
+range_anchoring   = input.string('Extend to containment', 'Range Anchoring', options = ['Scan window only', 'Extend to containment'], group = group_range, tooltip = tooltip_anchoring)
+anchor_lookback   = input.int(300, 'Anchor Lookback', minval = 20, maxval = 500, group = group_range, tooltip = tooltip_anchor_back)
+min_range_bars    = input.int(10, 'Minimum Range Bars', minval = 2, maxval = 200, group = group_range, tooltip = tooltip_min_bars)
+absorb_overshoot  = input.bool(true, 'Absorb Overshoot', group = group_range, tooltip = tooltip_absorb)
+overshoot_tol     = input.float(0.25, 'Overshoot Tolerance (ATR)', minval = 0.05, maxval = 1.0, step = 0.05, group = group_range, tooltip = tooltip_overshoot)
+break_confirm     = input.string('Close beyond', 'Break Confirmation', options = ['Close beyond', 'Wick beyond'], group = group_range, tooltip = tooltip_confirm)
+breakout_buffer   = input.float(0.15, 'Breakout Buffer (ATR)', minval = 0.0, maxval = 2.0, step = 0.05, group = group_range, tooltip = tooltip_break_buffer)
+merge_deviations  = input.bool(true, 'Merge Deviations', group = group_range, tooltip = tooltip_merge)
+deviation_window  = input.int(10, 'Deviation Window', minval = 1, maxval = 100, group = group_range, tooltip = tooltip_deviation)
+cooldown_bars     = input.int(3, 'Cooldown Bars', minval = 0, maxval = 100, group = group_range, tooltip = tooltip_cooldown)
+max_range_age     = input.int(0, 'Max Range Age', minval = 0, maxval = 2000, group = group_range, tooltip = tooltip_max_age)
+
+color_preset      = input.string('Custom', 'Color Preset', options = ['Classic', 'Aqua', 'Cosmic', 'Cyber', 'Neon', 'Custom'], group = group_visual, tooltip = tooltip_color_pre)
+bullish_input     = input.color(#00ffaa, 'Bullish Color', group = group_visual, tooltip = tooltip_bullish)
+bearish_input     = input.color(#ff0000, 'Bearish Color', group = group_visual, tooltip = tooltip_bearish)
+range_input       = input.color(color.gray, 'Range Color', group = group_visual, tooltip = tooltip_range_color)
+gradient_steps    = input.int(4, 'Gradient Steps', minval = 1, maxval = 10, group = group_visual, tooltip = tooltip_gradient)
+fill_transparency = input.int(88, 'Fill Transparency', minval = 50, maxval = 100, group = group_visual, tooltip = tooltip_fill_trans)
+show_equilibrium  = input.bool(true, 'Show Equilibrium Line', group = group_visual, tooltip = tooltip_equilibrium)
+show_quartiles    = input.bool(true, 'Show Quartile Levels', group = group_visual, tooltip = tooltip_quartiles)
+show_range_label  = input.bool(true, 'Show Range Labels', group = group_visual, tooltip = tooltip_range_label)
+show_breakouts    = input.bool(true, 'Show Breakout Markers', group = group_visual, tooltip = tooltip_breakouts)
+show_deviations   = input.bool(true, 'Show Deviation Markers', group = group_visual, tooltip = tooltip_deviations)
+label_text_size   = input.string('Small', 'Label Text Size', options = ['Tiny', 'Small', 'Normal', 'Large'], group = group_visual, tooltip = tooltip_label_size)
+
+[bullish_color, bearish_color] = switch color_preset
+    'Classic' => [#00ff00, #ff0000]
+    'Aqua'    => [#00d4ff, #ff8c00]
+    'Cosmic'  => [#49ffce, #9932cc]
+    'Cyber'   => [#00cccc, #ff6600]
+    'Neon'    => [#ffff00, #ff00ff]
+    =>           [bullish_input, bearish_input]
+
+var color transparent_fill = color.new(color.black, 100)
+var float contrast_line    = 3.0
+var float contrast_fill    = 1.6
+
+//              ╔════════════════════════════════╗              //
+//              ║       UTILITY FUNCTIONS        ║              //
+//              ╚════════════════════════════════╝              //
+
+resolveSize(string choice) =>
+    switch choice
+        'Tiny'   => size.tiny
+        'Normal' => size.normal
+        'Large'  => size.large
+        =>          size.small
+
+luminanceOf(color source) =>
+    channel_r = color.r(source) / 255.0
+    channel_g = color.g(source) / 255.0
+    channel_b = color.b(source) / 255.0
+    linear_r  = channel_r <= 0.03928 ? channel_r / 12.92 : math.pow((channel_r + 0.055) / 1.055, 2.4)
+    linear_g  = channel_g <= 0.03928 ? channel_g / 12.92 : math.pow((channel_g + 0.055) / 1.055, 2.4)
+    linear_b  = channel_b <= 0.03928 ? channel_b / 12.92 : math.pow((channel_b + 0.055) / 1.055, 2.4)
+    0.2126 * linear_r + 0.7152 * linear_g + 0.0722 * linear_b
+
+contrastRatio(color first_color, color second_color) =>
+    first_lum  = luminanceOf(first_color)
+    second_lum = luminanceOf(second_color)
+    (math.max(first_lum, second_lum) + 0.05) / (math.min(first_lum, second_lum) + 0.05)
+
+contrastText(color backdrop) =>
+    luminanceOf(backdrop) > 0.179 ? #000000 : #ffffff
+
+blendToward(color source, color target, float weight) =>
+    color.rgb(color.r(source) + (color.r(target) - color.r(source)) * weight, color.g(source) + (color.g(target) - color.g(source)) * weight, color.b(source) + (color.b(target) - color.b(source)) * weight)
+
+readableOn(color source, color backdrop, float floor_ratio) =>
+    target   = contrastText(backdrop)
+    adjusted = source
+    for step = 1 to 10
+        if contrastRatio(adjusted, backdrop) >= floor_ratio
+            break
+        adjusted := blendToward(source, target, step / 10.0)
+    adjusted
+
+percentText(float value) =>
+    str.tostring(value, '#.##') + '%'
+
+buildShade(array<box> shade, int left_bar, float top_price, float bottom_price) =>
+    array.clear(shade)
+    for i = 0 to gradient_steps - 1
+        array.push(shade, box.new(left_bar, top_price, bar_index, bottom_price, border_color = na, border_width = 0, bgcolor = na, xloc = xloc.bar_index))
+
+paintShade(array<box> shade, float top_price, float bottom_price, int left_bar, int right_bar, color shade_color) =>
+    slices = array.size(shade)
+    if slices > 0 and top_price > bottom_price
+        slice_height = (top_price - bottom_price) / slices
+        for i = 0 to slices - 1
+            slice_box   = array.get(shade, i)
+            center_dist = math.abs((i + 0.5) / slices - 0.5) * 2.0
+            slice_trans = int(math.min(99, math.max(0, fill_transparency + (1.0 - center_dist) * 10)))
+            box.set_lefttop(slice_box, left_bar, top_price - slice_height * i)
+            box.set_rightbottom(slice_box, right_bar, top_price - slice_height * (i + 1))
+            box.set_bgcolor(slice_box, color.new(shade_color, slice_trans))
+
+deleteShade(array<box> shade) =>
+    if array.size(shade) > 0
+        for i = 0 to array.size(shade) - 1
+            box.delete(array.get(shade, i))
+    array.clear(shade)
+
+anchorSpan(int window, float top_price, float bottom_price, float tolerance) =>
+    span = window
+    if range_anchoring == 'Extend to containment'
+        limit   = math.min(anchor_lookback, bar_index)
+        allowed = math.max(2, math.round((1.0 - min_containment) * window))
+        outside = 0
+        offset  = 0
+        while offset < limit and outside <= allowed
+            closed_in = close[offset] <= top_price and close[offset] >= bottom_price
+            fully_in  = closed_in and high[offset] <= top_price + tolerance and low[offset] >= bottom_price - tolerance
+            if closed_in
+                outside := math.max(0, outside - 1)
+                if fully_in and offset + 1 >= window
+                    span := offset + 1
+            else
+                outside += 1
+            offset += 1
+    span
+
+//              ╔════════════════════════════════╗              //
+//              ║        CORE CALCULATION        ║              //
+//              ╚════════════════════════════════╝              //
+
+atr_value   = ta.atr(atr_length)
+context_ok  = not na(atr_value) and atr_value > 0
+wick_break  = break_confirm == 'Wick beyond'
+wick_touch  = touch_basis == 'Wick reaches'
+live_timing = signal_timing == 'Live bar'
+bar_ready   = live_timing or barstate.isconfirmed
+label_size  = resolveSize(label_text_size)
+
+chart_backdrop     = chart.bg_color
+range_line_color   = readableOn(range_input, chart_backdrop, contrast_line)
+bullish_line_color = readableOn(bullish_color, chart_backdrop, contrast_line)
+bearish_line_color = readableOn(bearish_color, chart_backdrop, contrast_line)
+range_fill_color   = readableOn(range_input, chart_backdrop, contrast_fill)
+bullish_fill_color = readableOn(bullish_color, chart_backdrop, contrast_fill)
+bearish_fill_color = readableOn(bearish_color, chart_backdrop, contrast_fill)
+
+scanWindow(simple int len) =>
+    pct_top     = ta.percentile_linear_interpolation(high, len, band_percentile)
+    pct_bottom  = ta.percentile_linear_interpolation(low, len, 100.0 - band_percentile)
+    ext_top     = ta.highest(high, len)
+    ext_bottom  = ta.lowest(low, len)
+    body_top    = ta.highest(math.max(open, close), len)
+    body_bottom = ta.lowest(math.min(open, close), len)
+    top         = boundary_basis == 'Absolute extremes' ? ext_top : boundary_basis == 'Body extremes' ? body_top : pct_top
+    bottom      = boundary_basis == 'Absolute extremes' ? ext_bottom : boundary_basis == 'Body extremes' ? body_bottom : pct_bottom
+    band_height = top - bottom
+    compression = context_ok and band_height > 0 ? band_height / (atr_value * math.sqrt(len)) : 99.0
+    span_cap    = bar_index < 1 ? calibration_len : int(math.max(1, math.min(calibration_len, bar_index - atr_length)))
+    rank        = ta.percentrank(compression, span_cap)
+    slope       = ta.linreg(close, len, 0) - ta.linreg(close, len, 1)
+    drift       = band_height > 0 ? math.abs(slope) * len / band_height : 99.0
+    midpoint    = math.avg(top, bottom)
+    tolerance   = touch_tolerance * nz(atr_value)
+    crossings   = 0
+    hits_top    = 0
+    hits_bottom = 0
+    contained   = 0
+    for i = 0 to len - 1
+        if (close[i] > midpoint) != (close[i + 1] > midpoint)
+            crossings += 1
+        touched_top    = wick_touch ? high[i] >= top - tolerance : close[i] >= top - tolerance
+        touched_bottom = wick_touch ? low[i] <= bottom + tolerance : close[i] <= bottom + tolerance
+        if touched_top
+            hits_top += 1
+        if touched_bottom
+            hits_bottom += 1
+        if close[i] <= top and close[i] >= bottom
+            contained += 1
+    containment = contained / float(len)
+    qualified   = context_ok and not na(rank) and bar_index > len + 5 and rank <= compression_pct and crossings >= math.max(3, math.round(min_rotation * len)) and hits_top >= min_touches and hits_bottom >= min_touches and drift <= max_drift and containment >= min_containment
+    [qualified, top, bottom]
+
+[qualified_a, top_a, bottom_a] = scanWindow(base_length)
+[qualified_b, top_b, bottom_b] = scanWindow(base_length * 2)
+[qualified_c, top_c, bottom_c] = scanWindow(base_length * 3)
+
+use_double = scan_scaling != 'Base only' and qualified_b
+use_triple = scan_scaling == 'Base + 2x + 3x' and qualified_c
+qualified  = qualified_a or use_double or use_triple
+
+scan_length = use_triple ? base_length * 3 : use_double ? base_length * 2 : base_length
+scan_top    = use_triple ? top_c : use_double ? top_b : top_a
+scan_bottom = use_triple ? bottom_c : use_double ? bottom_b : bottom_a
+
+//              ╔════════════════════════════════╗              //
+//              ║          RANGE ENGINE          ║              //
+//              ╚════════════════════════════════╝              //
+
+var array<box> shade_boxes = array.new<box>()
+var box   range_box        = na
+var line  equilibrium_line = na
+var line  lower_quartile   = na
+var line  upper_quartile   = na
+var label range_tag        = na
+var label break_marker     = na
+var float range_top        = na
+var float range_bottom     = na
+var int   range_left       = na
+var int   range_opened     = na
+var bool  range_active     = false
+var bool  range_confirmed  = false
+var bool  range_dormant    = false
+var int   dormant_since    = na
+var int   dormant_dir      = 0
+var float deviation_price  = na
+var int   deviation_bar    = na
+var int   cooldown_left    = 0
+
+signal_new_range  = false
+signal_break_up   = false
+signal_break_down = false
+signal_deviation  = false
+
+if bar_ready and cooldown_left > 0
+    cooldown_left -= 1
+
+if bar_ready and not range_active and not range_dormant and cooldown_left <= 0 and qualified
+    anchor_bars      = anchorSpan(scan_length, scan_top, scan_bottom, touch_tolerance * atr_value)
+    range_left      := bar_index - anchor_bars + 1
+    range_opened    := bar_index
+    range_top       := scan_top
+    range_bottom    := scan_bottom
+    range_active    := true
+    range_confirmed := false
+    midpoint         = math.avg(range_top, range_bottom)
+    quartile_low     = range_bottom + (range_top - range_bottom) * 0.25
+    quartile_high    = range_bottom + (range_top - range_bottom) * 0.75
+    range_box       := box.new(range_left, range_top, bar_index, range_bottom, border_color = color.new(range_line_color, 65), border_width = 1, border_style = line.style_dashed, bgcolor = na, xloc = xloc.bar_index)
+    buildShade(shade_boxes, range_left, range_top, range_bottom)
+    if show_equilibrium
+        equilibrium_line := line.new(range_left, midpoint, bar_index, midpoint, xloc.bar_index, extend.none, color.new(range_line_color, 25), line.style_dotted, 1)
+    if show_quartiles
+        lower_quartile := line.new(range_left, quartile_low, bar_index, quartile_low, xloc.bar_index, extend.none, color.new(range_line_color, 70), line.style_dotted, 1)
+        upper_quartile := line.new(range_left, quartile_high, bar_index, quartile_high, xloc.bar_index, extend.none, color.new(range_line_color, 70), line.style_dotted, 1)
+    if show_range_label
+        range_tag := label.new(range_left, range_top, '', xloc = xloc.bar_index, yloc = yloc.price, color = transparent_fill, style = label.style_label_down, textcolor = color.new(range_line_color, 10), size = label_size)
+    signal_new_range := true
+
+if range_active and bar_ready
+    break_offset  = breakout_buffer * atr_value
+    absorb_offset = overshoot_tol * atr_value
+    if absorb_overshoot and not wick_break and close <= range_top and close >= range_bottom
+        if high > range_top and high <= range_top + absorb_offset
+            range_top := high
+        if low < range_bottom and low >= range_bottom - absorb_offset
+            range_bottom := low
+    break_up   = wick_break ? high > range_top + break_offset : close > range_top + break_offset
+    break_down = wick_break ? low < range_bottom - break_offset : close < range_bottom - break_offset
+    range_aged = max_range_age > 0 and bar_index - range_opened + 1 >= max_range_age
+    if break_up or break_down or range_aged
+        break_direction = break_up ? 1 : break_down ? -1 : 0
+        held_bars       = break_direction != 0 ? bar_index - range_left : bar_index - range_left + 1
+        range_height    = range_bottom != 0 ? (range_top - range_bottom) / range_bottom * 100.0 : 0.0
+        hold_for_merge  = merge_deviations and break_direction != 0 and range_confirmed
+        if range_confirmed
+            retire_line = break_direction == 1 ? bullish_line_color : break_direction == -1 ? bearish_line_color : range_line_color
+            retire_fill = break_direction == 1 ? bullish_fill_color : break_direction == -1 ? bearish_fill_color : range_fill_color
+            retire_base = break_direction == 1 ? bullish_color : break_direction == -1 ? bearish_color : range_input
+            box.set_lefttop(range_box, range_left, range_top)
+            box.set_rightbottom(range_box, bar_index, range_bottom)
+            box.set_border_color(range_box, color.new(retire_line, 35))
+            box.set_border_style(range_box, line.style_solid)
+            paintShade(shade_boxes, range_top, range_bottom, range_left, bar_index, retire_fill)
+            if not na(equilibrium_line)
+                line.set_x2(equilibrium_line, bar_index)
+            if not na(lower_quartile)
+                line.set_x2(lower_quartile, bar_index)
+                line.set_x2(upper_quartile, bar_index)
+            if not na(range_tag)
+                label.set_xy(range_tag, int(math.avg(range_left, bar_index)), range_top)
+                label.set_text(range_tag, 'RANGE   ' + str.tostring(held_bars) + ' BARS   ' + percentText(range_height))
+                label.set_textcolor(range_tag, color.new(retire_line, 10))
+            if show_breakouts and break_direction != 0
+                marker_text  = (break_direction == 1 ? '▲  ' : '▼  ') + 'Breakout'
+                break_marker := label.new(bar_index, break_direction == 1 ? low : high, marker_text, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(retire_base, 10), style = break_direction == 1 ? label.style_label_up : label.style_label_down, textcolor = contrastText(retire_base), size = label_size)
+            if break_direction == 1
+                signal_break_up := true
+            else if break_direction == -1
+                signal_break_down := true
+        else
+            box.delete(range_box)
+            deleteShade(shade_boxes)
+            line.delete(equilibrium_line)
+            line.delete(lower_quartile)
+            line.delete(upper_quartile)
+            label.delete(range_tag)
+        if hold_for_merge
+            range_dormant   := true
+            dormant_since   := bar_index
+            dormant_dir     := break_direction
+            deviation_price := break_direction == 1 ? high : low
+            deviation_bar   := bar_index
+        else
+            array.clear(shade_boxes)
+            range_box        := na
+            equilibrium_line := na
+            lower_quartile   := na
+            upper_quartile   := na
+            range_tag        := na
+            break_marker     := na
+        range_active    := false
+        range_confirmed := false
+        cooldown_left   := cooldown_bars
+    else
+        range_confirmed := bar_index - range_left + 1 >= min_range_bars
+
+if range_dormant and bar_ready
+    if dormant_dir == 1 and high > deviation_price
+        deviation_price := high
+        deviation_bar   := bar_index
+    if dormant_dir == -1 and low < deviation_price
+        deviation_price := low
+        deviation_bar   := bar_index
+    reentered = dormant_dir == 1 ? close <= range_top : close >= range_bottom
+    expired   = bar_index - dormant_since >= deviation_window
+    if reentered and bar_index > dormant_since
+        deviation_base = dormant_dir == 1 ? bearish_color : bullish_color
+        deviation_text = (dormant_dir == 1 ? '⤵  ' : '⤴  ') + 'Deviation'
+        if show_deviations
+            label.new(deviation_bar, deviation_price, deviation_text, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(deviation_base, 10), style = dormant_dir == 1 ? label.style_label_down : label.style_label_up, textcolor = contrastText(deviation_base), size = label_size)
+        label.delete(break_marker)
+        break_marker := na
+        if not na(range_box)
+            box.set_border_color(range_box, color.new(range_line_color, 35))
+            paintShade(shade_boxes, range_top, range_bottom, range_left, bar_index, range_fill_color)
+        if not na(range_tag)
+            label.set_textcolor(range_tag, color.new(range_line_color, 10))
+        range_active     := true
+        range_confirmed  := true
+        range_dormant    := false
+        dormant_dir      := 0
+        cooldown_left    := 0
+        signal_deviation := true
+    else if expired
+        array.clear(shade_boxes)
+        range_dormant    := false
+        dormant_dir      := 0
+        range_box        := na
+        equilibrium_line := na
+        lower_quartile   := na
+        upper_quartile   := na
+        range_tag        := na
+        break_marker     := na
+
+if range_active
+    live_height   = range_bottom != 0 ? (range_top - range_bottom) / range_bottom * 100.0 : 0.0
+    midpoint      = math.avg(range_top, range_bottom)
+    quartile_low  = range_bottom + (range_top - range_bottom) * 0.25
+    quartile_high = range_bottom + (range_top - range_bottom) * 0.75
+    box.set_lefttop(range_box, range_left, range_top)
+    box.set_rightbottom(range_box, bar_index, range_bottom)
+    box.set_border_color(range_box, color.new(range_line_color, range_confirmed ? 35 : 65))
+    box.set_border_style(range_box, range_confirmed ? line.style_solid : line.style_dashed)
+    paintShade(shade_boxes, range_top, range_bottom, range_left, bar_index, range_fill_color)
+    if not na(equilibrium_line)
+        line.set_xy1(equilibrium_line, range_left, midpoint)
+        line.set_xy2(equilibrium_line, bar_index, midpoint)
+    if not na(lower_quartile)
+        line.set_xy1(lower_quartile, range_left, quartile_low)
+        line.set_xy2(lower_quartile, bar_index, quartile_low)
+        line.set_xy1(upper_quartile, range_left, quartile_high)
+        line.set_xy2(upper_quartile, bar_index, quartile_high)
+    if not na(range_tag)
+        label.set_xy(range_tag, int(math.avg(range_left, bar_index)), range_top)
+        label.set_text(range_tag, (range_confirmed ? 'RANGE   ' : 'FORMING   ') + str.tostring(bar_index - range_left + 1) + ' BARS   ' + percentText(live_height))
+
+signal_any_break = signal_break_up or signal_break_down
+
+// Mientras hay un rango activo (en formación o confirmado) no se marcan CHoCH ni BOS.
+// Al salir del rango (breakout) se evalúa la estructura en esa misma vela.
+en_rango     = filtro_rango and range_active
+salida_rango = filtro_rango and range_active[1] and not range_active
 
 // ─────────────────────────────
 // DETECCIÓN DE PIVOTES
@@ -210,7 +664,7 @@ if cerrada and not na(choch_bar) and bar_index == choch_bar + 1
 // Va antes de las señales para que la nueva ruptura del mismo nivel no cree otro CHoCH.
 reactivada_alc = false
 reactivada_baj = false
-if cerrada and tendencia_invalidada
+if cerrada and tendencia_invalidada and not en_rango
     if dir_invalidada == 1 and close > nivel_invalidado
         reactivada_alc := true
         tendencia := 1
@@ -237,8 +691,9 @@ if cerrada and tendencia_invalidada
 // ─────────────────────────────
 // SEÑALES
 // ─────────────────────────────
-cruce_arriba = ta.crossover(close, ultimo_pico) and vol_ok and cerrada
-cruce_abajo  = ta.crossunder(close, ultimo_valle) and vol_ok and cerrada
+// Cruce del nivel en esta vela, o nivel ya superado dentro del rango y la vela es el breakout
+cruce_arriba = cerrada and not en_rango and vol_ok and not na(ultimo_pico) and close > ultimo_pico and (close[1] <= ultimo_pico or salida_rango)
+cruce_abajo  = cerrada and not en_rango and vol_ok and not na(ultimo_valle) and close < ultimo_valle and (close[1] >= ultimo_valle or salida_rango)
 choch_alcista = cruce_arriba and not na(ultimo_pico) and tendencia <= 0
 choch_bajista = cruce_abajo and not na(ultimo_valle) and tendencia >= 0
 choch_riesgo_alc = false
@@ -374,3 +829,8 @@ alertcondition(fvg_alcista, "FVG alcista", "Nuevo FVG alcista en {{ticker}} ({{i
 alertcondition(fvg_bajista, "FVG bajista", "Nuevo FVG bajista en {{ticker}} ({{interval}})")
 alertcondition(nuevo_ifvg_alc, "IFVG alcista creado", "Nuevo IFVG alcista (soporte) en {{ticker}} ({{interval}})")
 alertcondition(nuevo_ifvg_baj, "IFVG bajista creado", "Nuevo IFVG bajista (resistencia) en {{ticker}} ({{interval}})")
+alertcondition(signal_new_range,  title = 'Range Detected',     message = 'Auto Range Detector: new RANGE detected on {{exchange}}:{{ticker}} - {{interval}}')
+alertcondition(signal_break_up,   title = 'Range Breakout Up',  message = 'Auto Range Detector: range broken to the UPSIDE on {{exchange}}:{{ticker}} - {{interval}}')
+alertcondition(signal_break_down, title = 'Range Breakdown',    message = 'Auto Range Detector: range broken to the DOWNSIDE on {{exchange}}:{{ticker}} - {{interval}}')
+alertcondition(signal_any_break,  title = 'Any Range Break',    message = 'Auto Range Detector: range break on {{exchange}}:{{ticker}} - {{interval}}')
+alertcondition(signal_deviation,  title = 'Range Deviation',    message = 'Auto Range Detector: failed break, price returned INSIDE the range on {{exchange}}:{{ticker}} - {{interval}}')
