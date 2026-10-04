@@ -65,6 +65,20 @@ type Zona
 
 var zonas = array.new<Zona>()
 
+// Etiquetas de estructura dibujadas (CHoCH, ✗ CHoCH, BOS), para poder borrarlas
+// si después se detecta un rango que las contiene
+type Marca
+    label lb
+    line  ln
+    int   bar
+
+var marcas = array.new<Marca>()
+
+registrar_marca(label lb, line ln, int bar) =>
+    marcas.push(Marca.new(lb, ln, bar))
+    if marcas.size() > 500
+        marcas.shift()
+
 ema_rapida = ta.ema(close, ema_rap_len)
 ema_media  = ta.ema(close, ema_med_len)
 ema_lenta  = ta.ema(close, ema_len_len)
@@ -564,6 +578,7 @@ var int    bar_piv_invalidado   = na
 var string texto_invalidado     = ""
 var label  lbl_invalidado       = na
 var line   ln_invalidado        = na
+var int    bar_invalidado       = na
 
 // Último BOS dibujado: cuando un CHoCH contrario se confirma, ese BOS era el que marcó
 // el giro y se borra (en el cambio de tendencia solo queda el CHoCH)
@@ -580,8 +595,33 @@ dibujar_choch(int dir, int bar_piv, float nivel, int bar_rotura, string texto, s
     lb = label.new(bar_rotura - offset_x, nivel, texto, style=dir == 1 ? label.style_label_down : label.style_label_up, color=color.new(color.white, 100), textcolor=col, size=size.small, tooltip=tip)
     [ln, lb]
 
+// Al detectarse un rango (o volver a él tras una Deviation) se borran los CHoCH/BOS que
+// quedaron dentro de la caja: el rango se detecta cuando ya lleva varias velas formado.
+// Tendencia que había justo antes de la primera vela del rango
+tend_antes_rango = na(range_left) ? tendencia : nz(tendencia[math.max(0, bar_index - range_left + 1)], 0)
+if filtro_rango and (signal_new_range or signal_deviation) and not na(range_left)
+    // Las rupturas que hubo dentro de la caja no cuentan: se vuelve a la tendencia previa al rango
+    tendencia := tend_antes_rango
+    if marcas.size() > 0
+        for i = marcas.size() - 1 to 0
+            m = marcas.get(i)
+            if m.bar >= range_left
+                m.lb.delete()
+                m.ln.delete()
+                marcas.remove(i)
+    if not na(choch_bar) and choch_bar >= range_left
+        choch_bar := na
+    if tendencia_invalidada and bar_invalidado >= range_left
+        tendencia_invalidada := false
+        lbl_invalidado       := na
+        ln_invalidado        := na
+
 choch_fallido_alc = false
 choch_fallido_baj = false
+// Dentro de un rango el CHoCH pendiente se descarta (no se dibuja ni como válido ni como ✗)
+if cerrada and en_rango and not na(choch_bar)
+    choch_bar := na
+    tendencia := tend_previa
 if cerrada and not na(choch_bar) and bar_index == choch_bar + 1
     fallido = choch_dir == 1 ? close < choch_nivel : close > choch_nivel
     col_dir = choch_dir == 1 ? color_alcista : color_bajista
@@ -591,6 +631,7 @@ if cerrada and not na(choch_bar) and bar_index == choch_bar + 1
         nivel_invalidado     := choch_nivel
         bar_piv_invalidado   := choch_bar_piv
         texto_invalidado     := choch_texto
+        bar_invalidado       := choch_bar
         lbl_invalidado       := na
         ln_invalidado        := na
         if choch_dir == 1
@@ -601,6 +642,7 @@ if cerrada and not na(choch_bar) and bar_index == choch_bar + 1
             [ln_f, lb_f] = dibujar_choch(choch_dir, choch_bar_piv, choch_nivel, choch_bar, "✗ " + choch_texto, "CHoCH fallido: la vela siguiente cerró de nuevo al otro lado del nivel\n" + choch_tip, color_fallido, true)
             lbl_invalidado := lb_f
             ln_invalidado  := ln_f
+            registrar_marca(lb_f, ln_f, choch_bar)
         if anular_fallidos
             tendencia := tend_previa
             // Se restaura el nivel roto si no se ha formado un pivote nuevo
@@ -613,6 +655,7 @@ if cerrada and not na(choch_bar) and bar_index == choch_bar + 1
     else
         // CHoCH confirmado: se dibuja (sin ⚠) y se borra el BOS contrario previo
         [ln_c, lb_c] = dibujar_choch(choch_dir, choch_bar_piv, choch_nivel, choch_bar, choch_texto, choch_tip, col_dir, false)
+        registrar_marca(lb_c, ln_c, choch_bar)
         borrar_bos_contrario(choch_dir, choch_bar)
     choch_bar := na
 
@@ -639,6 +682,7 @@ if cerrada and tendencia_invalidada and not en_rango
         col_ok = dir_invalidada == 1 ? color_alcista : color_bajista
         if na(lbl_invalidado)
             [ln_r, lb_r] = dibujar_choch(dir_invalidada, bar_piv_invalidado, nivel_invalidado, bar_index, texto_invalidado, "CHoCH confirmado al recuperar el nivel", col_ok, false)
+            registrar_marca(lb_r, ln_r, bar_index)
         else
             lbl_invalidado.set_text(texto_invalidado)
             lbl_invalidado.set_textcolor(col_ok)
@@ -676,6 +720,7 @@ if cruce_arriba and not na(ultimo_pico)
         ultimo_bos_lbl := label.new(bar_index, high, "BOS", yloc=yloc.abovebar, style=label.style_none, textcolor=color_alcista, size=size.small)
         ultimo_bos_bar := bar_index
         ultimo_bos_dir := 1
+        registrar_marca(ultimo_bos_lbl, na, bar_index)
     tendencia := 1
     ultimo_pico := na 
 
@@ -697,6 +742,7 @@ if cruce_abajo and not na(ultimo_valle)
         ultimo_bos_lbl := label.new(bar_index, low, "BOS", yloc=yloc.belowbar, style=label.style_none, textcolor=color_bajista, size=size.small)
         ultimo_bos_bar := bar_index
         ultimo_bos_dir := -1
+        registrar_marca(ultimo_bos_lbl, na, bar_index)
     tendencia := -1
     ultimo_valle := na 
 
