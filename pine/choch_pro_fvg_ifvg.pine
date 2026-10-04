@@ -128,8 +128,9 @@ riesgo_choch(int dir, float nivel) =>
 // Todo se decide al CIERRE de la vela (barstate.isconfirmed) y cada etiqueta de CHoCH se
 // dibuja una sola vez, ya con su estado definitivo, y no se modifica después:
 //  - El CHoCH se dibuja al cierre de la vela siguiente a la ruptura, si se mantiene.
-//  - Si falla, se dibuja como «✗ CHoCH» (gris) y queda así.
-//  - Si luego la tendencia se reactiva, se dibuja un CHoCH NUEVO en la vela de reactivación.
+//  - Si falla, se dibuja como «✗ CHoCH» (gris).
+//  - Si luego el precio recupera ese nivel, ESA MISMA etiqueta pasa a CHoCH válido
+//    (nunca hay un «✗ CHoCH» y un «CHoCH» del mismo nivel a la vez).
 // ─────────────────────────────
 cerrada = barstate.isconfirmed
 
@@ -148,6 +149,8 @@ var int    dir_invalidada       = 0
 var float  nivel_invalidado     = na
 var int    bar_piv_invalidado   = na
 var string texto_invalidado     = ""
+var label  lbl_invalidado       = na
+var line   ln_invalidado        = na
 
 // Último BOS dibujado: cuando un CHoCH contrario se confirma, ese BOS era el que marcó
 // el giro y se borra (en el cambio de tendencia solo queda el CHoCH)
@@ -160,8 +163,9 @@ borrar_bos_contrario(int dir_choch, int bar_choch) =>
         ultimo_bos_lbl.delete()
 
 dibujar_choch(int dir, int bar_piv, float nivel, int bar_rotura, string texto, string tip, color col, bool fallido) =>
-    line.new(bar_piv, nivel, bar_rotura, nivel, color=col, width=1, style=fallido ? line.style_dashed : line.style_solid)
-    label.new(bar_rotura - offset_x, nivel, texto, style=dir == 1 ? label.style_label_down : label.style_label_up, color=color.new(color.white, 100), textcolor=col, size=size.small, tooltip=tip)
+    ln = line.new(bar_piv, nivel, bar_rotura, nivel, color=col, width=1, style=fallido ? line.style_dashed : line.style_solid)
+    lb = label.new(bar_rotura - offset_x, nivel, texto, style=dir == 1 ? label.style_label_down : label.style_label_up, color=color.new(color.white, 100), textcolor=col, size=size.small, tooltip=tip)
+    [ln, lb]
 
 choch_fallido_alc = false
 choch_fallido_baj = false
@@ -174,12 +178,16 @@ if cerrada and not na(choch_bar) and bar_index == choch_bar + 1
         nivel_invalidado     := choch_nivel
         bar_piv_invalidado   := choch_bar_piv
         texto_invalidado     := choch_texto
+        lbl_invalidado       := na
+        ln_invalidado        := na
         if choch_dir == 1
             choch_fallido_alc := true
         else
             choch_fallido_baj := true
         if marcar_fallidos
-            dibujar_choch(choch_dir, choch_bar_piv, choch_nivel, choch_bar, "✗ " + choch_texto, "CHoCH fallido: la vela siguiente cerró de nuevo al otro lado del nivel\n" + choch_tip, color_fallido, true)
+            [ln_f, lb_f] = dibujar_choch(choch_dir, choch_bar_piv, choch_nivel, choch_bar, "✗ " + choch_texto, "CHoCH fallido: la vela siguiente cerró de nuevo al otro lado del nivel\n" + choch_tip, color_fallido, true)
+            lbl_invalidado := lb_f
+            ln_invalidado  := ln_f
         if anular_fallidos
             tendencia := tend_previa
             // Se restaura el nivel roto si no se ha formado un pivote nuevo
@@ -191,9 +199,40 @@ if cerrada and not na(choch_bar) and bar_index == choch_bar + 1
                 bar_valle    := choch_bar_piv
     else
         // CHoCH confirmado: se dibuja (sin ⚠) y se borra el BOS contrario previo
-        dibujar_choch(choch_dir, choch_bar_piv, choch_nivel, choch_bar, choch_texto, choch_tip, col_dir, false)
+        [ln_c, lb_c] = dibujar_choch(choch_dir, choch_bar_piv, choch_nivel, choch_bar, choch_texto, choch_tip, col_dir, false)
         borrar_bos_contrario(choch_dir, choch_bar)
     choch_bar := na
+
+// --- REACTIVACIÓN ---
+// La tendencia del CHoCH fallido vuelve a estar activa si el precio cierra de nuevo
+// más allá del nivel que rompió.
+// La etiqueta «✗ CHoCH» de ese nivel se convierte en CHoCH válido (no se dibuja otra).
+// Va antes de las señales para que la nueva ruptura del mismo nivel no cree otro CHoCH.
+reactivada_alc = false
+reactivada_baj = false
+if cerrada and tendencia_invalidada
+    if dir_invalidada == 1 and close > nivel_invalidado
+        reactivada_alc := true
+        tendencia := 1
+        if ultimo_pico == nivel_invalidado
+            ultimo_pico := na
+    else if dir_invalidada == -1 and close < nivel_invalidado
+        reactivada_baj := true
+        tendencia := -1
+        if ultimo_valle == nivel_invalidado
+            ultimo_valle := na
+    if reactivada_alc or reactivada_baj
+        tendencia_invalidada := false
+        col_ok = dir_invalidada == 1 ? color_alcista : color_bajista
+        if na(lbl_invalidado)
+            [ln_r, lb_r] = dibujar_choch(dir_invalidada, bar_piv_invalidado, nivel_invalidado, bar_index, texto_invalidado, "CHoCH confirmado al recuperar el nivel", col_ok, false)
+        else
+            lbl_invalidado.set_text(texto_invalidado)
+            lbl_invalidado.set_textcolor(col_ok)
+            lbl_invalidado.set_tooltip("CHoCH confirmado al recuperar el nivel")
+            ln_invalidado.set_color(col_ok)
+            ln_invalidado.set_style(line.style_solid)
+        borrar_bos_contrario(dir_invalidada, bar_index)
 
 // ─────────────────────────────
 // SEÑALES
@@ -246,29 +285,6 @@ if cruce_abajo and not na(ultimo_valle)
         ultimo_bos_dir := -1
     tendencia := -1
     ultimo_valle := na 
-
-// --- REACTIVACIÓN ---
-// La tendencia del CHoCH fallido vuelve a estar activa si el precio cierra de nuevo
-// más allá del nivel que rompió (y no lo ha hecho ya un CHoCH nuevo en esta vela).
-// Se dibuja un CHoCH nuevo en esta vela; el «✗ CHoCH» anterior no se toca.
-reactivada_alc = false
-reactivada_baj = false
-if cerrada and tendencia_invalidada
-    if dir_invalidada == 1 and close > nivel_invalidado
-        reactivada_alc := true
-        tendencia := 1
-        if ultimo_pico == nivel_invalidado
-            ultimo_pico := na
-    else if dir_invalidada == -1 and close < nivel_invalidado
-        reactivada_baj := true
-        tendencia := -1
-        if ultimo_valle == nivel_invalidado
-            ultimo_valle := na
-    if reactivada_alc or reactivada_baj
-        tendencia_invalidada := false
-        col_ok = dir_invalidada == 1 ? color_alcista : color_bajista
-        dibujar_choch(dir_invalidada, bar_piv_invalidado, nivel_invalidado, bar_index, texto_invalidado, "CHoCH confirmado al recuperar el nivel", col_ok, false)
-        borrar_bos_contrario(dir_invalidada, bar_index)
 
 // FONDO BLANCO (sin colorear por tendencia)
 bgcolor(fondo_blanco ? color.white : na)
