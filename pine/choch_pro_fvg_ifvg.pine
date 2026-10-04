@@ -129,8 +129,11 @@ var int   choch_dir     = 0
 var float choch_nivel   = na
 var int   choch_bar_piv = na
 var int   tend_previa   = 0
-// true desde que un CHoCH falla hasta el siguiente CHoCH: mientras tanto no se dibujan BOS
+// true desde que un CHoCH falla hasta que hay un CHoCH nuevo o la tendencia se reactiva:
+// mientras tanto no se dibujan BOS
 var bool  tendencia_invalidada = false
+var int   dir_invalidada       = 0
+var float nivel_invalidado     = na
 
 choch_fallido_alc = false
 choch_fallido_baj = false
@@ -138,6 +141,8 @@ if not na(choch_bar) and bar_index == choch_bar + 1
     fallido = choch_dir == 1 ? close < choch_nivel : close > choch_nivel
     if fallido
         tendencia_invalidada := true
+        dir_invalidada       := choch_dir
+        nivel_invalidado     := choch_nivel
         if choch_dir == 1
             choch_fallido_alc := true
         else
@@ -218,6 +223,25 @@ if cruce_abajo and not na(ultimo_valle)
     
     tendencia := -1
     ultimo_valle := na 
+
+// --- REACTIVACIÓN ---
+// La tendencia del CHoCH fallido vuelve a estar activa si el precio cierra de nuevo
+// más allá del nivel que rompió (y no lo ha hecho ya un CHoCH nuevo en esta vela).
+reactivada_alc = false
+reactivada_baj = false
+if tendencia_invalidada
+    if dir_invalidada == 1 and close > nivel_invalidado
+        reactivada_alc := true
+        tendencia := 1
+        if ultimo_pico == nivel_invalidado
+            ultimo_pico := na
+    else if dir_invalidada == -1 and close < nivel_invalidado
+        reactivada_baj := true
+        tendencia := -1
+        if ultimo_valle == nivel_invalidado
+            ultimo_valle := na
+    if reactivada_alc or reactivada_baj
+        tendencia_invalidada := false
 
 // FONDO BLANCO (sin colorear por tendencia)
 bgcolor(fondo_blanco ? color.white : na)
@@ -301,6 +325,8 @@ alertcondition(choch_riesgo_alc, "CHoCH alcista de riesgo (⚠)", "CHoCH alcista
 alertcondition(choch_riesgo_baj, "CHoCH bajista de riesgo (⚠)", "CHoCH bajista con riesgo de fallo en {{ticker}} ({{interval}})")
 alertcondition(choch_fallido_alc, "CHoCH alcista fallido (✗)", "CHoCH alcista fallido: posible reversión bajista en {{ticker}} ({{interval}})")
 alertcondition(choch_fallido_baj, "CHoCH bajista fallido (✗)", "CHoCH bajista fallido: posible reversión alcista en {{ticker}} ({{interval}})")
+alertcondition(reactivada_alc, "Tendencia alcista reactivada", "Tendencia alcista reactivada tras CHoCH fallido en {{ticker}} ({{interval}})")
+alertcondition(reactivada_baj, "Tendencia bajista reactivada", "Tendencia bajista reactivada tras CHoCH fallido en {{ticker}} ({{interval}})")
 alertcondition(fvg_alcista, "FVG alcista", "Nuevo FVG alcista en {{ticker}} ({{interval}})")
 alertcondition(fvg_bajista, "FVG bajista", "Nuevo FVG bajista en {{ticker}} ({{interval}})")
 alertcondition(nuevo_ifvg_alc, "IFVG alcista creado", "Nuevo IFVG alcista (soporte) en {{ticker}} ({{interval}})")
