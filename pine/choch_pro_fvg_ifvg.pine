@@ -24,11 +24,40 @@ ema_rap_col  = input.color(#2962ff, "Color EMA rápida", group="EMAs")
 ema_med_col  = input.color(#ff6d00, "Color EMA media", group="EMAs")
 ema_len_col  = input.color(color.black, "Color EMA lenta", group="EMAs")
 
+// CHoCH fallido: la vela siguiente cierra de nuevo al otro lado del nivel roto
+marcar_fallidos = input.bool(true, "Marcar CHoCH fallidos (✗)", group="CHoCH fallido / riesgo")
+anular_fallidos = input.bool(true, "Anular tendencia si el CHoCH falla", group="CHoCH fallido / riesgo")
+// Riesgo de fallo evaluado al cierre de la vela del CHoCH
+marcar_riesgo   = input.bool(true, "Marcar CHoCH de riesgo (⚠)", group="CHoCH fallido / riesgo")
+riesgo_min      = input.int(2, "Puntuación mínima para ⚠", minval=1, maxval=6, group="CHoCH fallido / riesgo")
+atr_len         = input.int(14, "Longitud ATR", minval=1, group="CHoCH fallido / riesgo")
+mecha_pct       = input.float(50, "Mecha de rechazo ≥ (% del rango)", minval=0, maxval=100, group="CHoCH fallido / riesgo")
+dist_atr        = input.float(0.15, "Ruptura corta < (× ATR)", minval=0, step=0.05, group="CHoCH fallido / riesgo")
+climax_atr      = input.float(2.5, "Vela de clímax > (× ATR)", minval=0, step=0.1, group="CHoCH fallido / riesgo")
+cuerpo_pct      = input.float(30, "Cuerpo pequeño < (% del rango)", minval=0, maxval=100, group="CHoCH fallido / riesgo")
+zona_atr        = input.float(1.0, "FVG/IFVG contrario a < (× ATR)", minval=0, step=0.1, group="CHoCH fallido / riesgo")
+color_fallido   = input.color(color.gray, "Color CHoCH fallido", group="CHoCH fallido / riesgo")
+
 // Colores Sólidos Neón
 color_alcista = #00ffbb
 color_bajista = #ff0055
 color_ifvg_alc = #00b3ff   // IFVG alcista (soporte)
 color_ifvg_baj = #ff9900   // IFVG bajista (resistencia)
+
+// Zonas FVG / IFVG (se declaran aquí porque el riesgo del CHoCH las consulta)
+type Zona
+    box   bx
+    float techo
+    float suelo
+    int   dir        // 1 alcista, -1 bajista
+    bool  inversa    // true = IFVG
+
+var zonas = array.new<Zona>()
+
+ema_rapida = ta.ema(close, ema_rap_len)
+ema_media  = ta.ema(close, ema_med_len)
+ema_lenta  = ta.ema(close, ema_len_len)
+atr_val    = ta.atr(atr_len)
 
 // ─────────────────────────────
 // DETECCIÓN DE PIVOTES
@@ -57,12 +86,84 @@ vol_ok  = volume > (avg_vol * vol_mult)
 vol_top_confirm = volume > (avg_vol * vol_top)
 
 // ─────────────────────────────
+// RIESGO DE CHoCH FALSO (evaluado al cierre de la vela del CHoCH)
+// ─────────────────────────────
+riesgo_choch(int dir, float nivel) =>
+    rango  = math.max(high - low, syminfo.mintick)
+    cuerpo = math.abs(close - open)
+    mecha  = dir == 1 ? high - math.max(open, close) : math.min(open, close) - low
+    int puntos = 0
+    string motivos = ""
+    if mecha / rango >= mecha_pct / 100
+        puntos += 1
+        motivos += "• Mecha de rechazo\n"
+    if math.abs(close - nivel) < dist_atr * atr_val
+        puntos += 1
+        motivos += "• Ruptura corta\n"
+    if rango > climax_atr * atr_val
+        puntos += 1
+        motivos += "• Vela de clímax\n"
+    if (dir == 1 and close < ema_lenta) or (dir == -1 and close > ema_lenta)
+        puntos += 1
+        motivos += "• Contra la EMA lenta\n"
+    if cuerpo / rango < cuerpo_pct / 100
+        puntos += 1
+        motivos += "• Cuerpo pequeño\n"
+    zona_delante = false
+    for z in zonas
+        if dir == 1 and z.dir == -1 and z.suelo >= close and z.suelo - close <= zona_atr * atr_val
+            zona_delante := true
+        if dir == -1 and z.dir == 1 and z.techo <= close and close - z.techo <= zona_atr * atr_val
+            zona_delante := true
+    if zona_delante
+        puntos += 1
+        motivos += "• FVG/IFVG contrario delante\n"
+    [puntos, motivos]
+
+// Último CHoCH, para comprobar en la vela siguiente si falla
+var label choch_lbl     = na
+var line  choch_ln      = na
+var int   choch_bar     = na
+var int   choch_dir     = 0
+var float choch_nivel   = na
+var int   choch_bar_piv = na
+var int   tend_previa   = 0
+
+choch_fallido_alc = false
+choch_fallido_baj = false
+if not na(choch_bar) and bar_index == choch_bar + 1
+    fallido = choch_dir == 1 ? close < choch_nivel : close > choch_nivel
+    if fallido
+        if choch_dir == 1
+            choch_fallido_alc := true
+        else
+            choch_fallido_baj := true
+        if marcar_fallidos
+            choch_lbl.set_text("✗ " + choch_lbl.get_text())
+            choch_lbl.set_textcolor(color_fallido)
+            choch_lbl.set_tooltip("CHoCH fallido: la vela siguiente cerró de nuevo al otro lado del nivel")
+            choch_ln.set_color(color_fallido)
+            choch_ln.set_style(line.style_dashed)
+        if anular_fallidos
+            tendencia := tend_previa
+            // Se restaura el nivel roto si no se ha formado un pivote nuevo
+            if choch_dir == 1 and na(ultimo_pico)
+                ultimo_pico := choch_nivel
+                bar_pico    := choch_bar_piv
+            if choch_dir == -1 and na(ultimo_valle)
+                ultimo_valle := choch_nivel
+                bar_valle    := choch_bar_piv
+    choch_bar := na
+
+// ─────────────────────────────
 // SEÑALES
 // ─────────────────────────────
 cruce_arriba = ta.crossover(close, ultimo_pico) and vol_ok
 cruce_abajo  = ta.crossunder(close, ultimo_valle) and vol_ok
 choch_alcista = cruce_arriba and not na(ultimo_pico) and tendencia <= 0
 choch_bajista = cruce_abajo and not na(ultimo_valle) and tendencia >= 0
+choch_riesgo_alc = false
+choch_riesgo_baj = false
 
 // --- ALCISTA (BUY) ---
 if cruce_arriba and not na(ultimo_pico)
@@ -70,8 +171,18 @@ if cruce_arriba and not na(ultimo_pico)
     string texto = es_choch ? (vol_top_confirm ? "🔥 CHoCH" : "CHoCH") : "BOS"
     
     if es_choch
-        line.new(bar_pico, ultimo_pico, bar_index, ultimo_pico, color=color_alcista, width=1)
-        label.new(bar_index - offset_x, ultimo_pico, texto, style=label.style_label_down, color=color.new(color.white, 100), textcolor=color_alcista, size=size.small)
+        [riesgo, motivos] = riesgo_choch(1, ultimo_pico)
+        es_riesgo = marcar_riesgo and riesgo >= riesgo_min
+        choch_riesgo_alc := es_riesgo
+        texto := es_riesgo ? "⚠ " + texto : texto
+        tip = "Riesgo de fallo: " + str.tostring(riesgo) + "/6\n" + motivos
+        choch_ln  := line.new(bar_pico, ultimo_pico, bar_index, ultimo_pico, color=color_alcista, width=1)
+        choch_lbl := label.new(bar_index - offset_x, ultimo_pico, texto, style=label.style_label_down, color=color.new(color.white, 100), textcolor=color_alcista, size=size.small, tooltip=tip)
+        choch_bar     := bar_index
+        choch_dir     := 1
+        choch_nivel   := ultimo_pico
+        choch_bar_piv := bar_pico
+        tend_previa   := tendencia
     else
         label.new(bar_index, high, texto, yloc=yloc.abovebar, style=label.style_none, textcolor=color_alcista, size=size.small)
     
@@ -84,8 +195,18 @@ if cruce_abajo and not na(ultimo_valle)
     string texto = es_choch ? (vol_top_confirm ? "🔥 CHoCH" : "CHoCH") : "BOS"
     
     if es_choch
-        line.new(bar_valle, ultimo_valle, bar_index, ultimo_valle, color=color_bajista, width=1)
-        label.new(bar_index - offset_x, ultimo_valle, texto, style=label.style_label_up, color=color.new(color.white, 100), textcolor=color_bajista, size=size.small)
+        [riesgo, motivos] = riesgo_choch(-1, ultimo_valle)
+        es_riesgo = marcar_riesgo and riesgo >= riesgo_min
+        choch_riesgo_baj := es_riesgo
+        texto := es_riesgo ? "⚠ " + texto : texto
+        tip = "Riesgo de fallo: " + str.tostring(riesgo) + "/6\n" + motivos
+        choch_ln  := line.new(bar_valle, ultimo_valle, bar_index, ultimo_valle, color=color_bajista, width=1)
+        choch_lbl := label.new(bar_index - offset_x, ultimo_valle, texto, style=label.style_label_up, color=color.new(color.white, 100), textcolor=color_bajista, size=size.small, tooltip=tip)
+        choch_bar     := bar_index
+        choch_dir     := -1
+        choch_nivel   := ultimo_valle
+        choch_bar_piv := bar_valle
+        tend_previa   := tendencia
     else
         label.new(bar_index, low, texto, yloc=yloc.belowbar, style=label.style_none, textcolor=color_bajista, size=size.small)
     
@@ -98,9 +219,9 @@ bgcolor(fondo_blanco ? color.white : na)
 // ─────────────────────────────
 // EMAs
 // ─────────────────────────────
-plot(mostrar_emas ? ta.ema(close, ema_rap_len) : na, "EMA rápida", color=ema_rap_col, linewidth=1)
-plot(mostrar_emas ? ta.ema(close, ema_med_len) : na, "EMA media", color=ema_med_col, linewidth=1)
-plot(mostrar_emas ? ta.ema(close, ema_len_len) : na, "EMA lenta", color=ema_len_col, linewidth=2)
+plot(mostrar_emas ? ema_rapida : na, "EMA rápida", color=ema_rap_col, linewidth=1)
+plot(mostrar_emas ? ema_media : na, "EMA media", color=ema_med_col, linewidth=1)
+plot(mostrar_emas ? ema_lenta : na, "EMA lenta", color=ema_len_col, linewidth=2)
 
 // ─────────────────────────────
 // FVG / IFVG
@@ -109,14 +230,6 @@ plot(mostrar_emas ? ta.ema(close, ema_len_len) : na, "EMA lenta", color=ema_len_
 //       abre al otro lado del hueco y cierra más allá del extremo opuesto.
 //       Si el cierre al otro lado no es de una sola vez, el FVG solo queda mitigado.
 // ─────────────────────────────
-type Zona
-    box   bx
-    float techo
-    float suelo
-    int   dir        // 1 alcista, -1 bajista
-    bool  inversa    // true = IFVG
-
-var zonas = array.new<Zona>()
 nuevo_ifvg_alc = false
 nuevo_ifvg_baj = false
 
@@ -178,6 +291,10 @@ else if fvg_bajista
 // ─────────────────────────────
 alertcondition(choch_alcista, "CHoCH alcista", "CHoCH alcista en {{ticker}} ({{interval}})")
 alertcondition(choch_bajista, "CHoCH bajista", "CHoCH bajista en {{ticker}} ({{interval}})")
+alertcondition(choch_riesgo_alc, "CHoCH alcista de riesgo (⚠)", "CHoCH alcista con riesgo de fallo en {{ticker}} ({{interval}})")
+alertcondition(choch_riesgo_baj, "CHoCH bajista de riesgo (⚠)", "CHoCH bajista con riesgo de fallo en {{ticker}} ({{interval}})")
+alertcondition(choch_fallido_alc, "CHoCH alcista fallido (✗)", "CHoCH alcista fallido: posible reversión bajista en {{ticker}} ({{interval}})")
+alertcondition(choch_fallido_baj, "CHoCH bajista fallido (✗)", "CHoCH bajista fallido: posible reversión alcista en {{ticker}} ({{interval}})")
 alertcondition(fvg_alcista, "FVG alcista", "Nuevo FVG alcista en {{ticker}} ({{interval}})")
 alertcondition(fvg_bajista, "FVG bajista", "Nuevo FVG bajista en {{ticker}} ({{interval}})")
 alertcondition(nuevo_ifvg_alc, "IFVG alcista creado", "Nuevo IFVG alcista (soporte) en {{ticker}} ({{interval}})")
