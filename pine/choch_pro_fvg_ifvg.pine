@@ -16,6 +16,14 @@ mostrar_ifvg    = input.bool(true, "Mostrar IFVG", group="FVG / IFVG")
 fvg_min_pct     = input.float(0.0, "Tamaño mínimo FVG (% precio)", minval=0, step=0.05, group="FVG / IFVG")
 max_zonas       = input.int(50, "Máx. zonas vigiladas", minval=1, maxval=250, group="FVG / IFVG")
 
+mostrar_emas = input.bool(true, "Mostrar EMAs", group="EMAs")
+ema_rap_len  = input.int(9, "EMA rápida", minval=1, group="EMAs")
+ema_med_len  = input.int(20, "EMA media", minval=1, group="EMAs")
+ema_len_len  = input.int(200, "EMA lenta", minval=1, group="EMAs")
+ema_rap_col  = input.color(#2962ff, "Color EMA rápida", group="EMAs")
+ema_med_col  = input.color(#ff6d00, "Color EMA media", group="EMAs")
+ema_len_col  = input.color(color.black, "Color EMA lenta", group="EMAs")
+
 // Colores Sólidos Neón
 color_alcista = #00ffbb
 color_bajista = #ff0055
@@ -88,9 +96,18 @@ if cruce_abajo and not na(ultimo_valle)
 bgcolor(fondo_blanco ? color.white : na)
 
 // ─────────────────────────────
+// EMAs
+// ─────────────────────────────
+plot(mostrar_emas ? ta.ema(close, ema_rap_len) : na, "EMA rápida", color=ema_rap_col, linewidth=1)
+plot(mostrar_emas ? ta.ema(close, ema_med_len) : na, "EMA media", color=ema_med_col, linewidth=1)
+plot(mostrar_emas ? ta.ema(close, ema_len_len) : na, "EMA lenta", color=ema_len_col, linewidth=2)
+
+// ─────────────────────────────
 // FVG / IFVG
 // FVG: patrón de 3 velas (low > high[2] alcista, high < low[2] bajista).
-// IFVG: un FVG se invierte cuando una vela CIERRA al otro lado del hueco.
+// IFVG: un FVG se invierte cuando UNA SOLA vela lo atraviesa entero:
+//       abre al otro lado del hueco y cierra más allá del extremo opuesto.
+//       Si el cierre al otro lado no es de una sola vez, el FVG solo queda mitigado.
 // ─────────────────────────────
 type Zona
     box   bx
@@ -110,7 +127,9 @@ if zonas.size() > 0
         z = zonas.get(i)
         mitigada = z.dir == 1 ? low <= z.suelo : high >= z.techo
         if not z.inversa
-            invertida = z.dir == 1 ? close < z.suelo : close > z.techo
+            // Una sola vela: FVG alcista -> abre por encima del techo y cierra por debajo del suelo;
+            //               FVG bajista -> abre por debajo del suelo y cierra por encima del techo
+            invertida = z.dir == 1 ? (open >= z.techo and close < z.suelo) : (open <= z.suelo and close > z.techo)
             if invertida
                 // El FVG queda mitigado e invertido: se borra y nace el IFVG
                 z.bx.delete()
