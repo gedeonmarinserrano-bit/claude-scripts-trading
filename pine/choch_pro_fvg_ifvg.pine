@@ -11,7 +11,7 @@ vol_len      = input.int(20, "Media de Volumen", minval=1)
 offset_x     = input.int(2, "Desplazamiento Texto", minval=0)
 fondo_blanco = input.bool(true, "Fondo blanco")
 mostrar_bos  = input.bool(true, "Mostrar BOS (salvo con tendencia invalidada)")
-bos_ventana  = input.int(6, "Borrar BOS si hay CHoCH contrario en ≤ N velas (0 = no)", minval=0)
+bos_ventana  = input.int(0, "Borrar BOS previo al CHoCH: máx. velas (0 = sin límite)", minval=0)
 
 mostrar_fvg     = input.bool(true, "Mostrar FVG", group="FVG / IFVG")
 mostrar_ifvg    = input.bool(true, "Mostrar IFVG", group="FVG / IFVG")
@@ -134,14 +134,14 @@ var int   tend_previa   = 0
 // mientras tanto no se dibujan BOS
 var bool  tendencia_invalidada = false
 
-// Último BOS dibujado: si poco después sale un CHoCH contrario, ese BOS era el barrido
-// que marcó el giro y se borra (en el cambio de tendencia solo queda el CHoCH)
+// Último BOS dibujado: cuando un CHoCH contrario se confirma, ese BOS era el que marcó
+// el giro y se borra (en el cambio de tendencia solo queda el CHoCH)
 var label ultimo_bos_lbl = na
 var int   ultimo_bos_bar = na
 var int   ultimo_bos_dir = 0
 
-borrar_bos_contrario(int dir_choch) =>
-    if not na(ultimo_bos_bar) and ultimo_bos_dir == -dir_choch and bar_index - ultimo_bos_bar <= bos_ventana
+borrar_bos_contrario(int dir_choch, int bar_choch) =>
+    if not na(ultimo_bos_bar) and ultimo_bos_dir == -dir_choch and (bos_ventana == 0 or bar_choch - ultimo_bos_bar <= bos_ventana)
         ultimo_bos_lbl.delete()
 var int   dir_invalidada       = 0
 var float nivel_invalidado     = na
@@ -173,6 +173,10 @@ if not na(choch_bar) and bar_index == choch_bar + 1
             if choch_dir == -1 and na(ultimo_valle)
                 ultimo_valle := choch_nivel
                 bar_valle    := choch_bar_piv
+    else
+        // CHoCH confirmado: se quita el ⚠ (era solo provisional) y se borra el BOS contrario previo
+        choch_lbl.set_text(str.replace_all(choch_lbl.get_text(), "⚠ ", ""))
+        borrar_bos_contrario(choch_dir, choch_bar)
     choch_bar := na
 
 // ─────────────────────────────
@@ -191,7 +195,6 @@ if cruce_arriba and not na(ultimo_pico)
     string texto = es_choch ? (vol_top_confirm ? "🔥 CHoCH" : "CHoCH") : "BOS"
     
     if es_choch
-        borrar_bos_contrario(1)
         [riesgo, motivos] = riesgo_choch(1, ultimo_pico)
         es_riesgo = marcar_riesgo and riesgo >= riesgo_min
         choch_riesgo_alc := es_riesgo
@@ -219,7 +222,6 @@ if cruce_abajo and not na(ultimo_valle)
     string texto = es_choch ? (vol_top_confirm ? "🔥 CHoCH" : "CHoCH") : "BOS"
     
     if es_choch
-        borrar_bos_contrario(-1)
         [riesgo, motivos] = riesgo_choch(-1, ultimo_valle)
         es_riesgo = marcar_riesgo and riesgo >= riesgo_min
         choch_riesgo_baj := es_riesgo
