@@ -11,6 +11,7 @@ vol_len      = input.int(20, "Media de Volumen", minval=1)
 offset_x     = input.int(2, "Desplazamiento Texto", minval=0)
 fondo_blanco = input.bool(true, "Fondo blanco")
 mostrar_bos  = input.bool(true, "Mostrar BOS (salvo con tendencia invalidada)")
+bos_ventana  = input.int(6, "Borrar BOS si hay CHoCH contrario en ≤ N velas (0 = no)", minval=0)
 
 mostrar_fvg     = input.bool(true, "Mostrar FVG", group="FVG / IFVG")
 mostrar_ifvg    = input.bool(true, "Mostrar IFVG", group="FVG / IFVG")
@@ -132,6 +133,16 @@ var int   tend_previa   = 0
 // true desde que un CHoCH falla hasta que hay un CHoCH nuevo o la tendencia se reactiva:
 // mientras tanto no se dibujan BOS
 var bool  tendencia_invalidada = false
+
+// Último BOS dibujado: si poco después sale un CHoCH contrario, ese BOS era el barrido
+// que marcó el giro y se borra (en el cambio de tendencia solo queda el CHoCH)
+var label ultimo_bos_lbl = na
+var int   ultimo_bos_bar = na
+var int   ultimo_bos_dir = 0
+
+borrar_bos_contrario(int dir_choch) =>
+    if not na(ultimo_bos_bar) and ultimo_bos_dir == -dir_choch and bar_index - ultimo_bos_bar <= bos_ventana
+        ultimo_bos_lbl.delete()
 var int   dir_invalidada       = 0
 var float nivel_invalidado     = na
 
@@ -180,6 +191,7 @@ if cruce_arriba and not na(ultimo_pico)
     string texto = es_choch ? (vol_top_confirm ? "🔥 CHoCH" : "CHoCH") : "BOS"
     
     if es_choch
+        borrar_bos_contrario(1)
         [riesgo, motivos] = riesgo_choch(1, ultimo_pico)
         es_riesgo = marcar_riesgo and riesgo >= riesgo_min
         choch_riesgo_alc := es_riesgo
@@ -194,7 +206,9 @@ if cruce_arriba and not na(ultimo_pico)
         tend_previa   := tendencia
         tendencia_invalidada := false
     else if mostrar_bos and not tendencia_invalidada
-        label.new(bar_index, high, texto, yloc=yloc.abovebar, style=label.style_none, textcolor=color_alcista, size=size.small)
+        ultimo_bos_lbl := label.new(bar_index, high, texto, yloc=yloc.abovebar, style=label.style_none, textcolor=color_alcista, size=size.small)
+        ultimo_bos_bar := bar_index
+        ultimo_bos_dir := 1
     
     tendencia := 1
     ultimo_pico := na 
@@ -205,6 +219,7 @@ if cruce_abajo and not na(ultimo_valle)
     string texto = es_choch ? (vol_top_confirm ? "🔥 CHoCH" : "CHoCH") : "BOS"
     
     if es_choch
+        borrar_bos_contrario(-1)
         [riesgo, motivos] = riesgo_choch(-1, ultimo_valle)
         es_riesgo = marcar_riesgo and riesgo >= riesgo_min
         choch_riesgo_baj := es_riesgo
@@ -219,7 +234,9 @@ if cruce_abajo and not na(ultimo_valle)
         tend_previa   := tendencia
         tendencia_invalidada := false
     else if mostrar_bos and not tendencia_invalidada
-        label.new(bar_index, low, texto, yloc=yloc.belowbar, style=label.style_none, textcolor=color_bajista, size=size.small)
+        ultimo_bos_lbl := label.new(bar_index, low, texto, yloc=yloc.belowbar, style=label.style_none, textcolor=color_bajista, size=size.small)
+        ultimo_bos_bar := bar_index
+        ultimo_bos_dir := -1
     
     tendencia := -1
     ultimo_valle := na 
