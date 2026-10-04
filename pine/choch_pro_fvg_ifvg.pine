@@ -80,87 +80,46 @@ var string group_structure = '════════ Structure Filters ══�
 var string group_range     = '════════ Range Behavior ════════'
 var string group_visual    = '════════ Visual Settings ════════'
 
-tooltip_scaling      = 'Number of window sizes tested on each bar. Base only tests a single lookback and finds structures near that length. Base + 2x also tests double the base length. Base + 2x + 3x adds triple, and the longest window that passes every filter defines the range, so short coils and long consolidations are both covered by one configuration.'
-tooltip_base_length  = 'Shortest window tested, and the length the larger windows are multiplied from. This is the smallest structure the detector can find. Lower values capture brief pauses inside a trend and open boxes sooner. Higher values reserve detection for extended consolidation and produce fewer, larger boxes.'
-tooltip_boundary     = 'Determines where the two boundaries sit and how range height is measured. Percentile band uses a high percentile of highs and the mirrored percentile of lows, so outlying spikes do not define the box. That value is interpolated between the two nearest bars, so a boundary can rest slightly away from any single wick. Absolute extremes uses the highest high and lowest low, placing the edges on the extreme wicks and measuring height peak to trough. Body extremes uses opens and closes only, which suits instruments with erratic wicks such as thin crypto pairs.'
-tooltip_band_pct     = 'Percentile used for the upper boundary, mirrored for the lower one. At 100 the band matches the absolute extremes. Lower values trim more of the outlying wicks from the boundary, tightening the box onto the working range and producing more boundary tags. Only applies when Boundary Basis is set to Percentile band.'
-tooltip_timing       = 'Bar close waits for the bar to close before a range forms, breaks, or fires an alert, so nothing on the chart changes once drawn. This is the setting to use when acting on signals mechanically.\n\nLive bar evaluates the forming bar for earlier signals. Two behaviors follow from that. A box or marker can move or disappear before the bar closes, since the reading it came from is still forming. And when Absorb Overshoot is enabled, a boundary that stretches to take in an intrabar wick keeps that position after the tick passes, so a boundary can sit slightly wider than the closed candles behind it. Both resolve as the structure develops: subsequent bars re-evaluate the boundary against real extremes, and the breakout buffer measures from wherever it sits. Switch to Bar close for a chart that never revises itself.'
-tooltip_atr_length   = 'ATR lookback behind the compression measurement, touch tolerance, breakout buffer and overshoot allowance. Since those four are expressed in ATR, this scales them together. Shorter values follow recent volatility. Longer values hold a steadier reference across regimes. The compression ranking begins once this lookback has filled, so the setting also decides how early in a chart detection can start.'
+scan_scaling      = input.string('Base + 2x + 3x', 'Scan Scaling', options = ['Base only', 'Base + 2x', 'Base + 2x + 3x'], group = group_detect)
+base_length       = input.int(20, 'Base Scan Length', minval = 8, maxval = 100, group = group_detect)
+boundary_basis    = input.string('Percentile band', 'Boundary Basis', options = ['Percentile band', 'Absolute extremes', 'Body extremes'], group = group_detect)
+band_percentile   = input.float(90.0, 'Boundary Percentile', minval = 70.0, maxval = 100.0, step = 1.0, group = group_detect)
+signal_timing     = input.string('Bar close', 'Signal Timing', options = ['Bar close', 'Live bar'], group = group_detect)
+atr_length        = input.int(200, 'ATR Length', minval = 14, maxval = 1000, group = group_detect)
 
-tooltip_compression  = 'Volatility gate for the candidate band. Band height is ranked against its own history on the current symbol and interval, so the setting carries the same meaning on any instrument and is unaffected by the surrounding volatility regime. At 40, a window qualifies when it is tighter than 60 percent of what that market normally produces. Higher values accept wider structures and produce more boxes. Lower values isolate tight coiling.'
-tooltip_calibration  = 'History the compression reading is ranked against. Longer windows hold a steadier reference and an even detection rate over time. Shorter windows re-baseline faster after a volatility shift, so the working threshold follows recent conditions. The ranking uses whichever is smaller, this setting or the history available past the ATR lookback, so higher timeframes and recent listings rank against the bars they have.'
-tooltip_rotation     = 'Midline crossings per bar required from the window. Width alone does not separate a range from a reversal, since a V shaped move can span the same distance as a rectangle while crossing its midline about twice, where price rotating between two boundaries crosses repeatedly. Higher values require busier two sided rotation and filter out reversals. Lower values also accept quieter consolidation. Three crossings acts as a floor, so on short windows the lowest settings resolve to that.'
-tooltip_touch_basis  = 'Wick reaches counts any bar whose high or low entered the tolerance band. Close reaches counts only bars that closed inside it, isolating bars that were rejected at the boundary rather than spiked through, and registers fewer touches on the same data.'
-tooltip_min_touches  = 'Bars that must reach each boundary before the structure is accepted. At 2 and above, a single spike high paired with a single spike low no longer forms a range. Higher values require a box defended repeatedly, which forms the range later with more structure behind it.'
-tooltip_touch_tol    = 'Half width of the zone around each boundary that registers as a touch, in ATR. Tighter values count precise tests only, suiting instruments that hold their levels closely. Wider values also count approaches into the boundary area, suiting noisier instruments. The same tolerance decides how far a wick may extend past a boundary and still let that bar anchor the left edge of a box.'
-tooltip_drift        = 'Maximum tilt of the window mean, measured as the regression slope across the window as a fraction of band height. At 0 the structure is perfectly flat. At 1 the trend line traveled the full height of the box. Higher values also accept rising and falling channels. Lower values isolate a flat range with a stable mean.'
-tooltip_containment  = 'Share of closes that must sit between the two boundaries. Rotation establishes that price turned repeatedly, containment establishes that it did so inside the band rather than passing through it. The same share governs how much excursion the left edge may cross while anchoring back, so higher values produce a tighter box over less history and lower values allow more excursion on both counts.'
+compression_pct   = input.float(40.0, 'Compression Percentile', minval = 5.0, maxval = 95.0, step = 5.0, group = group_structure)
+calibration_len   = input.int(500, 'Calibration Lookback', minval = 100, maxval = 2000, group = group_structure)
+min_rotation      = input.float(0.18, 'Min Rotation Rate', minval = 0.05, maxval = 0.60, step = 0.01, group = group_structure)
+touch_basis       = input.string('Wick reaches', 'Touch Definition', options = ['Wick reaches', 'Close reaches'], group = group_structure)
+min_touches       = input.int(2, 'Min Boundary Touches', minval = 1, maxval = 10, group = group_structure)
+touch_tolerance   = input.float(0.10, 'Touch Tolerance (ATR)', minval = 0.02, maxval = 1.0, step = 0.02, group = group_structure)
+max_drift         = input.float(0.45, 'Max Drift', minval = 0.05, maxval = 2.0, step = 0.05, group = group_structure)
+min_containment   = input.float(0.70, 'Min Containment', minval = 0.40, maxval = 1.0, step = 0.05, group = group_structure)
 
-tooltip_anchoring    = 'Scan window only draws the box across the window that was tested, so the drawn structure matches the bars the filters evaluated exactly. Extend to containment walks back from that window while earlier bars stay inside the band, allowing the excursion that Min Containment permits before it stops. The edge lands only on a bar held inside the boundaries wick and all, so a box begins on a candle that belonged to the structure rather than one that arrived into it.'
-tooltip_anchor_back  = 'Maximum distance the left edge may travel backwards. The walk stops on its own once earlier history leaves the band, so this acts as a ceiling rather than a target. Higher values let a box cover a long consolidation in full. Lower values keep it on the most recent portion of the structure. Only applies when Range Anchoring is set to Extend to containment.'
-tooltip_min_bars     = 'Bars the box must span before the structure is confirmed. Until then it is provisional and drawn with a dashed border, and a break at that stage clears it without a marker, so only structures that held remain on the chart. The count runs from the left edge, so a box anchored back over earlier history can satisfy this immediately. Values above the anchored span are where this takes effect.'
-tooltip_absorb       = 'Allows a boundary to stretch and take in a wick that pokes marginally outside instead of ending the range there, keeping one structure intact where a rigid box would close and reform a few ticks away. Applies under Close beyond confirmation only, since Wick beyond treats any trade through the boundary as a break.'
-tooltip_overshoot    = 'Largest wick excursion that can be taken into a boundary, in ATR. Beyond this distance the move registers as genuine expansion and the range ends. Only applies when Absorb Overshoot is enabled and Break Confirmation is set to Close beyond.'
-tooltip_confirm      = 'Close beyond ends the range when a bar closes past the boundary, which ignores intrabar spikes. Wick beyond ends it on any trade through the boundary, which closes boxes earlier and captures stop runs, including spikes that reverse. This governs how a range ends. What qualifies as a range is set in Structure Filters.'
-tooltip_break_buffer = 'Distance past the boundary that price must clear for the break to register, in ATR. At 0 the boundary itself is the line. Higher values filter marginal breaks that cleared the level without force, and confirm genuine breaks later in the move.'
-tooltip_merge        = 'Governs a break that closes back inside the range. When enabled, the broken range is held open briefly and a close back between the boundaries revives it: the box resumes from its original left edge, the breakout marker is withdrawn, and the excursion is marked at its extreme, leaving one structure with a failed break inside it. When disabled, every break is final, which matches trading breaks mechanically.'
-tooltip_deviation    = 'Bars a broken range waits for price to return inside it. Longer windows recover deeper and slower excursions into the parent structure. Shorter windows recover an immediate rejection only. No new range opens while one is waiting, so this scales with the interval traded. Only applies when Merge Deviations is enabled.'
-tooltip_cooldown     = 'Bars before a new range can open after one ends. This keeps a fresh box from forming inside the breakout leg of the range that just resolved. Higher values suit faster intervals where breaks run for several bars.'
-tooltip_max_age      = 'Retires a range once it has been open this many bars, whether or not price broke it. The count runs from the bar the range formed, so anchoring back over earlier history never retires a box early. At 0 a range runs for as long as the structure holds, which suits swing charts. A positive value resets the detector periodically rather than carrying one box across sessions.'
+range_anchoring   = input.string('Extend to containment', 'Range Anchoring', options = ['Scan window only', 'Extend to containment'], group = group_range)
+anchor_lookback   = input.int(300, 'Anchor Lookback', minval = 20, maxval = 500, group = group_range)
+min_range_bars    = input.int(10, 'Minimum Range Bars', minval = 2, maxval = 200, group = group_range)
+absorb_overshoot  = input.bool(true, 'Absorb Overshoot', group = group_range)
+overshoot_tol     = input.float(0.25, 'Overshoot Tolerance (ATR)', minval = 0.05, maxval = 1.0, step = 0.05, group = group_range)
+break_confirm     = input.string('Close beyond', 'Break Confirmation', options = ['Close beyond', 'Wick beyond'], group = group_range)
+breakout_buffer   = input.float(0.15, 'Breakout Buffer (ATR)', minval = 0.0, maxval = 2.0, step = 0.05, group = group_range)
+merge_deviations  = input.bool(true, 'Merge Deviations', group = group_range)
+deviation_window  = input.int(10, 'Deviation Window', minval = 1, maxval = 100, group = group_range)
+cooldown_bars     = input.int(3, 'Cooldown Bars', minval = 0, maxval = 100, group = group_range)
+max_range_age     = input.int(0, 'Max Range Age', minval = 0, maxval = 2000, group = group_range)
 
-tooltip_color_pre    = 'Pre configured color schemes for different chart themes. Classic uses traditional green and red. Aqua uses ocean blue and orange. Cosmic uses mint and purple. Cyber uses teal and warm orange. Neon uses high contrast yellow and magenta. Custom uses the bullish, bearish, and range colors you set below.'
-tooltip_bullish      = 'Color applied to an upside break, its marker, and the shading of the range that gave way upward. Also applied to a deviation below the range, since a failed break of support resolves bullish. Every element drawn in this color is contrast corrected against the chart background, so any choice stays visible.'
-tooltip_bearish      = 'Color applied to a downside break, its marker, and the shading of the range that gave way downward. Also applied to a deviation above the range, since a failed break of resistance resolves bearish. Every element drawn in this color is contrast corrected against the chart background, so any choice stays visible.'
-tooltip_range_color  = 'Color applied to a live range: its border, its shading, the equilibrium and quartile levels, and the range tag. This sits outside the preset so the range stays neutral against whichever bullish and bearish pair is active. Every element is contrast corrected against the chart background, so a color close to the background lifts far enough to read while the shading stays light enough to keep price action visible.'
-tooltip_gradient     = 'Horizontal slices the range shading is built from. Higher values fade more smoothly from the boundaries toward equilibrium. Each slice is a drawing object, so lower values leave room for more completed boxes in chart history.'
-tooltip_fill_trans   = 'Transparency of the range shading. The center is always lighter than the edges so the fade stays visible at any setting. Higher values keep price action fully exposed.'
-tooltip_equilibrium  = 'Show the midpoint of the range, which is the line the rotation filter counts crossings against.'
-tooltip_quartiles    = 'Show the 25 and 75 percent levels inside the range, marking where a rotation is already extended relative to the structure.'
-tooltip_range_label  = 'Show a tag on each range with its state, the bars it has held, and its height as a percentage of price.\n\nThe bar count is the number of candles the structure contained. While a range is live that is every candle from the left edge to the current bar. When a break ends it, the box still extends over the bar that broke it so the marker sits on that candle, but the bar itself is not counted, so the figure on the retired box matches the last reading it showed while live. A range retired by Max Range Age counts its final bar, since no break occurred. TradingView measurement tools count the intervals between bars rather than the bars themselves, so a ruler dragged across a box reads one lower than a candle count.'
-tooltip_breakouts    = 'Show a marker on the bar that resolves a confirmed range. An upside break prints below the bar and a downside break above it. Provisional structures produce no marker, and the marker is withdrawn if the break is later merged back in as a deviation.'
-tooltip_deviations   = 'Show a marker at the extreme of a failed break once price returns inside the range. It sits on the high or low of the excursion rather than the bar price returned on, marking the level that was swept. Requires Merge Deviations.'
-tooltip_label_size   = 'Text size for range tags, breakout markers and deviation markers. Tiny and Small stay readable on crowded charts. Normal and Large suit presentation and screen recording.'
-
-scan_scaling      = input.string('Base + 2x + 3x', 'Scan Scaling', options = ['Base only', 'Base + 2x', 'Base + 2x + 3x'], group = group_detect, tooltip = tooltip_scaling)
-base_length       = input.int(20, 'Base Scan Length', minval = 8, maxval = 100, group = group_detect, tooltip = tooltip_base_length)
-boundary_basis    = input.string('Percentile band', 'Boundary Basis', options = ['Percentile band', 'Absolute extremes', 'Body extremes'], group = group_detect, tooltip = tooltip_boundary)
-band_percentile   = input.float(90.0, 'Boundary Percentile', minval = 70.0, maxval = 100.0, step = 1.0, group = group_detect, tooltip = tooltip_band_pct)
-signal_timing     = input.string('Bar close', 'Signal Timing', options = ['Bar close', 'Live bar'], group = group_detect, tooltip = tooltip_timing)
-atr_length        = input.int(200, 'ATR Length', minval = 14, maxval = 1000, group = group_detect, tooltip = tooltip_atr_length)
-
-compression_pct   = input.float(40.0, 'Compression Percentile', minval = 5.0, maxval = 95.0, step = 5.0, group = group_structure, tooltip = tooltip_compression)
-calibration_len   = input.int(500, 'Calibration Lookback', minval = 100, maxval = 2000, group = group_structure, tooltip = tooltip_calibration)
-min_rotation      = input.float(0.18, 'Min Rotation Rate', minval = 0.05, maxval = 0.60, step = 0.01, group = group_structure, tooltip = tooltip_rotation)
-touch_basis       = input.string('Wick reaches', 'Touch Definition', options = ['Wick reaches', 'Close reaches'], group = group_structure, tooltip = tooltip_touch_basis)
-min_touches       = input.int(2, 'Min Boundary Touches', minval = 1, maxval = 10, group = group_structure, tooltip = tooltip_min_touches)
-touch_tolerance   = input.float(0.10, 'Touch Tolerance (ATR)', minval = 0.02, maxval = 1.0, step = 0.02, group = group_structure, tooltip = tooltip_touch_tol)
-max_drift         = input.float(0.45, 'Max Drift', minval = 0.05, maxval = 2.0, step = 0.05, group = group_structure, tooltip = tooltip_drift)
-min_containment   = input.float(0.70, 'Min Containment', minval = 0.40, maxval = 1.0, step = 0.05, group = group_structure, tooltip = tooltip_containment)
-
-range_anchoring   = input.string('Extend to containment', 'Range Anchoring', options = ['Scan window only', 'Extend to containment'], group = group_range, tooltip = tooltip_anchoring)
-anchor_lookback   = input.int(300, 'Anchor Lookback', minval = 20, maxval = 500, group = group_range, tooltip = tooltip_anchor_back)
-min_range_bars    = input.int(10, 'Minimum Range Bars', minval = 2, maxval = 200, group = group_range, tooltip = tooltip_min_bars)
-absorb_overshoot  = input.bool(true, 'Absorb Overshoot', group = group_range, tooltip = tooltip_absorb)
-overshoot_tol     = input.float(0.25, 'Overshoot Tolerance (ATR)', minval = 0.05, maxval = 1.0, step = 0.05, group = group_range, tooltip = tooltip_overshoot)
-break_confirm     = input.string('Close beyond', 'Break Confirmation', options = ['Close beyond', 'Wick beyond'], group = group_range, tooltip = tooltip_confirm)
-breakout_buffer   = input.float(0.15, 'Breakout Buffer (ATR)', minval = 0.0, maxval = 2.0, step = 0.05, group = group_range, tooltip = tooltip_break_buffer)
-merge_deviations  = input.bool(true, 'Merge Deviations', group = group_range, tooltip = tooltip_merge)
-deviation_window  = input.int(10, 'Deviation Window', minval = 1, maxval = 100, group = group_range, tooltip = tooltip_deviation)
-cooldown_bars     = input.int(3, 'Cooldown Bars', minval = 0, maxval = 100, group = group_range, tooltip = tooltip_cooldown)
-max_range_age     = input.int(0, 'Max Range Age', minval = 0, maxval = 2000, group = group_range, tooltip = tooltip_max_age)
-
-color_preset      = input.string('Custom', 'Color Preset', options = ['Classic', 'Aqua', 'Cosmic', 'Cyber', 'Neon', 'Custom'], group = group_visual, tooltip = tooltip_color_pre)
-bullish_input     = input.color(#00ffaa, 'Bullish Color', group = group_visual, tooltip = tooltip_bullish)
-bearish_input     = input.color(#ff0000, 'Bearish Color', group = group_visual, tooltip = tooltip_bearish)
-range_input       = input.color(color.gray, 'Range Color', group = group_visual, tooltip = tooltip_range_color)
-gradient_steps    = input.int(4, 'Gradient Steps', minval = 1, maxval = 10, group = group_visual, tooltip = tooltip_gradient)
-fill_transparency = input.int(88, 'Fill Transparency', minval = 50, maxval = 100, group = group_visual, tooltip = tooltip_fill_trans)
-show_equilibrium  = input.bool(true, 'Show Equilibrium Line', group = group_visual, tooltip = tooltip_equilibrium)
-show_quartiles    = input.bool(true, 'Show Quartile Levels', group = group_visual, tooltip = tooltip_quartiles)
-show_range_label  = input.bool(true, 'Show Range Labels', group = group_visual, tooltip = tooltip_range_label)
-show_breakouts    = input.bool(true, 'Show Breakout Markers', group = group_visual, tooltip = tooltip_breakouts)
-show_deviations   = input.bool(true, 'Show Deviation Markers', group = group_visual, tooltip = tooltip_deviations)
-label_text_size   = input.string('Small', 'Label Text Size', options = ['Tiny', 'Small', 'Normal', 'Large'], group = group_visual, tooltip = tooltip_label_size)
+color_preset      = input.string('Custom', 'Color Preset', options = ['Classic', 'Aqua', 'Cosmic', 'Cyber', 'Neon', 'Custom'], group = group_visual)
+bullish_input     = input.color(#00ffaa, 'Bullish Color', group = group_visual)
+bearish_input     = input.color(#ff0000, 'Bearish Color', group = group_visual)
+range_input       = input.color(color.gray, 'Range Color', group = group_visual)
+gradient_steps    = input.int(4, 'Gradient Steps', minval = 1, maxval = 10, group = group_visual)
+fill_transparency = input.int(88, 'Fill Transparency', minval = 50, maxval = 100, group = group_visual)
+show_equilibrium  = input.bool(true, 'Show Equilibrium Line', group = group_visual)
+show_quartiles    = input.bool(true, 'Show Quartile Levels', group = group_visual)
+show_range_label  = input.bool(true, 'Show Range Labels', group = group_visual)
+show_breakouts    = input.bool(true, 'Show Breakout Markers', group = group_visual)
+show_deviations   = input.bool(true, 'Show Deviation Markers', group = group_visual)
+label_text_size   = input.string('Small', 'Label Text Size', options = ['Tiny', 'Small', 'Normal', 'Large'], group = group_visual)
 
 [bullish_color, bearish_color] = switch color_preset
     'Classic' => [#00ff00, #ff0000]
