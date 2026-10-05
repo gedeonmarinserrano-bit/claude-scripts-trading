@@ -138,6 +138,7 @@ show_breakouts    = input.bool(true, 'Show Breakout Markers', group = group_visu
 show_deviations   = input.bool(true, 'Show Deviation Markers', group = group_visual)
 label_text_size   = input.string('Small', 'Label Text Size', options = ['Tiny', 'Small', 'Normal', 'Large'], group = group_visual)
 marcas_sutiles    = input.bool(true, 'Marcas Breakout/Deviation sutiles (solo flecha)', group = group_visual)
+tam_marcas_txt    = input.string('Small', 'Tamaño flechas Breakout/Deviation', options = ['Tiny', 'Small', 'Normal', 'Large'], group = group_visual)
 
 [bullish_color, bearish_color] = switch color_preset
     'Classic' => [#00ff00, #ff0000]
@@ -247,6 +248,7 @@ wick_touch  = touch_basis == 'Wick reaches'
 live_timing = signal_timing == 'Live bar'
 bar_ready   = live_timing or barstate.isconfirmed
 label_size  = resolveSize(label_text_size)
+tam_marcas  = resolveSize(tam_marcas_txt)
 
 chart_backdrop     = chart.bg_color
 range_line_color   = readableOn(range_input, chart_backdrop, contrast_line)
@@ -396,7 +398,7 @@ if range_active and bar_ready
                 marker_text  = (break_direction == 1 ? '▲  ' : '▼  ') + 'Breakout'
                 if marcas_sutiles
                     // Solo una flecha pequeña del color de la ruptura, sin fondo; el texto va en el tooltip
-                    break_marker := label.new(bar_index, break_direction == 1 ? low : high, break_direction == 1 ? '▲' : '▼', xloc = xloc.bar_index, yloc = yloc.price, color = transparent_fill, style = break_direction == 1 ? label.style_label_up : label.style_label_down, textcolor = color.new(retire_line, 20), size = size.tiny, tooltip = 'Breakout del rango')
+                    break_marker := label.new(bar_index, break_direction == 1 ? low : high, break_direction == 1 ? '▲' : '▼', xloc = xloc.bar_index, yloc = yloc.price, color = transparent_fill, style = break_direction == 1 ? label.style_label_up : label.style_label_down, textcolor = color.new(retire_line, 20), size = tam_marcas, tooltip = 'Breakout del rango')
                 else
                     break_marker := label.new(bar_index, break_direction == 1 ? low : high, marker_text, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(retire_base, 10), style = break_direction == 1 ? label.style_label_up : label.style_label_down, textcolor = contrastText(retire_base), size = label_size)
             if break_direction == 1
@@ -445,7 +447,7 @@ if range_dormant and bar_ready
         if show_deviations
             if marcas_sutiles
                 deviation_line = readableOn(deviation_base, chart_backdrop, contrast_line)
-                label.new(deviation_bar, deviation_price, dormant_dir == 1 ? '⤵' : '⤴', xloc = xloc.bar_index, yloc = yloc.price, color = transparent_fill, style = dormant_dir == 1 ? label.style_label_down : label.style_label_up, textcolor = color.new(deviation_line, 20), size = size.tiny, tooltip = 'Deviation: ruptura fallida, el precio volvió al rango')
+                label.new(deviation_bar, deviation_price, dormant_dir == 1 ? '⤵' : '⤴', xloc = xloc.bar_index, yloc = yloc.price, color = transparent_fill, style = dormant_dir == 1 ? label.style_label_down : label.style_label_up, textcolor = color.new(deviation_line, 20), size = tam_marcas, tooltip = 'Deviation: ruptura fallida, el precio volvió al rango')
             else
                 label.new(deviation_bar, deviation_price, deviation_text, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(deviation_base, 10), style = dormant_dir == 1 ? label.style_label_down : label.style_label_up, textcolor = contrastText(deviation_base), size = label_size)
         label.delete(break_marker)
