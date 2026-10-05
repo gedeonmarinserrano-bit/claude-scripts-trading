@@ -26,6 +26,7 @@ mostrar_fvg     = input.bool(true, "Mostrar FVG", group="FVG / IFVG")
 mostrar_ifvg    = input.bool(true, "Mostrar IFVG", group="FVG / IFVG")
 fvg_min_pct     = input.float(0.0, "Tamaño mínimo FVG (% precio)", minval=0, step=0.05, group="FVG / IFVG")
 max_zonas       = input.int(50, "Máx. zonas vigiladas", minval=1, maxval=250, group="FVG / IFVG")
+color_consumido = input.color(color.new(color.gray, 75), "Color parte consumida", group="FVG / IFVG")
 
 mostrar_emas = input.bool(true, "Mostrar EMAs", group="EMAs")
 ema_rap_len  = input.int(9, "EMA rápida", minval=1, group="EMAs")
@@ -62,6 +63,8 @@ type Zona
     float suelo
     int   dir        // 1 alcista, -1 bajista
     bool  inversa    // true = IFVG
+    box   gris  = na // parte ya tocada (gris translúcido)
+    float borde = na // límite de la parte aún sin tocar
 
 var zonas = array.new<Zona>()
 
@@ -767,42 +770,65 @@ nuevo_ifvg_alc = false
 nuevo_ifvg_baj = false
 
 // Actualizar zonas existentes antes de añadir las de esta vela.
-// Las zonas mitigadas (precio atraviesa el hueco entero con la mecha) se eliminan del gráfico.
+// Consumo progresivo: la parte del hueco que el precio ya ha tocado se pinta en gris
+// translúcido y la caja de color se encoge hasta lo que queda sin tocar.
+//  - Zona alcista (soporte, FVG alcista / IFVG alcista): se consume desde el techo hacia abajo.
+//  - Zona bajista (resistencia, FVG bajista / IFVG bajista): se consume desde el suelo hacia arriba.
+// Cuando se consume del todo (la mecha llega al otro extremo) desaparece.
+borrar_zona(Zona z) =>
+    if not na(z.bx)
+        z.bx.delete()
+    if not na(z.gris)
+        z.gris.delete()
+
 if cerrada and zonas.size() > 0
     for i = zonas.size() - 1 to 0
         z = zonas.get(i)
-        mitigada = z.dir == 1 ? low <= z.suelo : high >= z.techo
-        if not z.inversa
-            // Una sola vela: FVG alcista -> abre por encima del techo y cierra por debajo del suelo;
-            //               FVG bajista -> abre por debajo del suelo y cierra por encima del techo
-            invertida = z.dir == 1 ? (open >= z.techo and close < z.suelo) : (open <= z.suelo and close > z.techo)
-            if invertida
-                // El FVG queda mitigado e invertido: se borra y nace el IFVG
-                z.bx.delete()
-                nueva_dir = -z.dir
-                if nueva_dir == 1
-                    nuevo_ifvg_alc := true
-                else
-                    nuevo_ifvg_baj := true
-                if mostrar_ifvg
-                    col = nueva_dir == 1 ? color_ifvg_alc : color_ifvg_baj
-                    b = box.new(bar_index, z.techo, bar_index + 1, z.suelo, border_color=col, bgcolor=color.new(col, 75), text="IFVG", text_size=size.tiny, text_color=color.black, text_halign=text.align_right)
-                    zonas.set(i, Zona.new(b, z.techo, z.suelo, nueva_dir, true))
-                else
-                    zonas.remove(i)
-            else if mitigada
-                // FVG rellenado con mecha (sin cierre al otro lado): se elimina
-                z.bx.delete()
-                zonas.remove(i)
+        consumida = z.dir == 1 ? low <= z.suelo : high >= z.techo
+        // Una sola vela: FVG alcista -> abre por encima del techo y cierra por debajo del suelo;
+        //               FVG bajista -> abre por debajo del suelo y cierra por encima del techo
+        invertida = not z.inversa and (z.dir == 1 ? (open >= z.techo and close < z.suelo) : (open <= z.suelo and close > z.techo))
+        if invertida
+            // El FVG queda consumido e invertido: se borra y nace el IFVG
+            borrar_zona(z)
+            nueva_dir = -z.dir
+            if nueva_dir == 1
+                nuevo_ifvg_alc := true
             else
-                z.bx.set_right(bar_index + 1)
+                nuevo_ifvg_baj := true
+            if mostrar_ifvg
+                col = nueva_dir == 1 ? color_ifvg_alc : color_ifvg_baj
+                b = box.new(bar_index, z.techo, bar_index + 1, z.suelo, border_color=col, bgcolor=color.new(col, 75), text="IFVG", text_size=size.tiny, text_color=color.black, text_halign=text.align_right)
+                zonas.set(i, Zona.new(b, z.techo, z.suelo, nueva_dir, true))
+            else
+                zonas.remove(i)
+        else if consumida
+            // Consumida del todo: desaparece
+            borrar_zona(z)
+            zonas.remove(i)
         else
-            // IFVG mitigado: alcista (soporte) cuando low <= suelo, bajista (resistencia) cuando high >= techo
-            if mitigada
-                z.bx.delete()
-                zonas.remove(i)
-            else
+            borde = na(z.borde) ? (z.dir == 1 ? z.techo : z.suelo) : z.borde
+            tocada = z.dir == 1 ? low < borde : high > borde
+            if tocada and not na(z.bx)
+                borde := z.dir == 1 ? low : high
+                z.borde := borde
+                izq = z.bx.get_left()
+                if z.dir == 1
+                    z.bx.set_top(borde)
+                    if na(z.gris)
+                        z.gris := box.new(izq, z.techo, bar_index + 1, borde, border_color=na, bgcolor=color_consumido)
+                    else
+                        z.gris.set_bottom(borde)
+                else
+                    z.bx.set_bottom(borde)
+                    if na(z.gris)
+                        z.gris := box.new(izq, borde, bar_index + 1, z.suelo, border_color=na, bgcolor=color_consumido)
+                    else
+                        z.gris.set_top(borde)
+            if not na(z.bx)
                 z.bx.set_right(bar_index + 1)
+            if not na(z.gris)
+                z.gris.set_right(bar_index + 1)
 
 fvg_alcista = cerrada and low > high[2] and (low - high[2]) / close * 100 > fvg_min_pct
 fvg_bajista = cerrada and high < low[2] and (low[2] - high) / close * 100 > fvg_min_pct
@@ -812,7 +838,7 @@ agregar_fvg(float techo, float suelo, int dir) =>
     b = mostrar_fvg ? box.new(bar_index - 2, techo, bar_index + 1, suelo, border_color=na, bgcolor=color.new(col, 82), text="FVG", text_size=size.tiny, text_color=col, text_halign=text.align_right) : na
     zonas.push(Zona.new(b, techo, suelo, dir, false))
     if zonas.size() > max_zonas
-        zonas.shift().bx.delete()
+        borrar_zona(zonas.shift())
 
 if fvg_alcista
     agregar_fvg(low, high[2], 1)
