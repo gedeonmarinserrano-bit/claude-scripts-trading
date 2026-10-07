@@ -1,4 +1,4 @@
-// CHoCH PRO + FVG/IFVG + EMAs + Rangos
+// CHoCH PRO + FVG + EMAs + Rangos
 //
 // Incluye "Auto Range Detector [QuantAlgo]" © QuantAlgo, licenciado bajo
 // Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
@@ -6,7 +6,7 @@
 // Por esa licencia, este script combinado se distribuye bajo la misma licencia (CC BY-NC-SA 4.0).
 
 //@version=6
-indicator("CHoCH PRO - High Contrast + FVG/IFVG + Rangos", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=500, max_bars_back=2000)
+indicator("CHoCH PRO - High Contrast + FVG + Rangos", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=500, max_bars_back=2000)
 
 // ─────────────────────────────
 // CONFIGURACIÓN
@@ -22,11 +22,10 @@ borrar_bos_giro = input.bool(true, "Borrar el BOS contrario previo al CHoCH (mod
 bos_ventana  = input.int(0, "Borrar BOS previo al CHoCH: máx. velas (0 = sin límite)", minval=0)
 filtro_rango = input.bool(true, "Sin CHoCH ni BOS dentro de un rango (hasta el breakout)")
 
-mostrar_fvg     = input.bool(true, "Mostrar FVG", group="FVG / IFVG")
-mostrar_ifvg    = input.bool(true, "Mostrar IFVG", group="FVG / IFVG")
-fvg_min_pct     = input.float(0.0, "Tamaño mínimo FVG (% precio)", minval=0, step=0.05, group="FVG / IFVG")
-max_zonas       = input.int(50, "Máx. zonas vigiladas", minval=1, maxval=250, group="FVG / IFVG")
-color_consumido = input.color(color.new(color.gray, 75), "Color parte consumida", group="FVG / IFVG")
+mostrar_fvg     = input.bool(true, "Mostrar FVG", group="FVG")
+fvg_min_pct     = input.float(0.0, "Tamaño mínimo FVG (% precio)", minval=0, step=0.05, group="FVG")
+max_zonas       = input.int(50, "Máx. zonas vigiladas", minval=1, maxval=250, group="FVG")
+color_consumido = input.color(color.new(color.gray, 75), "Color parte consumida", group="FVG")
 
 mostrar_emas = input.bool(true, "Mostrar EMAs", group="EMAs")
 ema_rap_len  = input.int(9, "EMA rápida", minval=1, group="EMAs")
@@ -47,22 +46,19 @@ mecha_pct       = input.float(50, "Mecha de rechazo ≥ (% del rango)", minval=0
 dist_atr        = input.float(0.15, "Ruptura corta < (× ATR)", minval=0, step=0.05, group="CHoCH fallido / riesgo")
 climax_atr      = input.float(2.5, "Vela de clímax > (× ATR)", minval=0, step=0.1, group="CHoCH fallido / riesgo")
 cuerpo_pct      = input.float(30, "Cuerpo pequeño < (% del rango)", minval=0, maxval=100, group="CHoCH fallido / riesgo")
-zona_atr        = input.float(1.0, "FVG/IFVG contrario a < (× ATR)", minval=0, step=0.1, group="CHoCH fallido / riesgo")
+zona_atr        = input.float(1.0, "FVG contrario a < (× ATR)", minval=0, step=0.1, group="CHoCH fallido / riesgo")
 color_fallido   = input.color(color.gray, "Color CHoCH fallido", group="CHoCH fallido / riesgo")
 
 // Colores Sólidos Neón
 color_alcista = #00ffbb
 color_bajista = #ff0055
-color_ifvg_alc = #00b3ff   // IFVG alcista (soporte)
-color_ifvg_baj = #ff9900   // IFVG bajista (resistencia)
 
-// Zonas FVG / IFVG (se declaran aquí porque el riesgo del CHoCH las consulta)
+// Zonas FVG (se declaran aquí porque el riesgo del CHoCH las consulta)
 type Zona
     box   bx
     float techo
     float suelo
     int   dir        // 1 alcista, -1 bajista
-    bool  inversa    // true = IFVG
     box   gris  = na // parte ya tocada (gris translúcido)
     float borde = na // límite de la parte aún sin tocar
 
@@ -561,7 +557,7 @@ riesgo_choch(int dir, float nivel) =>
             zona_delante := true
     if zona_delante
         puntos += 1
-        motivos += "• FVG/IFVG contrario delante\n"
+        motivos += "• FVG contrario delante\n"
     [puntos, motivos]
 
 // ─────────────────────────────
@@ -771,20 +767,15 @@ plot(mostrar_emas ? ema_media : na, "EMA media", color=ema_med_col, linewidth=1)
 plot(mostrar_emas ? ema_lenta : na, "EMA lenta", color=ema_len_col, linewidth=2)
 
 // ─────────────────────────────
-// FVG / IFVG
+// FVG
 // FVG: patrón de 3 velas (low > high[2] alcista, high < low[2] bajista).
-// IFVG: un FVG se invierte cuando UNA SOLA vela lo atraviesa entero:
-//       abre al otro lado del hueco y cierra más allá del extremo opuesto.
-//       Si el cierre al otro lado no es de una sola vez, el FVG solo queda mitigado.
 // ─────────────────────────────
-nuevo_ifvg_alc = false
-nuevo_ifvg_baj = false
 
 // Actualizar zonas existentes antes de añadir las de esta vela.
 // Consumo progresivo: la parte del hueco que el precio ya ha tocado se pinta en gris
 // translúcido y la caja de color se encoge hasta lo que queda sin tocar.
-//  - Zona alcista (soporte, FVG alcista / IFVG alcista): se consume desde el techo hacia abajo.
-//  - Zona bajista (resistencia, FVG bajista / IFVG bajista): se consume desde el suelo hacia arriba.
+//  - FVG alcista (soporte): se consume desde el techo hacia abajo.
+//  - FVG bajista (resistencia): se consume desde el suelo hacia arriba.
 // Cuando se consume del todo (la mecha llega al otro extremo) desaparece.
 borrar_zona(Zona z) =>
     if not na(z.bx)
@@ -796,24 +787,7 @@ if cerrada and zonas.size() > 0
     for i = zonas.size() - 1 to 0
         z = zonas.get(i)
         consumida = z.dir == 1 ? low <= z.suelo : high >= z.techo
-        // Una sola vela: FVG alcista -> abre por encima del techo y cierra por debajo del suelo;
-        //               FVG bajista -> abre por debajo del suelo y cierra por encima del techo
-        invertida = not z.inversa and (z.dir == 1 ? (open >= z.techo and close < z.suelo) : (open <= z.suelo and close > z.techo))
-        if invertida
-            // El FVG queda consumido e invertido: se borra y nace el IFVG
-            borrar_zona(z)
-            nueva_dir = -z.dir
-            if nueva_dir == 1
-                nuevo_ifvg_alc := true
-            else
-                nuevo_ifvg_baj := true
-            if mostrar_ifvg
-                col = nueva_dir == 1 ? color_ifvg_alc : color_ifvg_baj
-                b = box.new(bar_index, z.techo, bar_index + 1, z.suelo, border_color=col, bgcolor=color.new(col, 75), text="IFVG", text_size=size.tiny, text_color=color.black, text_halign=text.align_right)
-                zonas.set(i, Zona.new(b, z.techo, z.suelo, nueva_dir, true))
-            else
-                zonas.remove(i)
-        else if consumida
+        if consumida
             // Consumida del todo: desaparece
             borrar_zona(z)
             zonas.remove(i)
@@ -847,7 +821,7 @@ fvg_bajista = cerrada and high < low[2] and (low[2] - high) / close * 100 > fvg_
 agregar_fvg(float techo, float suelo, int dir) =>
     col = dir == 1 ? color_alcista : color_bajista
     b = mostrar_fvg ? box.new(bar_index - 2, techo, bar_index + 1, suelo, border_color=na, bgcolor=color.new(col, 82), text="FVG", text_size=size.tiny, text_color=col, text_halign=text.align_right) : na
-    zonas.push(Zona.new(b, techo, suelo, dir, false))
+    zonas.push(Zona.new(b, techo, suelo, dir))
     if zonas.size() > max_zonas
         borrar_zona(zonas.shift())
 
@@ -869,8 +843,6 @@ alertcondition(reactivada_alc, "Tendencia alcista reactivada", "Tendencia alcist
 alertcondition(reactivada_baj, "Tendencia bajista reactivada", "Tendencia bajista reactivada tras CHoCH fallido en {{ticker}} ({{interval}})")
 alertcondition(fvg_alcista, "FVG alcista", "Nuevo FVG alcista en {{ticker}} ({{interval}})")
 alertcondition(fvg_bajista, "FVG bajista", "Nuevo FVG bajista en {{ticker}} ({{interval}})")
-alertcondition(nuevo_ifvg_alc, "IFVG alcista creado", "Nuevo IFVG alcista (soporte) en {{ticker}} ({{interval}})")
-alertcondition(nuevo_ifvg_baj, "IFVG bajista creado", "Nuevo IFVG bajista (resistencia) en {{ticker}} ({{interval}})")
 alertcondition(signal_new_range,  title = 'Range Detected',     message = 'Auto Range Detector: new RANGE detected on {{exchange}}:{{ticker}} - {{interval}}')
 alertcondition(signal_break_up,   title = 'Range Breakout Up',  message = 'Auto Range Detector: range broken to the UPSIDE on {{exchange}}:{{ticker}} - {{interval}}')
 alertcondition(signal_break_down, title = 'Range Breakdown',    message = 'Auto Range Detector: range broken to the DOWNSIDE on {{exchange}}:{{ticker}} - {{interval}}')
