@@ -27,6 +27,21 @@ fvg_min_pct     = input.float(0.0, "Tamaño mínimo FVG (% precio)", minval=0, s
 max_zonas       = input.int(50, "Máx. zonas vigiladas", minval=1, maxval=250, group="FVG")
 color_consumido = input.color(color.new(color.gray, 75), "Color parte consumida", group="FVG")
 
+// Estrategia apertura de Nueva York (Bias + PO3)
+g_ny            = "Estrategia NY (Bias + PO3)"
+mostrar_horas   = input.bool(true, "Marcar horas 15:00 / 15:30 / 15:45 / 16:00 (Madrid)", group=g_ny)
+mostrar_fvg15   = input.bool(true, "FVG de M15 (con línea del 50%)", group=g_ny)
+mostrar_fvg60   = input.bool(true, "FVG de H1 (con línea del 50%)", group=g_ny)
+max_htf         = input.int(10, "Máx. FVG M15/H1 por temporalidad", minval=1, maxval=50, group=g_ny)
+col_fvg15       = input.color(#9c27b0, "Color FVG M15", group=g_ny)
+col_fvg60       = input.color(#1e88e5, "Color FVG H1", group=g_ny)
+mostrar_niv_h4  = input.bool(true, "Niveles clave: altos/bajos relevantes de H4", group=g_ny)
+piv_h4_len      = input.int(3, "Sensibilidad altos/bajos H4", minval=1, maxval=10, group=g_ny)
+max_niv_h4      = input.int(6, "Máx. niveles H4 vigentes", minval=1, maxval=20, group=g_ny)
+mostrar_pd      = input.bool(true, "Niveles clave: alto/bajo del día anterior", group=g_ny)
+col_niveles     = input.color(#424242, "Color niveles clave", group=g_ny)
+col_horas       = input.color(#757575, "Color horas", group=g_ny)
+
 mostrar_emas = input.bool(true, "Mostrar EMAs", group="EMAs")
 ema_rap_len  = input.int(9, "EMA rápida", minval=1, group="EMAs")
 ema_med_len  = input.int(20, "EMA media", minval=1, group="EMAs")
@@ -831,6 +846,148 @@ else if fvg_bajista
     agregar_fvg(low[2], high, -1)
 
 // ─────────────────────────────
+// ESTRATEGIA NY (Bias + PO3)
+//  Paso 1 (Bias): niveles clave = altos/bajos relevantes (H4 y día anterior).
+//  Paso 2 (PO3): horas de Madrid 15:00, 15:30, 15:45 y 16:00 y FVG de M15 y H1
+//                con su 50%, que es donde se espera la manipulación.
+//  SL: debajo del FVG en compras, encima del FVG en ventas.
+// ─────────────────────────────
+seg_tf = timeframe.in_seconds()
+
+// --- Horas de Madrid ---
+mins_mad = hour(time, "Europe/Madrid") * 60 + minute(time, "Europe/Madrid")
+prev_mad = nz(mins_mad[1], mins_mad)
+cruza_hora(int objetivo) =>
+    mins_mad >= objetivo and (prev_mad < objetivo or prev_mad > mins_mad)
+
+marcar_hora(string txt, bool fuerte) =>
+    line.new(bar_index, low, bar_index, high, extend=extend.both, color=color.new(col_horas, fuerte ? 30 : 60), style=fuerte ? line.style_dashed : line.style_dotted, width=1)
+    label.new(bar_index, high, txt, yloc=yloc.abovebar, style=label.style_none, textcolor=color.new(col_horas, 10), size=size.tiny)
+
+if mostrar_horas and timeframe.isintraday and seg_tf <= 900
+    if cruza_hora(15 * 60)
+        marcar_hora("15:00", false)
+    if cruza_hora(15 * 60 + 30)
+        marcar_hora("15:30", false)
+    if cruza_hora(15 * 60 + 45)
+        marcar_hora("15:45", false)
+    if cruza_hora(16 * 60)
+        marcar_hora("16:00", true)
+
+// --- FVG de M15 y H1 (sin repintado: se evalúa la última vela cerrada de esa temporalidad) ---
+type ZonaHTF
+    box   bx
+    line  mid
+    float techo
+    float suelo
+    int   dir
+
+var fvg15 = array.new<ZonaHTF>()
+var fvg60 = array.new<ZonaHTF>()
+
+fvg_htf() =>
+    [low[1] > high[3], high[1] < low[3], low[1], high[3], high[1], low[3], time[3]]
+
+[a15, b15, a15_top, a15_bot, b15_bot, b15_top, t15] = request.security(syminfo.tickerid, "15", fvg_htf(), lookahead = barmerge.lookahead_on)
+[a60, b60, a60_top, a60_bot, b60_bot, b60_top, t60] = request.security(syminfo.tickerid, "60", fvg_htf(), lookahead = barmerge.lookahead_on)
+
+nueva_htf(array<ZonaHTF> arr, float techo, float suelo, int dir, int t_izq, color col, string txt) =>
+    mitad = (techo + suelo) / 2
+    bx  = box.new(t_izq, techo, time, suelo, xloc=xloc.bar_time, border_color=color.new(col, 50), bgcolor=color.new(col, 88), text=txt + (dir == 1 ? " ▲" : " ▼"), text_size=size.tiny, text_color=color.new(col, 20), text_halign=text.align_right, text_valign=dir == 1 ? text.align_bottom : text.align_top)
+    mid = line.new(t_izq, mitad, time, mitad, xloc=xloc.bar_time, color=color.new(col, 25), style=line.style_dashed, width=1)
+    arr.push(ZonaHTF.new(bx, mid, techo, suelo, dir))
+    if arr.size() > max_htf
+        z = arr.shift()
+        z.bx.delete()
+        z.mid.delete()
+
+// Extiende las zonas, borra las rellenadas del todo y devuelve si el precio tocó algún 50%
+actualizar_htf(array<ZonaHTF> arr) =>
+    toque = false
+    if arr.size() > 0
+        for i = arr.size() - 1 to 0
+            z = arr.get(i)
+            mitad = (z.techo + z.suelo) / 2
+            if (z.dir == 1 and low <= z.suelo) or (z.dir == -1 and high >= z.techo)
+                z.bx.delete()
+                z.mid.delete()
+                arr.remove(i)
+            else
+                if low <= mitad and high >= mitad
+                    toque := true
+                z.bx.set_right(time)
+                z.mid.set_x2(time)
+    toque
+
+cambio15  = timeframe.change("15")
+cambio60  = timeframe.change("60")
+cambio240 = timeframe.change("240")
+toque50_m15 = false
+toque50_h1  = false
+if cerrada and timeframe.isintraday
+    if mostrar_fvg15 and seg_tf < 900
+        toque50_m15 := actualizar_htf(fvg15)
+        if cambio15
+            if a15
+                nueva_htf(fvg15, a15_top, a15_bot, 1, t15, col_fvg15, "FVG M15")
+            else if b15
+                nueva_htf(fvg15, b15_top, b15_bot, -1, t15, col_fvg15, "FVG M15")
+    if mostrar_fvg60 and seg_tf < 3600
+        toque50_h1 := actualizar_htf(fvg60)
+        if cambio60
+            if a60
+                nueva_htf(fvg60, a60_top, a60_bot, 1, t60, col_fvg60, "FVG H1")
+            else if b60
+                nueva_htf(fvg60, b60_top, b60_bot, -1, t60, col_fvg60, "FVG H1")
+
+// --- Niveles clave: altos y bajos relevantes de H4 (vigentes hasta que un cierre los rompe) ---
+type Nivel
+    line  ln
+    label lb
+    float precio
+    int   dir    // 1 = alto relevante, -1 = bajo relevante
+
+var niveles_h4 = array.new<Nivel>()
+
+piv_h4() =>
+    [ta.pivothigh(high, piv_h4_len, piv_h4_len)[1], ta.pivotlow(low, piv_h4_len, piv_h4_len)[1], time[1 + piv_h4_len]]
+
+[ph4, pl4, tp4] = request.security(syminfo.tickerid, "240", piv_h4(), lookahead = barmerge.lookahead_on)
+
+nuevo_nivel(float precio, int dir, int t_izq) =>
+    ln = line.new(t_izq, precio, time, precio, xloc=xloc.bar_time, color=color.new(col_niveles, 20), width=1)
+    lb = label.new(time, precio, dir == 1 ? "Alto H4" : "Bajo H4", xloc=xloc.bar_time, style=label.style_label_left, color=color.new(color.white, 100), textcolor=color.new(col_niveles, 10), size=size.tiny)
+    niveles_h4.push(Nivel.new(ln, lb, precio, dir))
+    if niveles_h4.size() > max_niv_h4
+        n = niveles_h4.shift()
+        n.ln.delete()
+        n.lb.delete()
+
+if cerrada and mostrar_niv_h4 and timeframe.isintraday and seg_tf < 14400
+    if niveles_h4.size() > 0
+        for i = niveles_h4.size() - 1 to 0
+            n = niveles_h4.get(i)
+            if (n.dir == 1 and close > n.precio) or (n.dir == -1 and close < n.precio)
+                // Nivel roto por cierre: deja de ser vigente y se borra
+                n.ln.delete()
+                n.lb.delete()
+                niveles_h4.remove(i)
+            else
+                n.ln.set_x2(time)
+                n.lb.set_x(time)
+    if cambio240
+        if not na(ph4)
+            nuevo_nivel(ph4, 1, tp4)
+        if not na(pl4)
+            nuevo_nivel(pl4, -1, tp4)
+
+// --- Niveles clave: alto y bajo del día anterior ---
+[pdh, pdl] = request.security(syminfo.tickerid, "D", [high[1], low[1]], lookahead = barmerge.lookahead_on)
+ver_pd = mostrar_pd and timeframe.isintraday and not timeframe.change("D")
+plot(ver_pd ? pdh : na, "Alto día anterior", color=color.new(col_niveles, 30), style=plot.style_linebr, linewidth=1)
+plot(ver_pd ? pdl : na, "Bajo día anterior", color=color.new(col_niveles, 30), style=plot.style_linebr, linewidth=1)
+
+// ─────────────────────────────
 // ALERTAS
 // ─────────────────────────────
 alertcondition(choch_alcista, "CHoCH alcista", "CHoCH alcista en {{ticker}} ({{interval}})")
@@ -848,3 +1005,5 @@ alertcondition(signal_break_up,   title = 'Range Breakout Up',  message = 'Auto 
 alertcondition(signal_break_down, title = 'Range Breakdown',    message = 'Auto Range Detector: range broken to the DOWNSIDE on {{exchange}}:{{ticker}} - {{interval}}')
 alertcondition(signal_any_break,  title = 'Any Range Break',    message = 'Auto Range Detector: range break on {{exchange}}:{{ticker}} - {{interval}}')
 alertcondition(signal_deviation,  title = 'Range Deviation',    message = 'Auto Range Detector: failed break, price returned INSIDE the range on {{exchange}}:{{ticker}} - {{interval}}')
+alertcondition(toque50_m15, "Precio en el 50% de un FVG M15", "Precio tocando el 50% de un FVG de M15 en {{ticker}} ({{interval}})")
+alertcondition(toque50_h1,  "Precio en el 50% de un FVG H1",  "Precio tocando el 50% de un FVG de H1 en {{ticker}} ({{interval}})")
