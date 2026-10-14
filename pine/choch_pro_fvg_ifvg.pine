@@ -28,6 +28,15 @@ max_zonas       = input.int(50, "Máx. zonas vigiladas", minval=1, maxval=250, g
 color_consumido = input.color(color.new(color.gray, 75), "Color parte consumida", group="FVG")
 
 // Estrategia apertura de Nueva York (Bias + PO3)
+// Order Blocks: la última vela contraria antes del impulso que rompe estructura (CHoCH o BOS)
+g_ob            = "Order Blocks"
+mostrar_ob      = input.bool(true, "Mostrar Order Blocks", group=g_ob)
+ob_solo_choch   = input.bool(false, "Solo los que originan un CHoCH (no los de BOS)", group=g_ob)
+ob_cuerpo       = input.bool(false, "Usar solo el cuerpo de la vela (sin mechas)", group=g_ob)
+max_ob          = input.int(10, "Máx. Order Blocks vigentes", minval=1, maxval=50, group=g_ob)
+col_ob_alc      = input.color(#2563eb, "OB alcista (demanda)", group=g_ob)
+col_ob_baj      = input.color(#f97316, "OB bajista (oferta)", group=g_ob)
+
 g_ny            = "Estrategia NY (Bias + PO3)"
 mostrar_horas   = input.bool(true, "Marcar horas 15:00 / 15:30 / 15:45 / 16:00 (Madrid)", group=g_ny)
 mostrar_fvg15   = input.bool(true, "FVG de M15 (con línea del 50%)", group=g_ny)
@@ -78,6 +87,14 @@ type Zona
     float borde = na // límite de la parte aún sin tocar
 
 var zonas = array.new<Zona>()
+
+type OrderBlock
+    box   bx
+    float techo
+    float suelo
+    int   dir    // 1 alcista (demanda), -1 bajista (oferta)
+
+var obs = array.new<OrderBlock>()
 
 // Etiquetas de estructura dibujadas (CHoCH, ✗ CHoCH, BOS), para poder borrarlas
 // si después se detecta un rango que las contiene
@@ -727,6 +744,37 @@ choch_bajista = cruce_abajo and not na(ultimo_valle) and tendencia >= 0
 choch_riesgo_alc = false
 choch_riesgo_baj = false
 
+// ─────────────────────────────
+// ORDER BLOCKS
+// Al romper estructura se busca, entre el swing roto y la vela de ruptura:
+//  - OB alcista: la vela BAJISTA con el mínimo más bajo (origen del impulso alcista).
+//  - OB bajista: la vela ALCISTA con el máximo más alto (origen del impulso bajista).
+// Si no hay ninguna vela de ese color, se usa la del extremo.
+// ─────────────────────────────
+crear_ob(int dir, int bar_desde) =>
+    n = math.min(math.max(bar_index - bar_desde, 1), 150)
+    int idx = na
+    float ext = na
+    for i = 0 to n
+        contraria = dir == 1 ? close[i] < open[i] : close[i] > open[i]
+        valor = dir == 1 ? low[i] : high[i]
+        if contraria and (na(ext) or (dir == 1 ? valor < ext : valor > ext))
+            ext := valor
+            idx := i
+    if na(idx)
+        for i = 0 to n
+            valor = dir == 1 ? low[i] : high[i]
+            if na(ext) or (dir == 1 ? valor < ext : valor > ext)
+                ext := valor
+                idx := i
+    techo = ob_cuerpo ? math.max(open[idx], close[idx]) : high[idx]
+    suelo = ob_cuerpo ? math.min(open[idx], close[idx]) : low[idx]
+    col = dir == 1 ? col_ob_alc : col_ob_baj
+    b = box.new(bar_index - idx, techo, bar_index + 1, suelo, border_color=color.new(col, 40), bgcolor=color.new(col, 82), text=dir == 1 ? "OB ▲" : "OB ▼", text_size=size.tiny, text_color=color.new(col, 10), text_halign=text.align_left, text_valign=dir == 1 ? text.align_bottom : text.align_top)
+    obs.push(OrderBlock.new(b, techo, suelo, dir))
+    if obs.size() > max_ob
+        obs.shift().bx.delete()
+
 // --- ALCISTA (BUY) ---
 if cruce_arriba and not na(ultimo_pico)
     if tendencia <= 0
@@ -746,6 +794,8 @@ if cruce_arriba and not na(ultimo_pico)
         ultimo_bos_bar := bar_index
         ultimo_bos_dir := 1
         registrar_marca(ultimo_bos_lbl, na, bar_index)
+    if mostrar_ob and (tendencia <= 0 or not ob_solo_choch)
+        crear_ob(1, bar_pico)
     tendencia := 1
     ultimo_pico := na 
 
@@ -768,8 +818,22 @@ if cruce_abajo and not na(ultimo_valle)
         ultimo_bos_bar := bar_index
         ultimo_bos_dir := -1
         registrar_marca(ultimo_bos_lbl, na, bar_index)
+    if mostrar_ob and (tendencia >= 0 or not ob_solo_choch)
+        crear_ob(-1, bar_valle)
     tendencia := -1
     ultimo_valle := na 
+
+// Order Blocks vigentes: se alargan y desaparecen cuando una vela CIERRA al otro lado
+// (OB alcista: cierre por debajo de su mínimo; OB bajista: cierre por encima de su máximo)
+if cerrada and obs.size() > 0
+    for i = obs.size() - 1 to 0
+        ob = obs.get(i)
+        roto = ob.dir == 1 ? close < ob.suelo : close > ob.techo
+        if roto
+            ob.bx.delete()
+            obs.remove(i)
+        else
+            ob.bx.set_right(bar_index + 1)
 
 // FONDO BLANCO (sin colorear por tendencia)
 bgcolor(fondo_blanco ? color.white : na)
