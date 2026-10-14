@@ -95,6 +95,7 @@ type OrderBlock
     int   dir    // 1 alcista (demanda), -1 bajista (oferta)
     box   gris  = na // parte ya tocada (gris translúcido)
     float borde = na // límite de la parte aún sin tocar
+    int   creado = na // vela en la que se creó (esa vela no lo consume)
 
 var obs = array.new<OrderBlock>()
 
@@ -773,7 +774,7 @@ crear_ob(int dir, int bar_desde) =>
     suelo = ob_cuerpo ? math.min(open[idx], close[idx]) : low[idx]
     col = dir == 1 ? col_ob_alc : col_ob_baj
     b = box.new(bar_index - idx, techo, bar_index + 1, suelo, border_color=color.new(col, 40), bgcolor=color.new(col, 82), text=dir == 1 ? "OB ▲" : "OB ▼", text_size=size.tiny, text_color=color.new(col, 10), text_halign=text.align_left, text_valign=dir == 1 ? text.align_bottom : text.align_top)
-    obs.push(OrderBlock.new(b, techo, suelo, dir))
+    obs.push(OrderBlock.new(b, techo, suelo, dir, na, na, bar_index))
     if obs.size() > max_ob
         viejo = obs.shift()
         viejo.bx.delete()
@@ -836,7 +837,9 @@ if cerrada and obs.size() > 0
     for i = obs.size() - 1 to 0
         ob = obs.get(i)
         consumido = ob.dir == 1 ? low <= ob.suelo : high >= ob.techo
-        if consumido
+        if ob.creado == bar_index
+            ob.bx.set_right(bar_index + 1)
+        else if consumido
             ob.bx.delete()
             if not na(ob.gris)
                 ob.gris.delete()
