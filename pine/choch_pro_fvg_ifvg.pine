@@ -1,4 +1,4 @@
-// CHoCH PRO + FVG + EMAs + Rangos
+// Po3 + CHoCH PRO - High Contrast + FVG + Rangos + OB
 //
 // Incluye "Auto Range Detector [QuantAlgo]" © QuantAlgo, licenciado bajo
 // Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
@@ -6,7 +6,7 @@
 // Por esa licencia, este script combinado se distribuye bajo la misma licencia (CC BY-NC-SA 4.0).
 
 //@version=6
-indicator("CHoCH PRO - High Contrast + FVG + Rangos", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=500, max_bars_back=2000)
+indicator("Po3 + CHoCH PRO - High Contrast + FVG + Rangos + OB", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=500, max_bars_back=2000)
 
 // ─────────────────────────────
 // CONFIGURACIÓN
