@@ -34,6 +34,7 @@ mostrar_ob      = input.bool(true, "Mostrar Order Blocks", group=g_ob)
 ob_solo_choch   = input.bool(false, "Solo los que originan un CHoCH (no los de BOS)", group=g_ob)
 ob_cuerpo       = input.bool(false, "Usar solo el cuerpo de la vela (sin mechas)", group=g_ob)
 max_ob          = input.int(10, "Máx. Order Blocks vigentes", minval=1, maxval=50, group=g_ob)
+ob_imb_velas    = input.int(1, "El imbalance (FVG) debe empezar en las N velas siguientes al OB", minval=1, maxval=5, group=g_ob)
 col_ob_alc      = input.color(#2563eb, "OB alcista (demanda)", group=g_ob)
 col_ob_baj      = input.color(#f97316, "OB bajista (oferta)", group=g_ob)
 
@@ -754,6 +755,18 @@ choch_riesgo_baj = false
 //  - OB bajista: la vela ALCISTA con el máximo más alto (origen del impulso bajista).
 // Si no hay ninguna vela de ese color, se usa la del extremo.
 // ─────────────────────────────
+crear_caja_ob(int dir, int idx) =>
+    techo = ob_cuerpo ? math.max(open[idx], close[idx]) : high[idx]
+    suelo = ob_cuerpo ? math.min(open[idx], close[idx]) : low[idx]
+    col = dir == 1 ? col_ob_alc : col_ob_baj
+    b = box.new(bar_index - idx, techo, bar_index + 1, suelo, border_color=color.new(col, 40), bgcolor=color.new(col, 82), text=dir == 1 ? "OB ▲" : "OB ▼", text_size=size.tiny, text_color=color.new(col, 10), text_halign=text.align_left, text_valign=dir == 1 ? text.align_bottom : text.align_top)
+    obs.push(OrderBlock.new(b, techo, suelo, dir, na, na, bar_index))
+    if obs.size() > max_ob
+        viejo = obs.shift()
+        viejo.bx.delete()
+        if not na(viejo.gris)
+            viejo.gris.delete()
+
 crear_ob(int dir, int bar_desde) =>
     n = math.min(math.max(bar_index - bar_desde, 1), 150)
     int idx = na
@@ -770,16 +783,15 @@ crear_ob(int dir, int bar_desde) =>
             if na(ext) or (dir == 1 ? valor < ext : valor > ext)
                 ext := valor
                 idx := i
-    techo = ob_cuerpo ? math.max(open[idx], close[idx]) : high[idx]
-    suelo = ob_cuerpo ? math.min(open[idx], close[idx]) : low[idx]
-    col = dir == 1 ? col_ob_alc : col_ob_baj
-    b = box.new(bar_index - idx, techo, bar_index + 1, suelo, border_color=color.new(col, 40), bgcolor=color.new(col, 82), text=dir == 1 ? "OB ▲" : "OB ▼", text_size=size.tiny, text_color=color.new(col, 10), text_halign=text.align_left, text_valign=dir == 1 ? text.align_bottom : text.align_top)
-    obs.push(OrderBlock.new(b, techo, suelo, dir, na, na, bar_index))
-    if obs.size() > max_ob
-        viejo = obs.shift()
-        viejo.bx.delete()
-        if not na(viejo.gris)
-            viejo.gris.delete()
+    // Solo es OB si deja un imbalance (FVG) a continuación en la dirección del impulso.
+    // El FVG empieza en la vela del OB (j = idx) o en una de las siguientes, hasta ob_imb_velas.
+    hay_imbalance = false
+    if idx >= 2
+        for j = idx to math.max(idx - ob_imb_velas + 1, 2)
+            if dir == 1 ? low[j - 2] > high[j] : high[j - 2] < low[j]
+                hay_imbalance := true
+    if hay_imbalance
+        crear_caja_ob(dir, idx)
 
 // --- ALCISTA (BUY) ---
 if cruce_arriba and not na(ultimo_pico)
