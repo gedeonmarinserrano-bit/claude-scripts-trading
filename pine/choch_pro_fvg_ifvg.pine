@@ -93,6 +93,8 @@ type OrderBlock
     float techo
     float suelo
     int   dir    // 1 alcista (demanda), -1 bajista (oferta)
+    box   gris  = na // parte ya tocada (gris translúcido)
+    float borde = na // límite de la parte aún sin tocar
 
 var obs = array.new<OrderBlock>()
 
@@ -773,7 +775,10 @@ crear_ob(int dir, int bar_desde) =>
     b = box.new(bar_index - idx, techo, bar_index + 1, suelo, border_color=color.new(col, 40), bgcolor=color.new(col, 82), text=dir == 1 ? "OB ▲" : "OB ▼", text_size=size.tiny, text_color=color.new(col, 10), text_halign=text.align_left, text_valign=dir == 1 ? text.align_bottom : text.align_top)
     obs.push(OrderBlock.new(b, techo, suelo, dir))
     if obs.size() > max_ob
-        obs.shift().bx.delete()
+        viejo = obs.shift()
+        viejo.bx.delete()
+        if not na(viejo.gris)
+            viejo.gris.delete()
 
 // --- ALCISTA (BUY) ---
 if cruce_arriba and not na(ultimo_pico)
@@ -823,17 +828,41 @@ if cruce_abajo and not na(ultimo_valle)
     tendencia := -1
     ultimo_valle := na 
 
-// Order Blocks vigentes: se alargan y desaparecen cuando una vela CIERRA al otro lado
-// (OB alcista: cierre por debajo de su mínimo; OB bajista: cierre por encima de su máximo)
+// Order Blocks vigentes: se consumen a medida que el precio los toca, igual que los FVG.
+//  - OB alcista (demanda): se consume desde su máximo hacia abajo.
+//  - OB bajista (oferta): se consume desde su mínimo hacia arriba.
+// La parte tocada queda en gris translúcido y, cuando la mecha llega al otro extremo, desaparece.
 if cerrada and obs.size() > 0
     for i = obs.size() - 1 to 0
         ob = obs.get(i)
-        roto = ob.dir == 1 ? close < ob.suelo : close > ob.techo
-        if roto
+        consumido = ob.dir == 1 ? low <= ob.suelo : high >= ob.techo
+        if consumido
             ob.bx.delete()
+            if not na(ob.gris)
+                ob.gris.delete()
             obs.remove(i)
         else
+            borde = na(ob.borde) ? (ob.dir == 1 ? ob.techo : ob.suelo) : ob.borde
+            tocado = ob.dir == 1 ? low < borde : high > borde
+            if tocado
+                borde := ob.dir == 1 ? low : high
+                ob.borde := borde
+                izq = ob.bx.get_left()
+                if ob.dir == 1
+                    ob.bx.set_top(borde)
+                    if na(ob.gris)
+                        ob.gris := box.new(izq, ob.techo, bar_index + 1, borde, border_color=na, bgcolor=color_consumido)
+                    else
+                        ob.gris.set_bottom(borde)
+                else
+                    ob.bx.set_bottom(borde)
+                    if na(ob.gris)
+                        ob.gris := box.new(izq, borde, bar_index + 1, ob.suelo, border_color=na, bgcolor=color_consumido)
+                    else
+                        ob.gris.set_top(borde)
             ob.bx.set_right(bar_index + 1)
+            if not na(ob.gris)
+                ob.gris.set_right(bar_index + 1)
 
 // FONDO BLANCO (sin colorear por tendencia)
 bgcolor(fondo_blanco ? color.white : na)
