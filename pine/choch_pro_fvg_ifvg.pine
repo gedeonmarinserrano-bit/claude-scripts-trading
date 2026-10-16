@@ -42,9 +42,11 @@ g_ny            = "Estrategia NY (Bias + PO3)"
 mostrar_horas   = input.bool(true, "Marcar horas 15:00 / 15:30 / 15:45 / 16:00 (Madrid)", group=g_ny)
 mostrar_fvg15   = input.bool(true, "FVG de M15 (con línea del 50%)", group=g_ny)
 mostrar_fvg60   = input.bool(true, "FVG de H1 (con línea del 50%)", group=g_ny)
+mostrar_fvg240  = input.bool(true, "FVG de H4 (con línea del 50%)", group=g_ny)
 max_htf         = input.int(10, "Máx. FVG M15/H1 por temporalidad", minval=1, maxval=50, group=g_ny)
 col_fvg15       = input.color(#9c27b0, "Color FVG M15", group=g_ny)
 col_fvg60       = input.color(#1e88e5, "Color FVG H1", group=g_ny)
+col_fvg240      = input.color(#0f766e, "Color FVG H4", group=g_ny)
 mostrar_niv_h4  = input.bool(true, "Niveles clave: altos/bajos relevantes de H4", group=g_ny)
 piv_h4_len      = input.int(3, "Sensibilidad altos/bajos H4", minval=1, maxval=10, group=g_ny)
 max_niv_h4      = input.int(6, "Máx. niveles H4 vigentes", minval=1, maxval=20, group=g_ny)
@@ -982,22 +984,26 @@ if mostrar_horas and timeframe.isintraday and seg_tf <= 900
     if cruza_hora(16 * 60)
         marcar_hora("16:00", true)
 
-// --- FVG de M15 y H1 (sin repintado: se evalúa la última vela cerrada de esa temporalidad) ---
+// --- FVG de M15, H1 y H4 (sin repintado: se evalúa la última vela cerrada de esa temporalidad) ---
 type ZonaHTF
     box   bx
     line  mid
     float techo
     float suelo
     int   dir
+    box   gris  = na // parte ya mitigada (gris translúcido)
+    float borde = na // límite de la parte aún sin mitigar
 
-var fvg15 = array.new<ZonaHTF>()
-var fvg60 = array.new<ZonaHTF>()
+var fvg15  = array.new<ZonaHTF>()
+var fvg60  = array.new<ZonaHTF>()
+var fvg240 = array.new<ZonaHTF>()
 
 fvg_htf() =>
     [low[1] > high[3], high[1] < low[3], low[1], high[3], high[1], low[3], time[3]]
 
 [a15, b15, a15_top, a15_bot, b15_bot, b15_top, t15] = request.security(syminfo.tickerid, "15", fvg_htf(), lookahead = barmerge.lookahead_on)
 [a60, b60, a60_top, a60_bot, b60_bot, b60_top, t60] = request.security(syminfo.tickerid, "60", fvg_htf(), lookahead = barmerge.lookahead_on)
+[a240, b240, a240_top, a240_bot, b240_bot, b240_top, t240] = request.security(syminfo.tickerid, "240", fvg_htf(), lookahead = barmerge.lookahead_on)
 
 nueva_htf(array<ZonaHTF> arr, float techo, float suelo, int dir, int t_izq, color col, string txt) =>
     mitad = (techo + suelo) / 2
@@ -1008,8 +1014,14 @@ nueva_htf(array<ZonaHTF> arr, float techo, float suelo, int dir, int t_izq, colo
         z = arr.shift()
         z.bx.delete()
         z.mid.delete()
+        if not na(z.gris)
+            z.gris.delete()
 
-// Extiende las zonas, borra las rellenadas del todo y devuelve si el precio tocó algún 50%
+// Consumo progresivo, igual que los FVG del gráfico y los Order Blocks:
+//  - FVG alcista: se consume desde el techo hacia abajo; FVG bajista: desde el suelo hacia arriba.
+//  - La parte mitigada queda en gris translúcido y la de color se encoge hasta lo que queda.
+//  - Cuando la mecha llega al otro extremo, desaparece.
+// Devuelve si el precio tocó el 50% de alguna zona en esta vela.
 actualizar_htf(array<ZonaHTF> arr) =>
     toque = false
     if arr.size() > 0
@@ -1019,12 +1031,34 @@ actualizar_htf(array<ZonaHTF> arr) =>
             if (z.dir == 1 and low <= z.suelo) or (z.dir == -1 and high >= z.techo)
                 z.bx.delete()
                 z.mid.delete()
+                if not na(z.gris)
+                    z.gris.delete()
                 arr.remove(i)
             else
                 if low <= mitad and high >= mitad
                     toque := true
+                borde = na(z.borde) ? (z.dir == 1 ? z.techo : z.suelo) : z.borde
+                tocada = z.dir == 1 ? low < borde : high > borde
+                if tocada
+                    borde := z.dir == 1 ? low : high
+                    z.borde := borde
+                    izq = z.bx.get_left()
+                    if z.dir == 1
+                        z.bx.set_top(borde)
+                        if na(z.gris)
+                            z.gris := box.new(izq, z.techo, time, borde, xloc=xloc.bar_time, border_color=na, bgcolor=color_consumido)
+                        else
+                            z.gris.set_bottom(borde)
+                    else
+                        z.bx.set_bottom(borde)
+                        if na(z.gris)
+                            z.gris := box.new(izq, borde, time, z.suelo, xloc=xloc.bar_time, border_color=na, bgcolor=color_consumido)
+                        else
+                            z.gris.set_top(borde)
                 z.bx.set_right(time)
                 z.mid.set_x2(time)
+                if not na(z.gris)
+                    z.gris.set_right(time)
     toque
 
 cambio15  = timeframe.change("15")
@@ -1032,6 +1066,7 @@ cambio60  = timeframe.change("60")
 cambio240 = timeframe.change("240")
 toque50_m15 = false
 toque50_h1  = false
+toque50_h4  = false
 if cerrada and timeframe.isintraday
     if mostrar_fvg15 and seg_tf < 900
         toque50_m15 := actualizar_htf(fvg15)
@@ -1047,6 +1082,13 @@ if cerrada and timeframe.isintraday
                 nueva_htf(fvg60, a60_top, a60_bot, 1, t60, col_fvg60, "FVG H1")
             else if b60
                 nueva_htf(fvg60, b60_top, b60_bot, -1, t60, col_fvg60, "FVG H1")
+    if mostrar_fvg240 and seg_tf < 14400
+        toque50_h4 := actualizar_htf(fvg240)
+        if cambio240
+            if a240
+                nueva_htf(fvg240, a240_top, a240_bot, 1, t240, col_fvg240, "FVG H4")
+            else if b240
+                nueva_htf(fvg240, b240_top, b240_bot, -1, t240, col_fvg240, "FVG H4")
 
 // --- Niveles clave: altos y bajos relevantes de H4 (vigentes hasta que un cierre los rompe) ---
 type Nivel
@@ -1115,3 +1157,4 @@ alertcondition(signal_any_break,  title = 'Any Range Break',    message = 'Auto 
 alertcondition(signal_deviation,  title = 'Range Deviation',    message = 'Auto Range Detector: failed break, price returned INSIDE the range on {{exchange}}:{{ticker}} - {{interval}}')
 alertcondition(toque50_m15, "Precio en el 50% de un FVG M15", "Precio tocando el 50% de un FVG de M15 en {{ticker}} ({{interval}})")
 alertcondition(toque50_h1,  "Precio en el 50% de un FVG H1",  "Precio tocando el 50% de un FVG de H1 en {{ticker}} ({{interval}})")
+alertcondition(toque50_h4,  "Precio en el 50% de un FVG H4",  "Precio tocando el 50% de un FVG de H4 en {{ticker}} ({{interval}})")
