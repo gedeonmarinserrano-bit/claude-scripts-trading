@@ -24,7 +24,7 @@ filtro_rango = input.bool(true, "Sin CHoCH ni BOS dentro de un rango (hasta el b
 
 mostrar_fvg     = input.bool(true, "Mostrar FVG", group="FVG")
 fvg_min_pct     = input.float(0.0, "Tamaño mínimo FVG (% precio)", minval=0, step=0.05, group="FVG")
-max_zonas       = input.int(50, "Máx. zonas vigiladas", minval=1, maxval=250, group="FVG")
+max_zonas       = input.int(20, "Máx. zonas vigiladas", minval=1, maxval=250, group="FVG")
 // Parte consumida: cuanto más baja la temporalidad, más oscuro el gris (igual en cualquier gráfico)
 color_consumido = input.color(color.new(#303030, 65), "Parte consumida · temporalidad del gráfico (FVG, IFVG, OB)", group="FVG")
 color_cons_m15  = input.color(color.new(#5F5F5F, 72), "Parte consumida · FVG M15", group="FVG")
@@ -456,7 +456,7 @@ if range_active and bar_ready
             box.set_border_style(range_box, line.style_solid)
             paintShade(shade_boxes, range_top, range_bottom, range_left, bar_index, retire_fill)
             rangos_hist.push(Rango.new(range_left, bar_index, range_top, range_bottom, retire_fill))
-            if rangos_hist.size() > 20
+            if rangos_hist.size() > 8
                 rangos_hist.shift()
             if not na(equilibrium_line)
                 line.set_x2(equilibrium_line, bar_index)
@@ -1176,11 +1176,16 @@ recortar(Pieza p) =>
     res = array.from(p)
     if sin_solape and ocupado.size() > 0
         for o in ocupado
-            nuevo = array.new<Pieza>()
-            for q in res
-                for r in restar(q, o)
-                    nuevo.push(r)
-            res := nuevo
+            // Solo cuentan las zonas que de verdad se cruzan con esta (ahorra cálculo)
+            if not (o.x2 <= p.x1 or o.x1 >= p.x2 or o.bot >= p.top or o.top <= p.bot)
+                nuevo = array.new<Pieza>()
+                for q in res
+                    for r in restar(q, o)
+                        nuevo.push(r)
+                res := nuevo
+                // Tope de trozos por zona para que el cálculo nunca se dispare
+                if res.size() > 24
+                    break
     res
 
 pintar_parte(Pieza p, color col) =>
@@ -1198,7 +1203,7 @@ dibujar_zona(int x1, int x2, float techo, float suelo, int dir, float borde, col
         pintar_parte(Pieza.new(x1, x2, dir == 1 ? techo : borde, dir == 1 ? borde : suelo), colgris)
     // Letreros: uno al principio y otro al final de la zona, a la altura de la parte sin tocar.
     // Si la zona es muy estrecha (menos de 8 velas) solo se pone el del principio, para que no se monten.
-    if txt != "" and letreros.size() < 200
+    if txt != "" and letreros.size() < 80
         y = (ctop + cbot) / 2
         letreros.push(Letrero.new(x1, y, txt, coltxt, false, fondo))
         if x2 - x1 >= 8
@@ -1260,7 +1265,7 @@ if barstate.islast
         for k in orden
             l = letreros.get(k)
             y = l.y
-            for intento = 0 to 30
+            for intento = 0 to 6
                 choca = false
                 for c in colocados
                     if c.derecha == l.derecha and math.abs(c.x - l.x) < 12 and math.abs(c.y - y) < sep_letrero
