@@ -1197,9 +1197,9 @@ pintar_parte(Pieza p, color col) =>
             dib_cajas.push(box.new(q.x1, q.top, q.x2, q.bot, border_color=na, bgcolor=col))
 
 dibujar_zona(int x1_zona, int x2, float techo, float suelo, int dir, float borde, color col, string txt, color coltxt, color colmitad, color colgris, bool fondo) =>
-    // TradingView no deja dibujar con bar_index a más de ~5000 velas hacia atrás: las zonas muy
-    // antiguas que siguen vigentes se dibujan desde ese límite
-    x1 = math.max(x1_zona, bar_index - 4500)
+    // TradingView no deja dibujar con bar_index demasiado lejos hacia atrás: las zonas muy antiguas
+    // que siguen vigentes se dibujan como mucho desde 1000 velas atrás (margen de seguridad amplio)
+    x1 = math.max(x1_zona, bar_index - 1000)
     // Parte aún sin tocar (con su color) y parte consumida (gris)
     ctop = na(borde) ? techo : (dir == 1 ? borde : techo)
     cbot = na(borde) ? suelo : (dir == 1 ? suelo : borde)
