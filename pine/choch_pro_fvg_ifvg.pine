@@ -419,7 +419,7 @@ if bar_ready and not range_active and not range_dormant and cooldown_left <= 0 a
     midpoint         = math.avg(range_top, range_bottom)
     quartile_low     = range_bottom + (range_top - range_bottom) * 0.25
     quartile_high    = range_bottom + (range_top - range_bottom) * 0.75
-    range_box       := box.new(range_left, range_top, bar_index, range_bottom, border_color = color.new(range_line_color, 55), border_width = 2, border_style = line.style_dashed, bgcolor = na, xloc = xloc.bar_index)
+    range_box       := box.new(range_left, range_top, bar_index, range_bottom, border_color = color.new(range_line_color, 55), border_width = 2, border_style = line.style_dotted, bgcolor = na, xloc = xloc.bar_index)
     buildShade(shade_boxes, range_left, range_top, range_bottom)
     if show_equilibrium
         equilibrium_line := line.new(range_left, midpoint, bar_index, midpoint, xloc.bar_index, extend.none, color.new(color.gray, 45), line.style_dotted, 1)
@@ -454,7 +454,7 @@ if range_active and bar_ready
             box.set_rightbottom(range_box, bar_index, range_bottom)
             // Rango terminado: sin fondo; el marco y el letrero toman el color de la ruptura
             box.set_border_color(range_box, color.new(retire_line, 30))
-            box.set_border_style(range_box, line.style_solid)
+            box.set_border_style(range_box, line.style_dotted)
             paintShade(shade_boxes, range_top, range_bottom, range_left, bar_index, na)
             rangos_hist.push(Rango.new(range_left, bar_index, range_top, range_bottom, retire_fill))
             if rangos_hist.size() > 8
@@ -559,7 +559,7 @@ if range_active
     box.set_lefttop(range_box, range_left, range_top)
     box.set_rightbottom(range_box, bar_index, range_bottom)
     box.set_border_color(range_box, color.new(range_line_color, range_confirmed ? 30 : 55))
-    box.set_border_style(range_box, range_confirmed ? line.style_solid : line.style_dashed)
+    box.set_border_style(range_box, line.style_dotted)
     // Sin fondo: el rango se distingue por su marco y su letrero, del color de su estado
     paintShade(shade_boxes, range_top, range_bottom, range_left, bar_index, na)
     if not na(equilibrium_line)
