@@ -419,7 +419,7 @@ if bar_ready and not range_active and not range_dormant and cooldown_left <= 0 a
     midpoint         = math.avg(range_top, range_bottom)
     quartile_low     = range_bottom + (range_top - range_bottom) * 0.25
     quartile_high    = range_bottom + (range_top - range_bottom) * 0.75
-    range_box       := box.new(range_left, range_top, bar_index, range_bottom, border_color = color.new(color.gray, 65), border_width = 1, border_style = line.style_dashed, bgcolor = na, xloc = xloc.bar_index)
+    range_box       := box.new(range_left, range_top, bar_index, range_bottom, border_color = color.new(color.gray, 65), border_width = 2, border_style = line.style_dashed, bgcolor = na, xloc = xloc.bar_index)
     buildShade(shade_boxes, range_left, range_top, range_bottom)
     if show_equilibrium
         equilibrium_line := line.new(range_left, midpoint, bar_index, midpoint, xloc.bar_index, extend.none, color.new(color.gray, 45), line.style_dotted, 1)
