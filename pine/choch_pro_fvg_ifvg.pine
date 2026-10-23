@@ -25,8 +25,8 @@ filtro_rango = input.bool(true, "Sin CHoCH ni BOS dentro de un rango (hasta el b
 mostrar_fvg     = input.bool(true, "Mostrar FVG", group="FVG")
 fvg_min_pct     = input.float(0.0, "Tamaño mínimo FVG (% precio)", minval=0, step=0.05, group="FVG")
 max_zonas       = input.int(50, "Máx. zonas vigiladas", minval=1, maxval=250, group="FVG")
-// Parte consumida: cuanto más baja la temporalidad, más oscuro el gris (igual en cualquier gráfico,
-// porque las zonas del gráfico siempre son de la temporalidad más baja de las que se muestran)
+// Parte consumida: cuanto más baja la temporalidad, más oscuro el gris (igual en cualquier gráfico)
+color_cons_m1   = input.color(color.new(#141414, 40), "Parte consumida · FVG M1", group="FVG")
 color_consumido = input.color(color.new(#303030, 45), "Parte consumida · temporalidad del gráfico (FVG, IFVG, OB)", group="FVG")
 color_cons_m15  = input.color(color.new(#5F5F5F, 55), "Parte consumida · FVG M15", group="FVG")
 color_cons_h1   = input.color(color.new(#8F8F8F, 62), "Parte consumida · FVG H1", group="FVG")
@@ -45,10 +45,12 @@ col_ob_baj      = input.color(#EF6C00, "OB bajista (oferta)", group=g_ob)
 
 g_ny            = "Estrategia NY (Bias + PO3)"
 mostrar_horas   = input.bool(true, "Marcar horas 15:00 / 15:30 / 15:45 / 16:00 (Madrid)", group=g_ny)
+mostrar_fvg1    = input.bool(true, "FVG de M1 (en gráficos de más de 1 minuto)", group=g_ny)
 mostrar_fvg15   = input.bool(true, "FVG de M15 (con línea del 50%)", group=g_ny)
 mostrar_fvg60   = input.bool(true, "FVG de H1 (con línea del 50%)", group=g_ny)
 mostrar_fvg240  = input.bool(true, "FVG de H4 (con línea del 50%)", group=g_ny)
 max_htf         = input.int(10, "Máx. FVG M15/H1 por temporalidad", minval=1, maxval=50, group=g_ny)
+col_fvg1        = input.color(#AEEA00, "Color FVG M1 (lima)", group=g_ny)
 col_fvg15       = input.color(#8E24AA, "Color FVG M15", group=g_ny)
 col_fvg60       = input.color(#00ACC1, "Color FVG H1", group=g_ny)
 col_fvg240      = input.color(#6D4C41, "Color FVG H4", group=g_ny)
@@ -107,6 +109,8 @@ var fvg60  = array.new<Zona>()
 var fvg240 = array.new<Zona>()
 // IFVG que vienen de FVG de M15, H1 y H4
 var ifvg15  = array.new<Zona>()
+var fvg1    = array.new<Zona>()
+var ifvg1   = array.new<Zona>()
 var ifvg60  = array.new<Zona>()
 var ifvg240 = array.new<Zona>()
 
@@ -128,6 +132,15 @@ consumir(Zona z) =>
         borde = na(z.borde) ? (z.dir == 1 ? z.techo : z.suelo) : z.borde
         if z.dir == 1 ? low < borde : high > borde
             z.borde := z.dir == 1 ? low : high
+    completa
+
+// Igual que consumir(), pero con el máximo y el mínimo de otra vela (velas de M1 dentro de la vela del gráfico)
+consumir_hl(Zona z, float hi, float lo) =>
+    completa = z.dir == 1 ? lo <= z.suelo : hi >= z.techo
+    if not completa
+        borde = na(z.borde) ? (z.dir == 1 ? z.techo : z.suelo) : z.borde
+        if z.dir == 1 ? lo < borde : hi > borde
+            z.borde := z.dir == 1 ? lo : hi
     completa
 
 // Etiquetas de estructura dibujadas (CHoCH, ✗ CHoCH, BOS), para poder borrarlas
@@ -1052,6 +1065,54 @@ if cerrada and timeframe.isintraday
             else if b240
                 nueva_htf(fvg240, b240_top, b240_bot, -1, t240)
 
+// --- FVG e IFVG de M1 (en gráficos de más de 1 minuto) ---
+// Se leen todas las velas de M1 que hay dentro de cada vela del gráfico y se recorren en orden, con
+// las mismas reglas: FVG de 3 velas, consumo por partes e IFVG cuando una sola vela de M1 atraviesa
+// entero un FVG intacto. La zona empieza en la vela del gráfico que contiene su primera vela de M1.
+[m1o, m1h, m1l, m1c] = request.security_lower_tf(syminfo.tickerid, "1", [open, high, low, close])
+var float m1_h2 = na
+var float m1_l2 = na
+var int   m1_x2 = na
+var float m1_h1 = na
+var float m1_l1 = na
+var int   m1_x1 = na
+if cerrada and mostrar_fvg1 and timeframe.isintraday and seg_tf > 60 and m1h.size() > 0
+    for k = 0 to m1h.size() - 1
+        o1 = m1o.get(k)
+        h1 = m1h.get(k)
+        l1 = m1l.get(k)
+        c1 = m1c.get(k)
+        // Zonas existentes con esta vela de M1
+        if ifvg1.size() > 0
+            for i = ifvg1.size() - 1 to 0
+                if consumir_hl(ifvg1.get(i), h1, l1)
+                    ifvg1.remove(i)
+        if fvg1.size() > 0
+            for i = fvg1.size() - 1 to 0
+                z = fvg1.get(i)
+                inv = na(z.borde) and (z.dir == 1 ? (o1 >= z.techo and c1 < z.suelo) : (o1 <= z.suelo and c1 > z.techo))
+                if inv
+                    fvg1.remove(i)
+                    ifvg1.push(Zona.new(z.x1, z.techo, z.suelo, -z.dir))
+                    if ifvg1.size() > max_htf
+                        ifvg1.shift()
+                else if consumir_hl(z, h1, l1)
+                    fvg1.remove(i)
+        // FVG nuevo con esta vela y las dos anteriores de M1
+        if not na(m1_h2)
+            if l1 > m1_h2
+                fvg1.push(Zona.new(m1_x2, l1, m1_h2, 1))
+            else if h1 < m1_l2
+                fvg1.push(Zona.new(m1_x2, m1_l2, h1, -1))
+            if fvg1.size() > max_htf
+                fvg1.shift()
+        m1_h2 := m1_h1
+        m1_l2 := m1_l1
+        m1_x2 := m1_x1
+        m1_h1 := h1
+        m1_l1 := l1
+        m1_x1 := bar_index
+
 // --- Niveles clave: altos y bajos relevantes de H4 (vigentes hasta que un cierre los rompe) ---
 type Nivel
     line  ln
@@ -1102,7 +1163,7 @@ plot(ver_pd ? pdl : na, "Bajo día anterior", color=color.new(col_niveles, 30), 
 // ─────────────────────────────
 // DIBUJO DE ZONAS SIN SOLAPES
 // Cada zona se dibuja solo donde no la tapa otra de más prioridad, así nunca se mezclan colores:
-//   IFVG > FVG del gráfico > OB > FVG M15 > FVG H1 > FVG H4 > rango activo > rangos terminados
+//   IFVG M1 > FVG M1 > IFVG > FVG del gráfico > OB > IFVG/FVG M15 > IFVG/FVG H1 > IFVG/FVG H4 > rangos
 // Dentro del mismo tipo, la más reciente va encima. Ejemplo: un FVG M15 dentro de un FVG H4 se ve
 // con su color, y el H4 solo se ve por encima y por debajo de él.
 // La parte ya consumida de cada zona se ve en gris y también ocupa su sitio.
@@ -1224,6 +1285,8 @@ if barstate.islast
     dib_letreros.clear()
     letreros.clear()
     ocupado.clear()
+    dibujar_lista(ifvg1, col_ifvg, col_ifvg, 78, "IFVG M1", true, false, color_cons_m1)
+    dibujar_lista(fvg1, col_fvg1, col_fvg1, 70, "FVG M1", true, false, color_cons_m1)
     dibujar_lista(ifvgs, col_ifvg, col_ifvg, 75, "IFVG " + tf_graf, true, false, color_consumido)
     if mostrar_fvg
         dibujar_lista(zonas, color_alcista, color_bajista, 82, "FVG " + tf_graf, true, false, color_consumido)
