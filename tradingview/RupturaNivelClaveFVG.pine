@@ -62,7 +62,23 @@ int    maxQty   = input.int(10, "Máx. contratos (modo riesgo)", minval = 1, gro
 
 string G_VIS = "6 · Visual"
 bool showLvls  = input.bool(true, "Mostrar niveles clave", group = G_VIS)
+bool showOpp   = input.bool(true, "Mostrar FVG contrarios de M1 (candidatos a IFVG)", group = G_VIS)
+bool showOb    = input.bool(true, "Mostrar Order Block de la ruptura (solo visual)", group = G_VIS)
+bool paintBars = input.bool(true, "Pintar las velas de FVG, IFVG y OB", group = G_VIS)
 bool showPanel = input.bool(true, "Mostrar panel", group = G_VIS)
+
+// Colores: cada elemento con un tono distinto para que no se confundan
+string G_COL = "7 · Colores"
+color cOvnH  = input.color(#FF9100, "Máx día",               group = G_COL, inline = "n1")
+color cOvnL  = input.color(#00E5FF, "Mín día",               group = G_COL, inline = "n1")
+color cPrvH  = input.color(#E040FB, "Máx sesión ant.",       group = G_COL, inline = "n2")
+color cPrvL  = input.color(#FFEA00, "Mín sesión ant.",       group = G_COL, inline = "n2")
+color cFvgUp = input.color(#00E676, "FVG M5 alcista",        group = G_COL, inline = "f1")
+color cFvgDn = input.color(#FF1744, "FVG M5 bajista",        group = G_COL, inline = "f1")
+color cOpp   = input.color(#9E9E9E, "FVG contrario M1",      group = G_COL, inline = "f2")
+color cIfvg  = input.color(#2962FF, "IFVG",                  group = G_COL, inline = "f2")
+color cOb    = input.color(#8D6E63, "Order Block",           group = G_COL, inline = "f3")
+int   zTransp = input.int(75, "Transparencia de las zonas", minval = 0, maxval = 95, group = G_COL)
 
 // ─── Sesiones ──────────────────────────────────────────────────────────────
 inSes(string s) =>
@@ -173,11 +189,15 @@ var int   cnt1  = 0
 var box   zBox  = na
 var array<float> oTop = array.new_float()  // FVG M1 contrarios creados en el retroceso
 var array<float> oBot = array.new_float()
+var array<box>   oBox = array.new_box()    // dibujo de cada FVG contrario (solo sobre sus 3 velas)
 
 bool cancel   = false
 bool justSet  = false
-color colBull = color.new(color.teal, 80)
-color colBear = color.new(color.red, 80)
+bool paintOpp = false   // vela central de un FVG contrario M1 recién formado (barra anterior)
+bool paintIfv = false   // vela IFVG
+bool paintObV = false   // velas M1 del Order Block (vela M5 previa a la ruptura)
+color colBull = color.new(cFvgUp, zTransp)
+color colBear = color.new(cFvgDn, zTransp)
 
 // 1) Ruptura con FVG en M5
 if st == 0 and m5Closed and inTrade and not na(atr5) and cC.size() >= accBars + 3
@@ -185,6 +205,7 @@ if st == 0 and m5Closed and inTrade and not na(atr5) and cC.size() >= accBars + 
     float h1 = cH.get(n - 3)
     float l1 = cL.get(n - 3)
     float c1 = cC.get(n - 3)
+    float o1 = cO.get(n - 3)
     float o2 = cO.get(n - 2)
     float c2 = cC.get(n - 2)
     float h3 = cH.get(n - 1)
@@ -238,11 +259,20 @@ if st == 0 and m5Closed and inTrade and not na(atr5) and cC.size() >= accBars + 
         justSet := true
         oTop.clear()
         oBot.clear()
-        zBox := box.new(time - 2 * TF5, zTop, time, zBot, xloc = xloc.bar_time,
-             bgcolor = dir == 1 ? colBull : colBear, border_color = na)
+        oBox.clear()
+        // Inicio de la vela M5 que acaba de cerrar (c3); c2 es la de ruptura y c1 la anterior
+        int c3Start = bDone ? bT : bT - TF5
+        zBox := box.new(c3Start - TF5, zTop, time, zBot, xloc = xloc.bar_time,
+             bgcolor = dir == 1 ? colBull : colBear, border_color = dir == 1 ? cFvgUp : cFvgDn)
         label.new(bar_index, dir == 1 ? high : low, "Ruptura " + lvlName,
              style = dir == 1 ? label.style_label_down : label.style_label_up,
-             color = dir == 1 ? color.teal : color.red, textcolor = color.white, size = size.small)
+             color = dir == 1 ? cFvgUp : cFvgDn, textcolor = color.black, size = size.small)
+        // Order Block: la última vela contraria antes de la ruptura (c1), dibujada solo sobre su propia vela
+        bool isOb = dir == 1 ? c1 < o1 : c1 > o1
+        if showOb and isOb
+            box.new(c3Start - 2 * TF5, h1, c3Start - TF5, l1, xloc = xloc.bar_time,
+                 bgcolor = color.new(cOb, zTransp), border_color = cOb)
+            paintObV := true
 
 // 2) Seguimiento del setup en M1
 if st > 0 and not justSet
@@ -250,12 +280,14 @@ if st > 0 and not justSet
         zBox.set_right(time)
 
     // FVG contrarios en M1 (los que se forman mientras el precio retrocede)
-    if dir == 1 and low[2] - high >= syminfo.mintick
-        oTop.push(low[2])
-        oBot.push(high)
-    if dir == -1 and low - high[2] >= syminfo.mintick
-        oTop.push(low)
-        oBot.push(high[2])
+    bool newOpp = (dir == 1 and low[2] - high >= syminfo.mintick) or (dir == -1 and low - high[2] >= syminfo.mintick)
+    if newOpp
+        float t = dir == 1 ? low[2] : low
+        float b = dir == 1 ? high : high[2]
+        oTop.push(t)
+        oBot.push(b)
+        oBox.push(showOpp ? box.new(bar_index - 2, t, bar_index, b, bgcolor = color.new(cOpp, zTransp), border_color = cOpp) : box(na))
+        paintOpp := true
 
     // Fase 1: esperando que el precio vuelva al FVG de M5
     if st == 1
@@ -268,8 +300,14 @@ if st > 0 and not justSet
             // Los FVG contrarios que se rellenan antes de llegar a la zona no sirven
             for i = oTop.size() - 1 to 0
                 if (dir == 1 and close > oTop.get(i)) or (dir == -1 and close < oBot.get(i))
+                    // Rellenado antes de llegar a la zona: queda casi transparente
+                    box bx = oBox.get(i)
+                    if not na(bx)
+                        bx.set_bgcolor(color.new(cOpp, 92))
+                        bx.set_border_color(color.new(cOpp, 70))
                     oTop.remove(i)
                     oBot.remove(i)
+                    oBox.remove(i)
         if m5Closed
             cnt5 += 1
             if cnt5 > waitRet and st == 1
@@ -283,16 +321,26 @@ if st > 0 and not justSet
             for i = oTop.size() - 1 to 0
                 float t = oTop.get(i)
                 float b = oBot.get(i)
-                if dir == 1 and close > t
-                    if close > open and open <= t and close - open >= ifvgBody * atr1
+                bool inverted = (dir == 1 and close > t) or (dir == -1 and close < b)
+                if inverted
+                    bool strongUp = close > open and open <= t and close - open >= ifvgBody * atr1
+                    bool strongDn = close < open and open >= b and open - close >= ifvgBody * atr1
+                    bool strong   = dir == 1 ? strongUp : strongDn
+                    box bx = oBox.get(i)
+                    if strong
                         sig := true
+                        // El FVG que se convierte en IFVG cambia de color y se marca pegado a la vela IFVG
+                        if not na(bx)
+                            bx.set_bgcolor(color.new(cIfvg, zTransp))
+                            bx.set_border_color(cIfvg)
+                        box.new(bar_index, t, bar_index + 1, b, bgcolor = color.new(cIfvg, 40), border_color = cIfvg, border_width = 2)
+                    else if not na(bx)
+                        bx.set_bgcolor(color.new(cOpp, 92))
+                        bx.set_border_color(color.new(cOpp, 70))
                     oTop.remove(i)
                     oBot.remove(i)
-                else if dir == -1 and close < b
-                    if close < open and open >= b and open - close >= ifvgBody * atr1
-                        sig := true
-                    oTop.remove(i)
-                    oBot.remove(i)
+                    oBox.remove(i)
+        paintIfv := sig
 
         if sig and inTrade and tradesToday < maxTrades and strategy.position_size == 0
             float sl   = dir == 1 ? ext - slBufTk * syminfo.mintick : ext + slBufTk * syminfo.mintick
@@ -307,12 +355,13 @@ if st > 0 and not justSet
                 line.new(bar_index, sl, bar_index + 30, sl, color = color.red, width = 2)
                 line.new(bar_index, tp, bar_index + 30, tp, color = color.green, width = 2)
                 line.new(bar_index, close, bar_index + 30, close, color = color.gray, style = line.style_dashed)
-                label.new(bar_index, close, "IFVG " + (dir == 1 ? "▲" : "▼"),
+                label.new(bar_index, dir == 1 ? low : high, "IFVG " + (dir == 1 ? "▲" : "▼"),
                      style = dir == 1 ? label.style_label_up : label.style_label_down,
-                     color = dir == 1 ? color.green : color.maroon, textcolor = color.white, size = size.small)
+                     color = cIfvg, textcolor = color.white, size = size.small)
                 st := 0
                 oTop.clear()
                 oBot.clear()
+                oBox.clear()
         if st == 2
             cnt1 += 1
             if cnt1 > waitEnt
@@ -332,6 +381,7 @@ if cancel
     st := 0
     oTop.clear()
     oBot.clear()
+    oBox.clear()
     if not na(zBox)
         zBox.set_bgcolor(color.new(color.gray, 85))
 
@@ -340,11 +390,28 @@ if inFlat and strategy.position_size != 0
     strategy.close_all(comment = "Cierre horario")
 
 // ─── Dibujo ────────────────────────────────────────────────────────────────
-plot(showLvls and useOvn  ? ovnH  : na, "Máx día",          color.new(color.orange, 0),  1, plot.style_stepline)
-plot(showLvls and useOvn  ? ovnL  : na, "Mín día",          color.new(color.orange, 0),  1, plot.style_stepline)
-plot(showLvls and usePrev ? prevH : na, "Máx sesión ant.",  color.new(color.fuchsia, 0), 1, plot.style_stepline)
-plot(showLvls and usePrev ? prevL : na, "Mín sesión ant.",  color.new(color.fuchsia, 0), 1, plot.style_stepline)
-bgcolor(inTrade ? color.new(color.blue, 94) : na, title = "Ventana de operativa")
+plot(showLvls and useOvn  ? ovnH  : na, "Máx día",          cOvnH, 2, plot.style_stepline)
+plot(showLvls and useOvn  ? ovnL  : na, "Mín día",          cOvnL, 2, plot.style_stepline)
+plot(showLvls and usePrev ? prevH : na, "Máx sesión ant.",  cPrvH, 1, plot.style_stepline)
+plot(showLvls and usePrev ? prevL : na, "Mín sesión ant.",  cPrvL, 1, plot.style_stepline)
+bgcolor(inTrade ? color.new(color.gray, 94) : na, title = "Ventana de operativa")
+
+// Velas pintadas. La vela M5 de ruptura (c2) son las velas M1 de 5 a 9 barras atrás
+// y el Order Block (c1) las de 10 a 14 barras atrás, en el momento en que se detecta.
+color cBrk  = paintBars and justSet ? (dir == 1 ? cFvgUp : cFvgDn) : na
+color cObV  = paintBars and paintObV ? cOb : na
+barcolor(cBrk, offset = -5, title = "Vela de ruptura (FVG M5) 5")
+barcolor(cBrk, offset = -6, title = "Vela de ruptura (FVG M5) 6")
+barcolor(cBrk, offset = -7, title = "Vela de ruptura (FVG M5) 7")
+barcolor(cBrk, offset = -8, title = "Vela de ruptura (FVG M5) 8")
+barcolor(cBrk, offset = -9, title = "Vela de ruptura (FVG M5) 9")
+barcolor(cObV, offset = -10, title = "Order Block 10")
+barcolor(cObV, offset = -11, title = "Order Block 11")
+barcolor(cObV, offset = -12, title = "Order Block 12")
+barcolor(cObV, offset = -13, title = "Order Block 13")
+barcolor(cObV, offset = -14, title = "Order Block 14")
+barcolor(paintBars and paintOpp ? cOpp : na, offset = -1, title = "Vela de FVG contrario M1")
+barcolor(paintBars and paintIfv ? cIfvg : na, title = "Vela IFVG")
 
 // ─── Panel ─────────────────────────────────────────────────────────────────
 var table panel = table.new(position.top_right, 2, 8, bgcolor = color.new(color.black, 15),
