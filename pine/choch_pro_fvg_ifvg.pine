@@ -1101,6 +1101,18 @@ var array<box>   dib_cajas  = array.new<box>()
 var array<line>  dib_lineas = array.new<line>()
 var array<label> dib_letreros = array.new<label>()
 
+// Letreros pendientes de colocar (se colocan todos juntos al final para que no se monten)
+type Letrero
+    int    x
+    float  y
+    string txt
+    color  col
+    bool   derecha   // true = letrero del final (termina en x); false = del principio (empieza en x)
+
+var array<Letrero> letreros = array.new<Letrero>()
+// Separación vertical mínima entre letreros cercanos, en precio
+sep_letrero = nz(ta.atr(50)) * 0.5
+
 // Temporalidad del gráfico en el mismo formato que los letreros de M15, H1 y H4 (M5, M15, H1, D…)
 tf_nombre() =>
     string r = timeframe.period
@@ -1163,11 +1175,11 @@ dibujar_zona(int x1, int x2, float techo, float suelo, int dir, float borde, col
         pintar_parte(Pieza.new(x1, x2, dir == 1 ? techo : borde, dir == 1 ? borde : suelo), colgris)
     // Letreros: uno al principio y otro al final de la zona, a la altura de la parte sin tocar.
     // Si la zona es muy estrecha (menos de 8 velas) solo se pone el del principio, para que no se monten.
-    if txt != "" and dib_letreros.size() < 200
+    if txt != "" and letreros.size() < 200
         y = (ctop + cbot) / 2
-        dib_letreros.push(label.new(x1, y, txt, style=label.style_label_left, color=color.new(color.white, 100), textcolor=coltxt, size=size.tiny))
+        letreros.push(Letrero.new(x1, y, txt, coltxt, false))
         if x2 - x1 >= 8
-            dib_letreros.push(label.new(x2, y, txt, style=label.style_label_right, color=color.new(color.white, 100), textcolor=coltxt, size=size.tiny))
+            letreros.push(Letrero.new(x2, y, txt, coltxt, true))
     // Línea del 50% (FVG de M15, H1 y H4), también recortada
     if not na(colmitad)
         m = (techo + suelo) / 2
@@ -1194,6 +1206,7 @@ if barstate.islast
     for e in dib_letreros
         e.delete()
     dib_letreros.clear()
+    letreros.clear()
     ocupado.clear()
     dibujar_lista(ifvgs, col_ifvg, col_ifvg, 75, "IFVG " + tf_graf, true, false, color_consumido)
     if mostrar_fvg
@@ -1209,6 +1222,27 @@ if barstate.islast
             for i = rangos_hist.size() - 1 to 0
                 r = rangos_hist.get(i)
                 dibujar_zona(r.x1, r.x2, r.techo, r.suelo, 0, na, color.new(r.col, fill_transparency), "", na, na, na)
+    // Colocar los letreros de arriba abajo. Si uno queda demasiado cerca de otro ya colocado del mismo
+    // lado y a pocas velas, se baja lo justo para que no se monten (queda junto a su zona).
+    if letreros.size() > 0
+        ys = array.new_float()
+        for l in letreros
+            ys.push(l.y)
+        orden = ys.sort_indices(order.descending)
+        colocados = array.new<Letrero>()
+        for k in orden
+            l = letreros.get(k)
+            y = l.y
+            for intento = 0 to 30
+                choca = false
+                for c in colocados
+                    if c.derecha == l.derecha and math.abs(c.x - l.x) < 12 and math.abs(c.y - y) < sep_letrero
+                        y := c.y - sep_letrero
+                        choca := true
+                if not choca
+                    break
+            colocados.push(Letrero.new(l.x, y, l.txt, l.col, l.derecha))
+            dib_letreros.push(label.new(l.x, y, l.txt, style=l.derecha ? label.style_label_right : label.style_label_left, color=color.new(color.white, 100), textcolor=l.col, size=size.tiny))
 
 // ─────────────────────────────
 // ALERTAS
