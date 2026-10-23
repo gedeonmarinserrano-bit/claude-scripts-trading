@@ -91,6 +91,7 @@ type Zona
     int   dir        // 1 alcista, -1 bajista
     box   gris  = na // parte ya tocada (gris translúcido)
     float borde = na // límite de la parte aún sin tocar
+    int   izq   = na // vela donde empieza el FVG (para dibujar el IFVG sobre todo el FVG)
 
 var zonas = array.new<Zona>()
 
@@ -915,7 +916,8 @@ borrar_zona(Zona z) =>
         z.gris.delete()
 
 // IFVG: una sola vela atraviesa el FVG entero (abre a un lado y cierra al otro).
-// No se dibuja una zona larga: solo una caja corta pegada a esa vela.
+// El FVG se sustituye por una caja IFVG del mismo tamaño, que termina en la vela que lo invierte
+// (no se alarga hacia la derecha).
 nuevo_ifvg_alc = false
 nuevo_ifvg_baj = false
 if cerrada and zonas.size() > 0
@@ -930,7 +932,8 @@ if cerrada and zonas.size() > 0
                 nuevo_ifvg_baj := true
             else
                 nuevo_ifvg_alc := true
-            box.new(bar_index - 1, z.techo, bar_index + 1, z.suelo, border_color=col_ifvg, border_width=1, bgcolor=color.new(col_ifvg, 75), text="IFVG", text_size=size.tiny, text_color=color.new(col_ifvg, 0), text_halign=text.align_center)
+            // La caja IFVG cubre todo el FVG original: desde su primera vela hasta la vela que lo invierte
+            box.new(na(z.izq) ? bar_index - 1 : z.izq, z.techo, bar_index + 1, z.suelo, border_color=col_ifvg, border_width=1, bgcolor=color.new(col_ifvg, 75), text="IFVG", text_size=size.tiny, text_color=color.new(col_ifvg, 0), text_halign=text.align_right)
         else if consumida
             // Consumida del todo: desaparece
             borrar_zona(z)
@@ -965,7 +968,7 @@ fvg_bajista = cerrada and high < low[2] and (low[2] - high) / close * 100 > fvg_
 agregar_fvg(float techo, float suelo, int dir) =>
     col = dir == 1 ? color_alcista : color_bajista
     b = mostrar_fvg ? box.new(bar_index - 2, techo, bar_index + 1, suelo, border_color=na, bgcolor=color.new(col, 82), text="FVG", text_size=size.tiny, text_color=col, text_halign=text.align_right) : na
-    zonas.push(Zona.new(b, techo, suelo, dir))
+    zonas.push(Zona.new(b, techo, suelo, dir, na, na, bar_index - 2))
     if zonas.size() > max_zonas
         borrar_zona(zonas.shift())
 
