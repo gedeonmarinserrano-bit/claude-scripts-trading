@@ -1242,7 +1242,9 @@ if barstate.islast
                 if not choca
                     break
             colocados.push(Letrero.new(l.x, y, l.txt, l.col, l.derecha))
-            dib_letreros.push(label.new(l.x, y, l.txt, style=l.derecha ? label.style_label_right : label.style_label_left, color=color.new(color.white, 100), textcolor=l.col, size=size.tiny))
+            // Los IFVG llevan el letrero con fondo magenta y texto blanco para no confundirlos con los FVG
+            es_ifvg = str.startswith(l.txt, "IFVG")
+            dib_letreros.push(label.new(l.x, y, l.txt, style=l.derecha ? label.style_label_right : label.style_label_left, color=es_ifvg ? col_ifvg : color.new(color.white, 100), textcolor=es_ifvg ? color.white : l.col, size=size.tiny))
 
 // ─────────────────────────────
 // ALERTAS
