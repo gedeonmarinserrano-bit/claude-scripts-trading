@@ -48,9 +48,16 @@ mostrar_fvg15   = input.bool(true, "FVG de M15 (con línea del 50%)", group=g_ny
 mostrar_fvg60   = input.bool(true, "FVG de H1 (con línea del 50%)", group=g_ny)
 mostrar_fvg240  = input.bool(true, "FVG de H4 (con línea del 50%)", group=g_ny)
 max_htf         = input.int(10, "Máx. FVG M15/H1 por temporalidad", minval=1, maxval=50, group=g_ny)
-col_fvg15       = input.color(#8E24AA, "Color FVG M15", group=g_ny)
-col_fvg60       = input.color(#00ACC1, "Color FVG H1", group=g_ny)
-col_fvg240      = input.color(#6D4C41, "Color FVG H4", group=g_ny)
+// Colores de los FVG: verde (alcista) y rojo (bajista), cada vez más oscuros cuanto más alta la temporalidad
+g_cfvg          = "Colores FVG (más oscuro = temporalidad más alta)"
+fvg_alc_0       = input.color(#81C784, "Alcista · temporalidad del gráfico", group=g_cfvg)
+fvg_alc_15      = input.color(#43A047, "Alcista · M15", group=g_cfvg)
+fvg_alc_60      = input.color(#2E7D32, "Alcista · H1", group=g_cfvg)
+fvg_alc_240     = input.color(#1B5E20, "Alcista · H4", group=g_cfvg)
+fvg_baj_0       = input.color(#E57373, "Bajista · temporalidad del gráfico", group=g_cfvg)
+fvg_baj_15      = input.color(#E53935, "Bajista · M15", group=g_cfvg)
+fvg_baj_60      = input.color(#C62828, "Bajista · H1", group=g_cfvg)
+fvg_baj_240     = input.color(#7F0000, "Bajista · H4", group=g_cfvg)
 mostrar_niv_h4  = input.bool(true, "Niveles clave: altos/bajos relevantes de H4", group=g_ny)
 piv_h4_len      = input.int(3, "Sensibilidad altos/bajos H4", minval=1, maxval=10, group=g_ny)
 max_niv_h4      = input.int(6, "Máx. niveles H4 vigentes", minval=1, maxval=20, group=g_ny)
@@ -1123,6 +1130,7 @@ type Letrero
     string txt
     color  col
     bool   derecha   // true = letrero del final (termina en x); false = del principio (empieza en x)
+    bool   fondo     // true = letrero blanco sobre el color de la zona (FVG)
 
 var array<Letrero> letreros = array.new<Letrero>()
 // Separación vertical mínima entre letreros cercanos, en precio
@@ -1181,7 +1189,7 @@ pintar_parte(Pieza p, color col) =>
         if q.x2 > q.x1 and q.top > q.bot and dib_cajas.size() < 440
             dib_cajas.push(box.new(q.x1, q.top, q.x2, q.bot, border_color=na, bgcolor=col))
 
-dibujar_zona(int x1, int x2, float techo, float suelo, int dir, float borde, color col, string txt, color coltxt, color colmitad, color colgris) =>
+dibujar_zona(int x1, int x2, float techo, float suelo, int dir, float borde, color col, string txt, color coltxt, color colmitad, color colgris, bool fondo) =>
     // Parte aún sin tocar (con su color) y parte consumida (gris)
     ctop = na(borde) ? techo : (dir == 1 ? borde : techo)
     cbot = na(borde) ? suelo : (dir == 1 ? suelo : borde)
@@ -1192,9 +1200,9 @@ dibujar_zona(int x1, int x2, float techo, float suelo, int dir, float borde, col
     // Si la zona es muy estrecha (menos de 8 velas) solo se pone el del principio, para que no se monten.
     if txt != "" and letreros.size() < 200
         y = (ctop + cbot) / 2
-        letreros.push(Letrero.new(x1, y, txt, coltxt, false))
+        letreros.push(Letrero.new(x1, y, txt, coltxt, false, fondo))
         if x2 - x1 >= 8
-            letreros.push(Letrero.new(x2, y, txt, coltxt, true))
+            letreros.push(Letrero.new(x2, y, txt, coltxt, true, fondo))
     // Línea del 50% (FVG de M15, H1 y H4), también recortada
     if not na(colmitad)
         m = (techo + suelo) / 2
@@ -1203,13 +1211,13 @@ dibujar_zona(int x1, int x2, float techo, float suelo, int dir, float borde, col
                 dib_lineas.push(line.new(q.x1, m, q.x2, m, color=colmitad, style=line.style_dashed, width=1))
     ocupado.push(Pieza.new(x1, x2, techo, suelo))
 
-dibujar_lista(array<Zona> arr, color c_alc, color c_baj, int transp, string txt, bool flecha, bool mitad, color colgris) =>
+dibujar_lista(array<Zona> arr, color c_alc, color c_baj, int transp, string txt, bool flecha, bool mitad, color colgris, bool fondo) =>
     if arr.size() > 0
         for i = arr.size() - 1 to 0
             z = arr.get(i)
             c = z.dir == 1 ? c_alc : c_baj
             t = flecha ? txt + (z.dir == 1 ? " ▲" : " ▼") : txt
-            dibujar_zona(z.x1, bar_index + 1, z.techo, z.suelo, z.dir, z.borde, color.new(c, transp), t, c, mitad ? color.new(c, 25) : na, colgris)
+            dibujar_zona(z.x1, bar_index + 1, z.techo, z.suelo, z.dir, z.borde, color.new(c, transp), t, c, mitad ? color.new(c, 25) : na, colgris, fondo)
 
 if barstate.islast
     for b in dib_cajas
@@ -1224,23 +1232,23 @@ if barstate.islast
     letreros.clear()
     ocupado.clear()
     // Solo se muestran zonas de la temporalidad del gráfico y de las superiores (M15, H1 y H4)
-    dibujar_lista(ifvgs, col_ifvg, col_ifvg, 75, "IFVG " + tf_graf, true, false, color_consumido)
+    dibujar_lista(ifvgs, col_ifvg, col_ifvg, 75, "IFVG " + tf_graf, true, false, color_consumido, false)
     if mostrar_fvg
-        dibujar_lista(zonas, color_alcista, color_bajista, 82, "FVG " + tf_graf, true, false, color_consumido)
-    dibujar_lista(obs, col_ob_alc, col_ob_baj, 82, "OB " + tf_graf, true, false, color_consumido)
-    dibujar_lista(ifvg15, col_ifvg, col_ifvg, 78, "IFVG M15", true, false, color_cons_m15)
-    dibujar_lista(fvg15, col_fvg15, col_fvg15, 85, "FVG M15", true, true, color_cons_m15)
-    dibujar_lista(ifvg60, col_ifvg, col_ifvg, 78, "IFVG H1", true, false, color_cons_h1)
-    dibujar_lista(fvg60, col_fvg60, col_fvg60, 85, "FVG H1", true, true, color_cons_h1)
-    dibujar_lista(ifvg240, col_ifvg, col_ifvg, 78, "IFVG H4", true, false, color_cons_h4)
-    dibujar_lista(fvg240, col_fvg240, col_fvg240, 85, "FVG H4", true, true, color_cons_h4)
+        dibujar_lista(zonas, fvg_alc_0, fvg_baj_0, 70, "FVG " + tf_graf, true, false, color_consumido, true)
+    dibujar_lista(obs, col_ob_alc, col_ob_baj, 82, "OB " + tf_graf, true, false, color_consumido, false)
+    dibujar_lista(ifvg15, col_ifvg, col_ifvg, 78, "IFVG M15", true, false, color_cons_m15, false)
+    dibujar_lista(fvg15, fvg_alc_15, fvg_baj_15, 70, "FVG M15", true, true, color_cons_m15, true)
+    dibujar_lista(ifvg60, col_ifvg, col_ifvg, 78, "IFVG H1", true, false, color_cons_h1, false)
+    dibujar_lista(fvg60, fvg_alc_60, fvg_baj_60, 70, "FVG H1", true, true, color_cons_h1, true)
+    dibujar_lista(ifvg240, col_ifvg, col_ifvg, 78, "IFVG H4", true, false, color_cons_h4, false)
+    dibujar_lista(fvg240, fvg_alc_240, fvg_baj_240, 70, "FVG H4", true, true, color_cons_h4, true)
     if sin_solape
         if range_active and not na(range_left)
-            dibujar_zona(range_left, bar_index + 1, range_top, range_bottom, 0, na, color.new(range_fill_color, fill_transparency), "", na, na, na)
+            dibujar_zona(range_left, bar_index + 1, range_top, range_bottom, 0, na, color.new(range_fill_color, fill_transparency), "", na, na, na, false)
         if rangos_hist.size() > 0
             for i = rangos_hist.size() - 1 to 0
                 r = rangos_hist.get(i)
-                dibujar_zona(r.x1, r.x2, r.techo, r.suelo, 0, na, color.new(r.col, fill_transparency), "", na, na, na)
+                dibujar_zona(r.x1, r.x2, r.techo, r.suelo, 0, na, color.new(r.col, fill_transparency), "", na, na, na, false)
     // Colocar los letreros de arriba abajo. Si uno queda demasiado cerca de otro ya colocado del mismo
     // lado y a pocas velas, se baja lo justo para que no se monten (queda junto a su zona).
     if letreros.size() > 0
@@ -1260,8 +1268,9 @@ if barstate.islast
                         choca := true
                 if not choca
                     break
-            colocados.push(Letrero.new(l.x, y, l.txt, l.col, l.derecha))
-            dib_letreros.push(label.new(l.x, y, l.txt, style=l.derecha ? label.style_label_right : label.style_label_left, color=color.new(color.white, 100), textcolor=l.col, size=size.tiny))
+            colocados.push(Letrero.new(l.x, y, l.txt, l.col, l.derecha, l.fondo))
+            // FVG: letrero en blanco sobre el color de su zona; IFVG y OB: texto de color sin fondo
+            dib_letreros.push(label.new(l.x, y, l.txt, style=l.derecha ? label.style_label_right : label.style_label_left, color=l.fondo ? l.col : color.new(color.white, 100), textcolor=l.fondo ? color.white : l.col, size=size.tiny))
 
 // ─────────────────────────────
 // ALERTAS
