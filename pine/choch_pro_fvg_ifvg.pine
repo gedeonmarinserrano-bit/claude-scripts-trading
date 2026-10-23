@@ -25,7 +25,8 @@ filtro_rango = input.bool(true, "Sin CHoCH ni BOS dentro de un rango (hasta el b
 mostrar_fvg     = input.bool(true, "Mostrar FVG", group="FVG")
 fvg_min_pct     = input.float(0.0, "Tamaño mínimo FVG (% precio)", minval=0, step=0.05, group="FVG")
 max_zonas       = input.int(50, "Máx. zonas vigiladas", minval=1, maxval=250, group="FVG")
-color_consumido = input.color(color.new(color.gray, 75), "Color parte consumida", group="FVG")
+color_consumido = input.color(color.new(#424242, 55), "Parte consumida: FVG, IFVG y OB del gráfico (gris oscuro)", group="FVG")
+color_cons_htf  = input.color(color.new(#9E9E9E, 75), "Parte consumida: FVG de M15, H1 y H4 (gris claro)", group="FVG")
 
 // Estrategia apertura de Nueva York (Bias + PO3)
 // Order Blocks: la última vela contraria antes del impulso que rompe estructura (CHoCH o BOS)
@@ -1140,13 +1141,13 @@ pintar_parte(Pieza p, color col, string txt, color coltxt) =>
         if q.x2 > q.x1 and q.top > q.bot and dib_cajas.size() < 440
             dib_cajas.push(box.new(q.x1, q.top, q.x2, q.bot, border_color=na, bgcolor=col, text=i == mejor ? txt : "", text_size=size.tiny, text_color=coltxt, text_halign=text.align_right))
 
-dibujar_zona(int x1, int x2, float techo, float suelo, int dir, float borde, color col, string txt, color coltxt, color colmitad) =>
+dibujar_zona(int x1, int x2, float techo, float suelo, int dir, float borde, color col, string txt, color coltxt, color colmitad, color colgris) =>
     // Parte aún sin tocar (con su color) y parte consumida (gris)
     ctop = na(borde) ? techo : (dir == 1 ? borde : techo)
     cbot = na(borde) ? suelo : (dir == 1 ? suelo : borde)
     pintar_parte(Pieza.new(x1, x2, ctop, cbot), col, txt, coltxt)
     if not na(borde)
-        pintar_parte(Pieza.new(x1, x2, dir == 1 ? techo : borde, dir == 1 ? borde : suelo), color_consumido, "", na)
+        pintar_parte(Pieza.new(x1, x2, dir == 1 ? techo : borde, dir == 1 ? borde : suelo), colgris, "", na)
     // Línea del 50% (FVG de M15, H1 y H4), también recortada
     if not na(colmitad)
         m = (techo + suelo) / 2
@@ -1155,13 +1156,13 @@ dibujar_zona(int x1, int x2, float techo, float suelo, int dir, float borde, col
                 dib_lineas.push(line.new(q.x1, m, q.x2, m, color=colmitad, style=line.style_dashed, width=1))
     ocupado.push(Pieza.new(x1, x2, techo, suelo))
 
-dibujar_lista(array<Zona> arr, color c_alc, color c_baj, int transp, string txt, bool flecha, bool mitad) =>
+dibujar_lista(array<Zona> arr, color c_alc, color c_baj, int transp, string txt, bool flecha, bool mitad, color colgris) =>
     if arr.size() > 0
         for i = arr.size() - 1 to 0
             z = arr.get(i)
             c = z.dir == 1 ? c_alc : c_baj
             t = flecha ? txt + (z.dir == 1 ? " ▲" : " ▼") : txt
-            dibujar_zona(z.x1, bar_index + 1, z.techo, z.suelo, z.dir, z.borde, color.new(c, transp), t, c, mitad ? color.new(c, 25) : na)
+            dibujar_zona(z.x1, bar_index + 1, z.techo, z.suelo, z.dir, z.borde, color.new(c, transp), t, c, mitad ? color.new(c, 25) : na, colgris)
 
 if barstate.islast
     for b in dib_cajas
@@ -1171,20 +1172,20 @@ if barstate.islast
         l.delete()
     dib_lineas.clear()
     ocupado.clear()
-    dibujar_lista(ifvgs, col_ifvg, col_ifvg, 75, "IFVG", false, false)
+    dibujar_lista(ifvgs, col_ifvg, col_ifvg, 75, "IFVG", false, false, color_consumido)
     if mostrar_fvg
-        dibujar_lista(zonas, color_alcista, color_bajista, 82, "FVG", false, false)
-    dibujar_lista(obs, col_ob_alc, col_ob_baj, 82, "OB", true, false)
-    dibujar_lista(fvg15, col_fvg15, col_fvg15, 85, "FVG M15", true, true)
-    dibujar_lista(fvg60, col_fvg60, col_fvg60, 85, "FVG H1", true, true)
-    dibujar_lista(fvg240, col_fvg240, col_fvg240, 85, "FVG H4", true, true)
+        dibujar_lista(zonas, color_alcista, color_bajista, 82, "FVG", false, false, color_consumido)
+    dibujar_lista(obs, col_ob_alc, col_ob_baj, 82, "OB", true, false, color_consumido)
+    dibujar_lista(fvg15, col_fvg15, col_fvg15, 85, "FVG M15", true, true, color_cons_htf)
+    dibujar_lista(fvg60, col_fvg60, col_fvg60, 85, "FVG H1", true, true, color_cons_htf)
+    dibujar_lista(fvg240, col_fvg240, col_fvg240, 85, "FVG H4", true, true, color_cons_htf)
     if sin_solape
         if range_active and not na(range_left)
-            dibujar_zona(range_left, bar_index + 1, range_top, range_bottom, 0, na, color.new(range_fill_color, fill_transparency), "", na, na)
+            dibujar_zona(range_left, bar_index + 1, range_top, range_bottom, 0, na, color.new(range_fill_color, fill_transparency), "", na, na, na)
         if rangos_hist.size() > 0
             for i = rangos_hist.size() - 1 to 0
                 r = rangos_hist.get(i)
-                dibujar_zona(r.x1, r.x2, r.techo, r.suelo, 0, na, color.new(r.col, fill_transparency), "", na, na)
+                dibujar_zona(r.x1, r.x2, r.techo, r.suelo, 0, na, color.new(r.col, fill_transparency), "", na, na, na)
 
 // ─────────────────────────────
 // ALERTAS
