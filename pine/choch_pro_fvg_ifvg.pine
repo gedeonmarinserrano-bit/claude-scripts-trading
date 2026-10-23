@@ -1107,7 +1107,7 @@ tf_nombre() =>
     if timeframe.isseconds
         r := "S" + str.tostring(timeframe.multiplier)
     else if timeframe.isminutes
-        r := timeframe.multiplier % 60 == 0 ? "H" + str.tostring(timeframe.multiplier / 60) : "M" + str.tostring(timeframe.multiplier)
+        r := timeframe.multiplier % 60 == 0 ? "H" + str.tostring(int(timeframe.multiplier / 60)) : "M" + str.tostring(timeframe.multiplier)
     else if timeframe.isdaily
         r := timeframe.multiplier == 1 ? "D" : str.tostring(timeframe.multiplier) + "D"
     else if timeframe.isweekly
