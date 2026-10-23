@@ -924,7 +924,9 @@ if cerrada and zonas.size() > 0
     for i = zonas.size() - 1 to 0
         z = zonas.get(i)
         consumida = z.dir == 1 ? low <= z.suelo : high >= z.techo
-        invertida = z.dir == 1 ? (open >= z.techo and close < z.suelo) : (open <= z.suelo and close > z.techo)
+        // Solo FVG intactos: si ya se había mitigado en parte (tiene zona gris), no puede pasar a IFVG
+        intacta = na(z.borde)
+        invertida = intacta and (z.dir == 1 ? (open >= z.techo and close < z.suelo) : (open <= z.suelo and close > z.techo))
         if invertida
             borrar_zona(z)
             zonas.remove(i)
