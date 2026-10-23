@@ -916,10 +916,23 @@ borrar_zona(Zona z) =>
         z.gris.delete()
 
 // IFVG: una sola vela atraviesa el FVG entero (abre a un lado y cierra al otro).
-// El FVG se sustituye por una caja IFVG del mismo tamaño, que termina en la vela que lo invierte
-// (no se alarga hacia la derecha).
+// El FVG se sustituye por una caja IFVG del mismo tamaño que sigue vigente (se alarga) hasta
+// que el precio vuelve a cubrirla entera en la dirección contraria:
+//  - IFVG alcista (soporte, viene de un FVG bajista): desaparece cuando una mecha llega a su suelo.
+//  - IFVG bajista (resistencia, viene de un FVG alcista): desaparece cuando una mecha llega a su techo.
+var ifvgs = array.new<Zona>()
 nuevo_ifvg_alc = false
 nuevo_ifvg_baj = false
+if cerrada and ifvgs.size() > 0
+    for i = ifvgs.size() - 1 to 0
+        f = ifvgs.get(i)
+        cubierta = f.dir == 1 ? low <= f.suelo : high >= f.techo
+        if cubierta
+            f.bx.delete()
+            ifvgs.remove(i)
+        else
+            f.bx.set_right(bar_index + 1)
+
 if cerrada and zonas.size() > 0
     for i = zonas.size() - 1 to 0
         z = zonas.get(i)
@@ -934,8 +947,11 @@ if cerrada and zonas.size() > 0
                 nuevo_ifvg_baj := true
             else
                 nuevo_ifvg_alc := true
-            // La caja IFVG cubre todo el FVG original: desde su primera vela hasta la vela que lo invierte
-            box.new(na(z.izq) ? bar_index - 1 : z.izq, z.techo, bar_index + 1, z.suelo, border_color=col_ifvg, border_width=1, bgcolor=color.new(col_ifvg, 75), text="IFVG", text_size=size.tiny, text_color=color.new(col_ifvg, 0), text_halign=text.align_right)
+            // La caja IFVG cubre todo el FVG original y desde aquí se alarga mientras siga vigente
+            bi = box.new(na(z.izq) ? bar_index - 1 : z.izq, z.techo, bar_index + 1, z.suelo, border_color=col_ifvg, border_width=1, bgcolor=color.new(col_ifvg, 75), text="IFVG", text_size=size.tiny, text_color=color.new(col_ifvg, 0), text_halign=text.align_right)
+            ifvgs.push(Zona.new(bi, z.techo, z.suelo, -z.dir))
+            if ifvgs.size() > max_zonas
+                ifvgs.shift().bx.delete()
         else if consumida
             // Consumida del todo: desaparece
             borrar_zona(z)
