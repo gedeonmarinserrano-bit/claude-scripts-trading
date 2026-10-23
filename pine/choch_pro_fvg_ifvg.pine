@@ -26,10 +26,10 @@ mostrar_fvg     = input.bool(true, "Mostrar FVG", group="FVG")
 fvg_min_pct     = input.float(0.0, "Tamaño mínimo FVG (% precio)", minval=0, step=0.05, group="FVG")
 max_zonas       = input.int(50, "Máx. zonas vigiladas", minval=1, maxval=250, group="FVG")
 // Parte consumida: cuanto más baja la temporalidad, más oscuro el gris (igual en cualquier gráfico)
-color_consumido = input.color(color.new(#303030, 45), "Parte consumida · temporalidad del gráfico (FVG, IFVG, OB)", group="FVG")
-color_cons_m15  = input.color(color.new(#5F5F5F, 55), "Parte consumida · FVG M15", group="FVG")
-color_cons_h1   = input.color(color.new(#8F8F8F, 62), "Parte consumida · FVG H1", group="FVG")
-color_cons_h4   = input.color(color.new(#C2C2C2, 65), "Parte consumida · FVG H4", group="FVG")
+color_consumido = input.color(color.new(#303030, 65), "Parte consumida · temporalidad del gráfico (FVG, IFVG, OB)", group="FVG")
+color_cons_m15  = input.color(color.new(#5F5F5F, 72), "Parte consumida · FVG M15", group="FVG")
+color_cons_h1   = input.color(color.new(#8F8F8F, 78), "Parte consumida · FVG H1", group="FVG")
+color_cons_h4   = input.color(color.new(#C2C2C2, 82), "Parte consumida · FVG H4", group="FVG")
 
 // Estrategia apertura de Nueva York (Bias + PO3)
 // Order Blocks: la última vela contraria antes del impulso que rompe estructura (CHoCH o BOS)
@@ -198,7 +198,7 @@ bullish_input     = input.color(#00A651, 'Bullish Color', group = group_visual)
 bearish_input     = input.color(#E4002B, 'Bearish Color', group = group_visual)
 range_input       = input.color(#F9A825, 'Range Color', group = group_visual)
 gradient_steps    = input.int(4, 'Gradient Steps', minval = 1, maxval = 10, group = group_visual)
-fill_transparency = input.int(88, 'Fill Transparency', minval = 50, maxval = 100, group = group_visual)
+fill_transparency = input.int(93, 'Fill Transparency', minval = 50, maxval = 100, group = group_visual)
 show_equilibrium  = input.bool(true, 'Show Equilibrium Line', group = group_visual)
 show_quartiles    = input.bool(true, 'Show Quartile Levels', group = group_visual)
 show_range_label  = input.bool(true, 'Show Range Labels', group = group_visual)
@@ -1217,7 +1217,7 @@ dibujar_lista(array<Zona> arr, color c_alc, color c_baj, int transp, string txt,
             z = arr.get(i)
             c = z.dir == 1 ? c_alc : c_baj
             t = flecha ? txt + (z.dir == 1 ? " ▲" : " ▼") : txt
-            dibujar_zona(z.x1, bar_index + 1, z.techo, z.suelo, z.dir, z.borde, color.new(c, transp), t, c, mitad ? color.new(c, 25) : na, colgris, fondo)
+            dibujar_zona(z.x1, bar_index + 1, z.techo, z.suelo, z.dir, z.borde, color.new(c, transp), t, c, mitad ? color.new(c, 55) : na, colgris, fondo)
 
 if barstate.islast
     for b in dib_cajas
@@ -1232,16 +1232,16 @@ if barstate.islast
     letreros.clear()
     ocupado.clear()
     // Solo se muestran zonas de la temporalidad del gráfico y de las superiores (M15, H1 y H4)
-    dibujar_lista(ifvgs, col_ifvg, col_ifvg, 75, "IFVG " + tf_graf, true, false, color_consumido, false)
+    dibujar_lista(ifvgs, col_ifvg, col_ifvg, 88, "IFVG " + tf_graf, true, false, color_consumido, false)
     if mostrar_fvg
-        dibujar_lista(zonas, fvg_alc_0, fvg_baj_0, 70, "FVG " + tf_graf, true, false, color_consumido, true)
-    dibujar_lista(obs, col_ob_alc, col_ob_baj, 82, "OB " + tf_graf, true, false, color_consumido, false)
-    dibujar_lista(ifvg15, col_ifvg, col_ifvg, 78, "IFVG M15", true, false, color_cons_m15, false)
-    dibujar_lista(fvg15, fvg_alc_15, fvg_baj_15, 70, "FVG M15", true, true, color_cons_m15, true)
-    dibujar_lista(ifvg60, col_ifvg, col_ifvg, 78, "IFVG H1", true, false, color_cons_h1, false)
-    dibujar_lista(fvg60, fvg_alc_60, fvg_baj_60, 70, "FVG H1", true, true, color_cons_h1, true)
-    dibujar_lista(ifvg240, col_ifvg, col_ifvg, 78, "IFVG H4", true, false, color_cons_h4, false)
-    dibujar_lista(fvg240, fvg_alc_240, fvg_baj_240, 70, "FVG H4", true, true, color_cons_h4, true)
+        dibujar_lista(zonas, fvg_alc_0, fvg_baj_0, 85, "FVG " + tf_graf, true, false, color_consumido, true)
+    dibujar_lista(obs, col_ob_alc, col_ob_baj, 90, "OB " + tf_graf, true, false, color_consumido, false)
+    dibujar_lista(ifvg15, col_ifvg, col_ifvg, 88, "IFVG M15", true, false, color_cons_m15, false)
+    dibujar_lista(fvg15, fvg_alc_15, fvg_baj_15, 85, "FVG M15", true, true, color_cons_m15, true)
+    dibujar_lista(ifvg60, col_ifvg, col_ifvg, 88, "IFVG H1", true, false, color_cons_h1, false)
+    dibujar_lista(fvg60, fvg_alc_60, fvg_baj_60, 85, "FVG H1", true, true, color_cons_h1, true)
+    dibujar_lista(ifvg240, col_ifvg, col_ifvg, 88, "IFVG H4", true, false, color_cons_h4, false)
+    dibujar_lista(fvg240, fvg_alc_240, fvg_baj_240, 85, "FVG H4", true, true, color_cons_h4, true)
     if sin_solape
         if range_active and not na(range_left)
             dibujar_zona(range_left, bar_index + 1, range_top, range_bottom, 0, na, color.new(range_fill_color, fill_transparency), "", na, na, na, false)
@@ -1270,7 +1270,7 @@ if barstate.islast
                     break
             colocados.push(Letrero.new(l.x, y, l.txt, l.col, l.derecha, l.fondo))
             // FVG: letrero en blanco sobre el color de su zona; IFVG y OB: texto de color sin fondo
-            dib_letreros.push(label.new(l.x, y, l.txt, style=l.derecha ? label.style_label_right : label.style_label_left, color=l.fondo ? l.col : color.new(color.white, 100), textcolor=l.fondo ? color.white : l.col, size=size.tiny))
+            dib_letreros.push(label.new(l.x, y, l.txt, style=l.derecha ? label.style_label_right : label.style_label_left, color=l.fondo ? color.new(l.col, 45) : color.new(color.white, 100), textcolor=l.fondo ? color.new(color.white, 10) : color.new(l.col, 35), size=size.tiny))
 
 // ─────────────────────────────
 // ALERTAS
