@@ -80,8 +80,7 @@ color_fallido   = input.color(color.gray, "Color CHoCH fallido", group="CHoCH fa
 g_col           = "Colores"
 color_alcista   = input.color(#00A651, "Estructura y FVG alcista (verde)", group=g_col)
 color_bajista   = input.color(#E4002B, "Estructura y FVG bajista (rojo)", group=g_col)
-pintar_velas    = input.bool(true, "Pintar las velas de FVG, IFVG y OB", group=g_col)
-col_vela_fvg    = input.color(#FFC400, "Vela que crea un FVG (oro)", group=g_col)
+pintar_velas    = input.bool(true, "Marcar la vela del OB", group=g_col)
 col_ifvg        = input.color(#FF00C8, "IFVG (magenta)", group=g_col)
 
 // Zonas FVG (se declaran aquí porque el riesgo del CHoCH las consulta)
@@ -916,7 +915,7 @@ borrar_zona(Zona z) =>
         z.gris.delete()
 
 // IFVG: una sola vela atraviesa el FVG entero (abre a un lado y cierra al otro).
-// No se dibuja una zona larga: solo una marca corta pegada a esa vela y la vela pintada.
+// No se dibuja una zona larga: solo una caja corta pegada a esa vela.
 nuevo_ifvg_alc = false
 nuevo_ifvg_baj = false
 if cerrada and zonas.size() > 0
@@ -974,10 +973,6 @@ if fvg_alcista
     agregar_fvg(low, high[2], 1)
 else if fvg_bajista
     agregar_fvg(low[2], high, -1)
-
-// Velas pintadas: la vela central de cada FVG (la del desplazamiento) y la vela del IFVG
-barcolor(pintar_velas and (fvg_alcista or fvg_bajista) ? col_vela_fvg : na, offset=-1, title="Vela FVG")
-barcolor(pintar_velas and (nuevo_ifvg_alc or nuevo_ifvg_baj) ? col_ifvg : na, title="Vela IFVG")
 
 // ─────────────────────────────
 // ESTRATEGIA NY (Bias + PO3)
