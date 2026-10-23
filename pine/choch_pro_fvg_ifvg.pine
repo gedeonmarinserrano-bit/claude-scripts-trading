@@ -1133,17 +1133,24 @@ recortar(Pieza p) =>
 
 pintar_parte(Pieza p, color col, string txt, color coltxt) =>
     partes = recortar(p)
-    // El texto va en el trozo más ancho
-    int mejor = -1
-    int ancho = 0
+    // El letrero (p. ej. «FVG M15 ▲») va al principio (trozo más a la izquierda, alineado a la
+    // izquierda) y al final (trozo más a la derecha, alineado a la derecha) de la zona
+    int izq = -1
+    int der = -1
     for [i, q] in partes
-        if q.x2 - q.x1 > ancho
-            ancho := q.x2 - q.x1
-            mejor := i
+        if q.x2 > q.x1 and q.top > q.bot
+            if izq == -1 or q.x1 < partes.get(izq).x1
+                izq := i
+            if der == -1 or q.x2 > partes.get(der).x2
+                der := i
     for [i, q] in partes
         // Tope de cajas para no superar el límite de TradingView (500): se dibujan antes las de más prioridad
         if q.x2 > q.x1 and q.top > q.bot and dib_cajas.size() < 440
-            dib_cajas.push(box.new(q.x1, q.top, q.x2, q.bot, border_color=na, bgcolor=col, text=i == mejor ? txt : "", text_size=size.tiny, text_color=coltxt, text_halign=text.align_right))
+            t_izq = i == izq ? txt : ""
+            dib_cajas.push(box.new(q.x1, q.top, q.x2, q.bot, border_color=na, bgcolor=col, text=t_izq, text_size=size.tiny, text_color=coltxt, text_halign=text.align_left))
+            if i == der and txt != ""
+                // Segundo letrero al final, en una caja sin relleno encima del mismo trozo
+                dib_cajas.push(box.new(q.x1, q.top, q.x2, q.bot, border_color=na, bgcolor=na, text=txt, text_size=size.tiny, text_color=coltxt, text_halign=text.align_right))
 
 dibujar_zona(int x1, int x2, float techo, float suelo, int dir, float borde, color col, string txt, color coltxt, color colmitad, color colgris) =>
     // Parte aún sin tocar (con su color) y parte consumida (gris)
