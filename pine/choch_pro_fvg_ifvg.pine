@@ -1285,13 +1285,14 @@ if barstate.islast
     dib_letreros.clear()
     letreros.clear()
     ocupado.clear()
-    // Solo llevan letrero las zonas de temporalidades superiores (M15, H1 y H4)
+    // Llevan letrero las zonas de la temporalidad del gráfico y de las superiores (M15, H1 y H4);
+    // las de temporalidad más baja (M1) van sin letrero
     dibujar_lista(ifvg1, col_ifvg, col_ifvg, 78, "", false, false, color_cons_m1)
     dibujar_lista(fvg1, col_fvg1, col_fvg1, 70, "", false, false, color_cons_m1)
-    dibujar_lista(ifvgs, col_ifvg, col_ifvg, 75, "", false, false, color_consumido)
+    dibujar_lista(ifvgs, col_ifvg, col_ifvg, 75, "IFVG " + tf_graf, true, false, color_consumido)
     if mostrar_fvg
-        dibujar_lista(zonas, color_alcista, color_bajista, 82, "", false, false, color_consumido)
-    dibujar_lista(obs, col_ob_alc, col_ob_baj, 82, "", false, false, color_consumido)
+        dibujar_lista(zonas, color_alcista, color_bajista, 82, "FVG " + tf_graf, true, false, color_consumido)
+    dibujar_lista(obs, col_ob_alc, col_ob_baj, 82, "OB " + tf_graf, true, false, color_consumido)
     dibujar_lista(ifvg15, col_ifvg, col_ifvg, 78, "IFVG M15", true, false, color_cons_m15)
     dibujar_lista(fvg15, col_fvg15, col_fvg15, 85, "FVG M15", true, true, color_cons_m15)
     dibujar_lista(ifvg60, col_ifvg, col_ifvg, 78, "IFVG H1", true, false, color_cons_h1)
