@@ -166,7 +166,7 @@ max_range_age     = input.int(0, 'Max Range Age', minval = 0, maxval = 2000, gro
 color_preset      = input.string('Custom', 'Color Preset', options = ['Classic', 'Aqua', 'Cosmic', 'Cyber', 'Neon', 'Custom'], group = group_visual)
 bullish_input     = input.color(#00A651, 'Bullish Color', group = group_visual)
 bearish_input     = input.color(#E4002B, 'Bearish Color', group = group_visual)
-range_input       = input.color(color.gray, 'Range Color', group = group_visual)
+range_input       = input.color(#F9A825, 'Range Color', group = group_visual)
 gradient_steps    = input.int(4, 'Gradient Steps', minval = 1, maxval = 10, group = group_visual)
 fill_transparency = input.int(88, 'Fill Transparency', minval = 50, maxval = 100, group = group_visual)
 show_equilibrium  = input.bool(true, 'Show Equilibrium Line', group = group_visual)
