@@ -419,13 +419,13 @@ if bar_ready and not range_active and not range_dormant and cooldown_left <= 0 a
     midpoint         = math.avg(range_top, range_bottom)
     quartile_low     = range_bottom + (range_top - range_bottom) * 0.25
     quartile_high    = range_bottom + (range_top - range_bottom) * 0.75
-    range_box       := box.new(range_left, range_top, bar_index, range_bottom, border_color = color.new(range_line_color, 65), border_width = 1, border_style = line.style_dashed, bgcolor = na, xloc = xloc.bar_index)
+    range_box       := box.new(range_left, range_top, bar_index, range_bottom, border_color = color.new(color.gray, 65), border_width = 1, border_style = line.style_dashed, bgcolor = na, xloc = xloc.bar_index)
     buildShade(shade_boxes, range_left, range_top, range_bottom)
     if show_equilibrium
-        equilibrium_line := line.new(range_left, midpoint, bar_index, midpoint, xloc.bar_index, extend.none, color.new(range_line_color, 25), line.style_dotted, 1)
+        equilibrium_line := line.new(range_left, midpoint, bar_index, midpoint, xloc.bar_index, extend.none, color.new(color.gray, 45), line.style_dotted, 1)
     if show_quartiles
-        lower_quartile := line.new(range_left, quartile_low, bar_index, quartile_low, xloc.bar_index, extend.none, color.new(range_line_color, 70), line.style_dotted, 1)
-        upper_quartile := line.new(range_left, quartile_high, bar_index, quartile_high, xloc.bar_index, extend.none, color.new(range_line_color, 70), line.style_dotted, 1)
+        lower_quartile := line.new(range_left, quartile_low, bar_index, quartile_low, xloc.bar_index, extend.none, color.new(color.gray, 70), line.style_dotted, 1)
+        upper_quartile := line.new(range_left, quartile_high, bar_index, quartile_high, xloc.bar_index, extend.none, color.new(color.gray, 70), line.style_dotted, 1)
     if show_range_label
         range_tag := label.new(range_left, range_top, '', xloc = xloc.bar_index, yloc = yloc.price, color = transparent_fill, style = label.style_label_down, textcolor = color.new(range_line_color, 10), size = label_size)
     signal_new_range := true
@@ -527,8 +527,8 @@ if range_dormant and bar_ready
         label.delete(break_marker)
         break_marker := na
         if not na(range_box)
-            box.set_border_color(range_box, color.new(range_line_color, 35))
-            paintShade(shade_boxes, range_top, range_bottom, range_left, bar_index, range_fill_color)
+            box.set_border_color(range_box, color.new(color.gray, 60))
+            paintShade(shade_boxes, range_top, range_bottom, range_left, bar_index, na)
         if not na(range_tag)
             label.set_textcolor(range_tag, color.new(range_line_color, 10))
         range_active     := true
@@ -558,9 +558,10 @@ if range_active
     quartile_high = range_bottom + (range_top - range_bottom) * 0.75
     box.set_lefttop(range_box, range_left, range_top)
     box.set_rightbottom(range_box, bar_index, range_bottom)
-    box.set_border_color(range_box, color.new(range_line_color, range_confirmed ? 35 : 65))
+    box.set_border_color(range_box, color.new(color.gray, range_confirmed ? 60 : 75))
     box.set_border_style(range_box, range_confirmed ? line.style_solid : line.style_dashed)
-    paintShade(shade_boxes, range_top, range_bottom, range_left, bar_index, range_fill_color)
+    // Sin fondo: el rango solo se distingue por su borde gris y el color de su letrero
+    paintShade(shade_boxes, range_top, range_bottom, range_left, bar_index, na)
     if not na(equilibrium_line)
         line.set_xy1(equilibrium_line, range_left, midpoint)
         line.set_xy2(equilibrium_line, bar_index, midpoint)
@@ -1247,9 +1248,6 @@ if barstate.islast
     dibujar_lista(fvg60, fvg_alc_60, fvg_baj_60, 82, "FVG H1", true, true, color_cons_h1, true)
     dibujar_lista(ifvg240, col_ifvg, col_ifvg, 88, "IFVG H4", true, false, color_cons_h4, false)
     dibujar_lista(fvg240, fvg_alc_240, fvg_baj_240, 80, "FVG H4", true, true, color_cons_h4, true)
-    if sin_solape
-        if range_active and not na(range_left)
-            dibujar_zona(range_left, bar_index + 1, range_top, range_bottom, 0, na, color.new(range_fill_color, fill_transparency), "", na, na, na, false)
     // Colocar los letreros de arriba abajo. Si uno queda demasiado cerca de otro ya colocado del mismo
     // lado y a pocas velas, se baja lo justo para que no se monten (queda junto a su zona).
     if letreros.size() > 0
