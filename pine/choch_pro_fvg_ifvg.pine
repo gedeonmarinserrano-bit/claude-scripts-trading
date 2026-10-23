@@ -1099,6 +1099,23 @@ type Pieza
 
 var array<box>   dib_cajas  = array.new<box>()
 var array<line>  dib_lineas = array.new<line>()
+var array<label> dib_letreros = array.new<label>()
+
+// Temporalidad del gráfico en el mismo formato que los letreros de M15, H1 y H4 (M5, M15, H1, D…)
+tf_nombre() =>
+    string r = timeframe.period
+    if timeframe.isseconds
+        r := "S" + str.tostring(timeframe.multiplier)
+    else if timeframe.isminutes
+        r := timeframe.multiplier % 60 == 0 ? "H" + str.tostring(timeframe.multiplier / 60) : "M" + str.tostring(timeframe.multiplier)
+    else if timeframe.isdaily
+        r := timeframe.multiplier == 1 ? "D" : str.tostring(timeframe.multiplier) + "D"
+    else if timeframe.isweekly
+        r := timeframe.multiplier == 1 ? "W" : str.tostring(timeframe.multiplier) + "W"
+    else if timeframe.ismonthly
+        r := timeframe.multiplier == 1 ? "MN" : str.tostring(timeframe.multiplier) + "MN"
+    r
+tf_graf = tf_nombre()
 var array<Pieza> ocupado    = array.new<Pieza>()
 
 // Rectángulo p menos el rectángulo o: hasta 4 trozos (izquierda, derecha, arriba y abajo)
@@ -1131,34 +1148,26 @@ recortar(Pieza p) =>
             res := nuevo
     res
 
-pintar_parte(Pieza p, color col, string txt, color coltxt) =>
-    partes = recortar(p)
-    // El letrero (p. ej. «FVG M15 ▲») va al principio (trozo más a la izquierda, alineado a la
-    // izquierda) y al final (trozo más a la derecha, alineado a la derecha) de la zona
-    int izq = -1
-    int der = -1
-    for [i, q] in partes
-        if q.x2 > q.x1 and q.top > q.bot
-            if izq == -1 or q.x1 < partes.get(izq).x1
-                izq := i
-            if der == -1 or q.x2 > partes.get(der).x2
-                der := i
-    for [i, q] in partes
+pintar_parte(Pieza p, color col) =>
+    for q in recortar(p)
         // Tope de cajas para no superar el límite de TradingView (500): se dibujan antes las de más prioridad
         if q.x2 > q.x1 and q.top > q.bot and dib_cajas.size() < 440
-            t_izq = i == izq ? txt : ""
-            dib_cajas.push(box.new(q.x1, q.top, q.x2, q.bot, border_color=na, bgcolor=col, text=t_izq, text_size=size.tiny, text_color=coltxt, text_halign=text.align_left))
-            if i == der and txt != ""
-                // Segundo letrero al final, en una caja sin relleno encima del mismo trozo
-                dib_cajas.push(box.new(q.x1, q.top, q.x2, q.bot, border_color=na, bgcolor=na, text=txt, text_size=size.tiny, text_color=coltxt, text_halign=text.align_right))
+            dib_cajas.push(box.new(q.x1, q.top, q.x2, q.bot, border_color=na, bgcolor=col))
 
 dibujar_zona(int x1, int x2, float techo, float suelo, int dir, float borde, color col, string txt, color coltxt, color colmitad, color colgris) =>
     // Parte aún sin tocar (con su color) y parte consumida (gris)
     ctop = na(borde) ? techo : (dir == 1 ? borde : techo)
     cbot = na(borde) ? suelo : (dir == 1 ? suelo : borde)
-    pintar_parte(Pieza.new(x1, x2, ctop, cbot), col, txt, coltxt)
+    pintar_parte(Pieza.new(x1, x2, ctop, cbot), col)
     if not na(borde)
-        pintar_parte(Pieza.new(x1, x2, dir == 1 ? techo : borde, dir == 1 ? borde : suelo), colgris, "", na)
+        pintar_parte(Pieza.new(x1, x2, dir == 1 ? techo : borde, dir == 1 ? borde : suelo), colgris)
+    // Letreros: uno al principio y otro al final de la zona, a la altura de la parte sin tocar.
+    // Si la zona es muy estrecha (menos de 8 velas) solo se pone el del principio, para que no se monten.
+    if txt != "" and dib_letreros.size() < 200
+        y = (ctop + cbot) / 2
+        dib_letreros.push(label.new(x1, y, txt, style=label.style_label_left, color=color.new(color.white, 100), textcolor=coltxt, size=size.tiny))
+        if x2 - x1 >= 8
+            dib_letreros.push(label.new(x2, y, txt, style=label.style_label_right, color=color.new(color.white, 100), textcolor=coltxt, size=size.tiny))
     // Línea del 50% (FVG de M15, H1 y H4), también recortada
     if not na(colmitad)
         m = (techo + suelo) / 2
@@ -1182,11 +1191,14 @@ if barstate.islast
     for l in dib_lineas
         l.delete()
     dib_lineas.clear()
+    for e in dib_letreros
+        e.delete()
+    dib_letreros.clear()
     ocupado.clear()
-    dibujar_lista(ifvgs, col_ifvg, col_ifvg, 75, "IFVG", false, false, color_consumido)
+    dibujar_lista(ifvgs, col_ifvg, col_ifvg, 75, "IFVG " + tf_graf, true, false, color_consumido)
     if mostrar_fvg
-        dibujar_lista(zonas, color_alcista, color_bajista, 82, "FVG", false, false, color_consumido)
-    dibujar_lista(obs, col_ob_alc, col_ob_baj, 82, "OB", true, false, color_consumido)
+        dibujar_lista(zonas, color_alcista, color_bajista, 82, "FVG " + tf_graf, true, false, color_consumido)
+    dibujar_lista(obs, col_ob_alc, col_ob_baj, 82, "OB " + tf_graf, true, false, color_consumido)
     dibujar_lista(fvg15, col_fvg15, col_fvg15, 85, "FVG M15", true, true, color_cons_m15)
     dibujar_lista(fvg60, col_fvg60, col_fvg60, 85, "FVG H1", true, true, color_cons_h1)
     dibujar_lista(fvg240, col_fvg240, col_fvg240, 85, "FVG H4", true, true, color_cons_h4)
