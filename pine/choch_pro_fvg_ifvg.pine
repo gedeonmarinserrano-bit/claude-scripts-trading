@@ -916,10 +916,11 @@ borrar_zona(Zona z) =>
         z.gris.delete()
 
 // IFVG: una sola vela atraviesa el FVG entero (abre a un lado y cierra al otro).
-// El FVG se sustituye por una caja IFVG del mismo tamaño que sigue vigente (se alarga) hasta
-// que el precio vuelve a cubrirla entera en la dirección contraria:
-//  - IFVG alcista (soporte, viene de un FVG bajista): desaparece cuando una mecha llega a su suelo.
-//  - IFVG bajista (resistencia, viene de un FVG alcista): desaparece cuando una mecha llega a su techo.
+// El FVG se sustituye por una caja IFVG del mismo tamaño que sigue vigente (se alarga) y se
+// consume por partes como el resto de zonas, hasta que el precio la cubre entera en dirección contraria:
+//  - IFVG alcista (soporte, viene de un FVG bajista): se consume desde el techo hacia abajo.
+//  - IFVG bajista (resistencia, viene de un FVG alcista): se consume desde el suelo hacia arriba.
+// La parte tocada queda en gris translúcido y, cuando la mecha llega al otro extremo, desaparece.
 var ifvgs = array.new<Zona>()
 nuevo_ifvg_alc = false
 nuevo_ifvg_baj = false
@@ -928,10 +929,30 @@ if cerrada and ifvgs.size() > 0
         f = ifvgs.get(i)
         cubierta = f.dir == 1 ? low <= f.suelo : high >= f.techo
         if cubierta
-            f.bx.delete()
+            borrar_zona(f)
             ifvgs.remove(i)
         else
+            borde = na(f.borde) ? (f.dir == 1 ? f.techo : f.suelo) : f.borde
+            tocada = f.dir == 1 ? low < borde : high > borde
+            if tocada
+                borde := f.dir == 1 ? low : high
+                f.borde := borde
+                izq = f.bx.get_left()
+                if f.dir == 1
+                    f.bx.set_top(borde)
+                    if na(f.gris)
+                        f.gris := box.new(izq, f.techo, bar_index + 1, borde, border_color=na, bgcolor=color_consumido)
+                    else
+                        f.gris.set_bottom(borde)
+                else
+                    f.bx.set_bottom(borde)
+                    if na(f.gris)
+                        f.gris := box.new(izq, borde, bar_index + 1, f.suelo, border_color=na, bgcolor=color_consumido)
+                    else
+                        f.gris.set_top(borde)
             f.bx.set_right(bar_index + 1)
+            if not na(f.gris)
+                f.gris.set_right(bar_index + 1)
 
 if cerrada and zonas.size() > 0
     for i = zonas.size() - 1 to 0
@@ -951,7 +972,7 @@ if cerrada and zonas.size() > 0
             bi = box.new(na(z.izq) ? bar_index - 1 : z.izq, z.techo, bar_index + 1, z.suelo, border_color=col_ifvg, border_width=1, bgcolor=color.new(col_ifvg, 75), text="IFVG", text_size=size.tiny, text_color=color.new(col_ifvg, 0), text_halign=text.align_right)
             ifvgs.push(Zona.new(bi, z.techo, z.suelo, -z.dir))
             if ifvgs.size() > max_zonas
-                ifvgs.shift().bx.delete()
+                borrar_zona(ifvgs.shift())
         else if consumida
             // Consumida del todo: desaparece
             borrar_zona(z)
