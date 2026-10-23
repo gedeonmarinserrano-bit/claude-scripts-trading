@@ -35,8 +35,8 @@ ob_solo_choch   = input.bool(false, "Solo los que originan un CHoCH (no los de B
 ob_cuerpo       = input.bool(false, "Usar solo el cuerpo de la vela (sin mechas)", group=g_ob)
 max_ob          = input.int(10, "Máx. Order Blocks vigentes", minval=1, maxval=50, group=g_ob)
 ob_imb_velas    = input.int(1, "El imbalance (FVG) debe empezar en las N velas siguientes al OB", minval=1, maxval=5, group=g_ob)
-col_ob_alc      = input.color(#2563eb, "OB alcista (demanda)", group=g_ob)
-col_ob_baj      = input.color(#f97316, "OB bajista (oferta)", group=g_ob)
+col_ob_alc      = input.color(#1565C0, "OB alcista (demanda)", group=g_ob)
+col_ob_baj      = input.color(#EF6C00, "OB bajista (oferta)", group=g_ob)
 
 g_ny            = "Estrategia NY (Bias + PO3)"
 mostrar_horas   = input.bool(true, "Marcar horas 15:00 / 15:30 / 15:45 / 16:00 (Madrid)", group=g_ny)
@@ -44,9 +44,9 @@ mostrar_fvg15   = input.bool(true, "FVG de M15 (con línea del 50%)", group=g_ny
 mostrar_fvg60   = input.bool(true, "FVG de H1 (con línea del 50%)", group=g_ny)
 mostrar_fvg240  = input.bool(true, "FVG de H4 (con línea del 50%)", group=g_ny)
 max_htf         = input.int(10, "Máx. FVG M15/H1 por temporalidad", minval=1, maxval=50, group=g_ny)
-col_fvg15       = input.color(#9c27b0, "Color FVG M15", group=g_ny)
-col_fvg60       = input.color(#1e88e5, "Color FVG H1", group=g_ny)
-col_fvg240      = input.color(#0f766e, "Color FVG H4", group=g_ny)
+col_fvg15       = input.color(#8E24AA, "Color FVG M15", group=g_ny)
+col_fvg60       = input.color(#00ACC1, "Color FVG H1", group=g_ny)
+col_fvg240      = input.color(#6D4C41, "Color FVG H4", group=g_ny)
 mostrar_niv_h4  = input.bool(true, "Niveles clave: altos/bajos relevantes de H4", group=g_ny)
 piv_h4_len      = input.int(3, "Sensibilidad altos/bajos H4", minval=1, maxval=10, group=g_ny)
 max_niv_h4      = input.int(6, "Máx. niveles H4 vigentes", minval=1, maxval=20, group=g_ny)
@@ -58,8 +58,8 @@ mostrar_emas = input.bool(true, "Mostrar EMAs", group="EMAs")
 ema_rap_len  = input.int(9, "EMA rápida", minval=1, group="EMAs")
 ema_med_len  = input.int(20, "EMA media", minval=1, group="EMAs")
 ema_len_len  = input.int(200, "EMA lenta", minval=1, group="EMAs")
-ema_rap_col  = input.color(#2962ff, "Color EMA rápida", group="EMAs")
-ema_med_col  = input.color(#ff6d00, "Color EMA media", group="EMAs")
+ema_rap_col  = input.color(#546E7A, "Color EMA rápida", group="EMAs")
+ema_med_col  = input.color(#9E9D24, "Color EMA media", group="EMAs")
 ema_len_col  = input.color(color.black, "Color EMA lenta", group="EMAs")
 
 // CHoCH fallido: la vela siguiente cierra de nuevo al otro lado del nivel roto
@@ -76,9 +76,13 @@ cuerpo_pct      = input.float(30, "Cuerpo pequeño < (% del rango)", minval=0, m
 zona_atr        = input.float(1.0, "FVG contrario a < (× ATR)", minval=0, step=0.1, group="CHoCH fallido / riesgo")
 color_fallido   = input.color(color.gray, "Color CHoCH fallido", group="CHoCH fallido / riesgo")
 
-// Colores Sólidos Neón
-color_alcista = #00ffbb
-color_bajista = #ff0055
+// Paleta: cada tipo de elemento tiene un tono propio y separado de los demás
+g_col           = "Colores"
+color_alcista   = input.color(#00A651, "Estructura y FVG alcista (verde)", group=g_col)
+color_bajista   = input.color(#E4002B, "Estructura y FVG bajista (rojo)", group=g_col)
+pintar_velas    = input.bool(true, "Pintar las velas de FVG, IFVG y OB", group=g_col)
+col_vela_fvg    = input.color(#FFC400, "Vela que crea un FVG (oro)", group=g_col)
+col_ifvg        = input.color(#FF00C8, "IFVG (magenta)", group=g_col)
 
 // Zonas FVG (se declaran aquí porque el riesgo del CHoCH las consulta)
 type Zona
@@ -160,8 +164,8 @@ cooldown_bars     = input.int(3, 'Cooldown Bars', minval = 0, maxval = 100, grou
 max_range_age     = input.int(0, 'Max Range Age', minval = 0, maxval = 2000, group = group_range)
 
 color_preset      = input.string('Custom', 'Color Preset', options = ['Classic', 'Aqua', 'Cosmic', 'Cyber', 'Neon', 'Custom'], group = group_visual)
-bullish_input     = input.color(#00ffaa, 'Bullish Color', group = group_visual)
-bearish_input     = input.color(#ff0000, 'Bearish Color', group = group_visual)
+bullish_input     = input.color(#00A651, 'Bullish Color', group = group_visual)
+bearish_input     = input.color(#E4002B, 'Bearish Color', group = group_visual)
 range_input       = input.color(color.gray, 'Range Color', group = group_visual)
 gradient_steps    = input.int(4, 'Gradient Steps', minval = 1, maxval = 10, group = group_visual)
 fill_transparency = input.int(88, 'Fill Transparency', minval = 50, maxval = 100, group = group_visual)
@@ -762,6 +766,9 @@ crear_caja_ob(int dir, int idx) =>
     suelo = ob_cuerpo ? math.min(open[idx], close[idx]) : low[idx]
     col = dir == 1 ? col_ob_alc : col_ob_baj
     b = box.new(bar_index - idx, techo, bar_index + 1, suelo, border_color=color.new(col, 40), bgcolor=color.new(col, 82), text=dir == 1 ? "OB ▲" : "OB ▼", text_size=size.tiny, text_color=color.new(col, 10), text_halign=text.align_left, text_valign=dir == 1 ? text.align_bottom : text.align_top)
+    if pintar_velas
+        // La vela del OB queda pintada con su color (no se puede recolorear una vela pasada con barcolor)
+        line.new(bar_index - idx, high[idx], bar_index - idx, low[idx], color=color.new(col, 10), width=5)
     obs.push(OrderBlock.new(b, techo, suelo, dir, na, na, bar_index))
     if obs.size() > max_ob
         viejo = obs.shift()
@@ -908,11 +915,24 @@ borrar_zona(Zona z) =>
     if not na(z.gris)
         z.gris.delete()
 
+// IFVG: una sola vela atraviesa el FVG entero (abre a un lado y cierra al otro).
+// No se dibuja una zona larga: solo una marca corta pegada a esa vela y la vela pintada.
+nuevo_ifvg_alc = false
+nuevo_ifvg_baj = false
 if cerrada and zonas.size() > 0
     for i = zonas.size() - 1 to 0
         z = zonas.get(i)
         consumida = z.dir == 1 ? low <= z.suelo : high >= z.techo
-        if consumida
+        invertida = z.dir == 1 ? (open >= z.techo and close < z.suelo) : (open <= z.suelo and close > z.techo)
+        if invertida
+            borrar_zona(z)
+            zonas.remove(i)
+            if z.dir == 1
+                nuevo_ifvg_baj := true
+            else
+                nuevo_ifvg_alc := true
+            box.new(bar_index - 1, z.techo, bar_index + 1, z.suelo, border_color=col_ifvg, border_width=1, bgcolor=color.new(col_ifvg, 75), text="IFVG", text_size=size.tiny, text_color=color.new(col_ifvg, 0), text_halign=text.align_center)
+        else if consumida
             // Consumida del todo: desaparece
             borrar_zona(z)
             zonas.remove(i)
@@ -954,6 +974,10 @@ if fvg_alcista
     agregar_fvg(low, high[2], 1)
 else if fvg_bajista
     agregar_fvg(low[2], high, -1)
+
+// Velas pintadas: la vela central de cada FVG (la del desplazamiento) y la vela del IFVG
+barcolor(pintar_velas and (fvg_alcista or fvg_bajista) ? col_vela_fvg : na, offset=-1, title="Vela FVG")
+barcolor(pintar_velas and (nuevo_ifvg_alc or nuevo_ifvg_baj) ? col_ifvg : na, title="Vela IFVG")
 
 // ─────────────────────────────
 // ESTRATEGIA NY (Bias + PO3)
@@ -1148,6 +1172,8 @@ alertcondition(choch_fallido_alc, "CHoCH alcista fallido (✗)", "CHoCH alcista 
 alertcondition(choch_fallido_baj, "CHoCH bajista fallido (✗)", "CHoCH bajista fallido: posible reversión alcista en {{ticker}} ({{interval}})")
 alertcondition(reactivada_alc, "Tendencia alcista reactivada", "Tendencia alcista reactivada tras CHoCH fallido en {{ticker}} ({{interval}})")
 alertcondition(reactivada_baj, "Tendencia bajista reactivada", "Tendencia bajista reactivada tras CHoCH fallido en {{ticker}} ({{interval}})")
+alertcondition(nuevo_ifvg_alc, "IFVG alcista", "Un FVG bajista se ha invertido (IFVG alcista) en {{ticker}} ({{interval}})")
+alertcondition(nuevo_ifvg_baj, "IFVG bajista", "Un FVG alcista se ha invertido (IFVG bajista) en {{ticker}} ({{interval}})")
 alertcondition(fvg_alcista, "FVG alcista", "Nuevo FVG alcista en {{ticker}} ({{interval}})")
 alertcondition(fvg_bajista, "FVG bajista", "Nuevo FVG bajista en {{ticker}} ({{interval}})")
 alertcondition(signal_new_range,  title = 'Range Detected',     message = 'Auto Range Detector: new RANGE detected on {{exchange}}:{{ticker}} - {{interval}}')
