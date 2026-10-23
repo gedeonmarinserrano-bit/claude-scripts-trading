@@ -105,6 +105,10 @@ var obs    = array.new<Zona>()
 var fvg15  = array.new<Zona>()
 var fvg60  = array.new<Zona>()
 var fvg240 = array.new<Zona>()
+// IFVG que vienen de FVG de M15, H1 y H4
+var ifvg15  = array.new<Zona>()
+var ifvg60  = array.new<Zona>()
+var ifvg240 = array.new<Zona>()
 
 // Rangos ya terminados, para dibujar su sombreado sin solaparse con las zonas
 type Rango
@@ -995,15 +999,27 @@ nueva_htf(array<Zona> arr, float techo, float suelo, int dir, int t_izq) =>
         arr.shift()
 
 // Consumo progresivo igual que el resto de zonas. Devuelve si el precio tocó el 50% de alguna.
-actualizar_htf(array<Zona> arr) =>
+// Misma regla de IFVG que en el gráfico: una sola vela atraviesa entero un FVG intacto (abre a un
+// lado y cierra al otro) y lo convierte en IFVG de su misma temporalidad, que se consume por partes.
+actualizar_htf(array<Zona> arr, array<Zona> arr_ifvg) =>
     toque = false
+    if arr_ifvg.size() > 0
+        for i = arr_ifvg.size() - 1 to 0
+            if consumir(arr_ifvg.get(i))
+                arr_ifvg.remove(i)
     if arr.size() > 0
         for i = arr.size() - 1 to 0
             z = arr.get(i)
             mitad = (z.techo + z.suelo) / 2
             if low <= mitad and high >= mitad
                 toque := true
-            if consumir(z)
+            invertida = na(z.borde) and (z.dir == 1 ? (open >= z.techo and close < z.suelo) : (open <= z.suelo and close > z.techo))
+            if invertida
+                arr.remove(i)
+                arr_ifvg.push(Zona.new(z.x1, z.techo, z.suelo, -z.dir))
+                if arr_ifvg.size() > max_htf
+                    arr_ifvg.shift()
+            else if consumir(z)
                 arr.remove(i)
     toque
 
@@ -1015,21 +1031,21 @@ toque50_h1  = false
 toque50_h4  = false
 if cerrada and timeframe.isintraday
     if mostrar_fvg15 and seg_tf < 900
-        toque50_m15 := actualizar_htf(fvg15)
+        toque50_m15 := actualizar_htf(fvg15, ifvg15)
         if cambio15
             if a15
                 nueva_htf(fvg15, a15_top, a15_bot, 1, t15)
             else if b15
                 nueva_htf(fvg15, b15_top, b15_bot, -1, t15)
     if mostrar_fvg60 and seg_tf < 3600
-        toque50_h1 := actualizar_htf(fvg60)
+        toque50_h1 := actualizar_htf(fvg60, ifvg60)
         if cambio60
             if a60
                 nueva_htf(fvg60, a60_top, a60_bot, 1, t60)
             else if b60
                 nueva_htf(fvg60, b60_top, b60_bot, -1, t60)
     if mostrar_fvg240 and seg_tf < 14400
-        toque50_h4 := actualizar_htf(fvg240)
+        toque50_h4 := actualizar_htf(fvg240, ifvg240)
         if cambio240
             if a240
                 nueva_htf(fvg240, a240_top, a240_bot, 1, t240)
@@ -1212,8 +1228,11 @@ if barstate.islast
     if mostrar_fvg
         dibujar_lista(zonas, color_alcista, color_bajista, 82, "FVG " + tf_graf, true, false, color_consumido)
     dibujar_lista(obs, col_ob_alc, col_ob_baj, 82, "OB " + tf_graf, true, false, color_consumido)
+    dibujar_lista(ifvg15, col_ifvg, col_ifvg, 78, "IFVG M15", true, false, color_cons_m15)
     dibujar_lista(fvg15, col_fvg15, col_fvg15, 85, "FVG M15", true, true, color_cons_m15)
+    dibujar_lista(ifvg60, col_ifvg, col_ifvg, 78, "IFVG H1", true, false, color_cons_h1)
     dibujar_lista(fvg60, col_fvg60, col_fvg60, 85, "FVG H1", true, true, color_cons_h1)
+    dibujar_lista(ifvg240, col_ifvg, col_ifvg, 78, "IFVG H4", true, false, color_cons_h4)
     dibujar_lista(fvg240, col_fvg240, col_fvg240, 85, "FVG H4", true, true, color_cons_h4)
     if sin_solape
         if range_active and not na(range_left)
