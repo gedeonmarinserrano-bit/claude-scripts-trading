@@ -82,29 +82,44 @@ color_alcista   = input.color(#00A651, "Estructura y FVG alcista (verde)", group
 color_bajista   = input.color(#E4002B, "Estructura y FVG bajista (rojo)", group=g_col)
 pintar_velas    = input.bool(true, "Marcar la vela del OB", group=g_col)
 col_ifvg        = input.color(#FF00C8, "IFVG (magenta)", group=g_col)
+sin_solape      = input.bool(true, "Zonas sin solaparse (la más concreta encima, la mayor alrededor)", group=g_col)
 
-// Zonas FVG (se declaran aquí porque el riesgo del CHoCH las consulta)
+// Zonas (FVG, IFVG, OB, FVG M15/H1/H4): aquí solo se guardan los datos. Se dibujan al final,
+// recortadas para que ninguna quede por debajo de otra (ver «DIBUJO DE ZONAS SIN SOLAPES»).
 type Zona
-    box   bx
+    int   x1          // vela donde empieza la zona
     float techo
     float suelo
-    int   dir        // 1 alcista, -1 bajista
-    box   gris  = na // parte ya tocada (gris translúcido)
-    float borde = na // límite de la parte aún sin tocar
-    int   izq   = na // vela donde empieza el FVG (para dibujar el IFVG sobre todo el FVG)
+    int   dir         // 1 alcista, -1 bajista
+    float borde = na  // límite de la parte aún sin tocar (na = intacta)
+    int   creado = na // vela en la que se creó (esa vela no la consume)
 
-var zonas = array.new<Zona>()
+var zonas  = array.new<Zona>()   // FVG del gráfico (el riesgo del CHoCH las consulta)
+var ifvgs  = array.new<Zona>()
+var obs    = array.new<Zona>()
+var fvg15  = array.new<Zona>()
+var fvg60  = array.new<Zona>()
+var fvg240 = array.new<Zona>()
 
-type OrderBlock
-    box   bx
+// Rangos ya terminados, para dibujar su sombreado sin solaparse con las zonas
+type Rango
+    int   x1
+    int   x2
     float techo
     float suelo
-    int   dir    // 1 alcista (demanda), -1 bajista (oferta)
-    box   gris  = na // parte ya tocada (gris translúcido)
-    float borde = na // límite de la parte aún sin tocar
-    int   creado = na // vela en la que se creó (esa vela no lo consume)
+    color col
 
-var obs = array.new<OrderBlock>()
+var rangos_hist = array.new<Rango>()
+
+// Consumo progresivo con la vela actual: la zona alcista se consume desde el techo hacia abajo y
+// la bajista desde el suelo hacia arriba. Devuelve true cuando la mecha llega al otro extremo.
+consumir(Zona z) =>
+    completa = z.dir == 1 ? low <= z.suelo : high >= z.techo
+    if not completa
+        borde = na(z.borde) ? (z.dir == 1 ? z.techo : z.suelo) : z.borde
+        if z.dir == 1 ? low < borde : high > borde
+            z.borde := z.dir == 1 ? low : high
+    completa
 
 // Etiquetas de estructura dibujadas (CHoCH, ✗ CHoCH, BOS), para poder borrarlas
 // si después se detecta un rango que las contiene
@@ -235,8 +250,10 @@ percentText(float value) =>
 
 buildShade(array<box> shade, int left_bar, float top_price, float bottom_price) =>
     array.clear(shade)
-    for i = 0 to gradient_steps - 1
-        array.push(shade, box.new(left_bar, top_price, bar_index, bottom_price, border_color = na, border_width = 0, bgcolor = na, xloc = xloc.bar_index))
+    // Sin solapes, el sombreado del rango lo dibuja el bloque de zonas (aquí no se crea)
+    if not sin_solape
+        for i = 0 to gradient_steps - 1
+            array.push(shade, box.new(left_bar, top_price, bar_index, bottom_price, border_color = na, border_width = 0, bgcolor = na, xloc = xloc.bar_index))
 
 paintShade(array<box> shade, float top_price, float bottom_price, int left_bar, int right_bar, color shade_color) =>
     slices = array.size(shade)
@@ -423,6 +440,9 @@ if range_active and bar_ready
             box.set_border_color(range_box, color.new(retire_line, 35))
             box.set_border_style(range_box, line.style_solid)
             paintShade(shade_boxes, range_top, range_bottom, range_left, bar_index, retire_fill)
+            rangos_hist.push(Rango.new(range_left, bar_index, range_top, range_bottom, retire_fill))
+            if rangos_hist.size() > 20
+                rangos_hist.shift()
             if not na(equilibrium_line)
                 line.set_x2(equilibrium_line, bar_index)
             if not na(lower_quartile)
@@ -501,6 +521,9 @@ if range_dormant and bar_ready
         dormant_dir      := 0
         cooldown_left    := 0
         signal_deviation := true
+        // El rango vuelve a estar activo: deja de contar como rango terminado
+        if rangos_hist.size() > 0 and rangos_hist.last().x1 == range_left
+            rangos_hist.pop()
     else if expired
         array.clear(shade_boxes)
         range_dormant    := false
@@ -765,16 +788,12 @@ crear_caja_ob(int dir, int idx) =>
     techo = ob_cuerpo ? math.max(open[idx], close[idx]) : high[idx]
     suelo = ob_cuerpo ? math.min(open[idx], close[idx]) : low[idx]
     col = dir == 1 ? col_ob_alc : col_ob_baj
-    b = box.new(bar_index - idx, techo, bar_index + 1, suelo, border_color=color.new(col, 40), bgcolor=color.new(col, 82), text=dir == 1 ? "OB ▲" : "OB ▼", text_size=size.tiny, text_color=color.new(col, 10), text_halign=text.align_left, text_valign=dir == 1 ? text.align_bottom : text.align_top)
     if pintar_velas
         // La vela del OB queda pintada con su color (no se puede recolorear una vela pasada con barcolor)
         line.new(bar_index - idx, high[idx], bar_index - idx, low[idx], color=color.new(col, 10), width=5)
-    obs.push(OrderBlock.new(b, techo, suelo, dir, na, na, bar_index))
+    obs.push(Zona.new(bar_index - idx, techo, suelo, dir, na, bar_index))
     if obs.size() > max_ob
-        viejo = obs.shift()
-        viejo.bx.delete()
-        if not na(viejo.gris)
-            viejo.gris.delete()
+        obs.shift()
 
 crear_ob(int dir, int bar_desde) =>
     n = math.min(math.max(bar_index - bar_desde, 1), 150)
@@ -857,36 +876,8 @@ if cruce_abajo and not na(ultimo_valle)
 if cerrada and obs.size() > 0
     for i = obs.size() - 1 to 0
         ob = obs.get(i)
-        consumido = ob.dir == 1 ? low <= ob.suelo : high >= ob.techo
-        if ob.creado == bar_index
-            ob.bx.set_right(bar_index + 1)
-        else if consumido
-            ob.bx.delete()
-            if not na(ob.gris)
-                ob.gris.delete()
+        if ob.creado != bar_index and consumir(ob)
             obs.remove(i)
-        else
-            borde = na(ob.borde) ? (ob.dir == 1 ? ob.techo : ob.suelo) : ob.borde
-            tocado = ob.dir == 1 ? low < borde : high > borde
-            if tocado
-                borde := ob.dir == 1 ? low : high
-                ob.borde := borde
-                izq = ob.bx.get_left()
-                if ob.dir == 1
-                    ob.bx.set_top(borde)
-                    if na(ob.gris)
-                        ob.gris := box.new(izq, ob.techo, bar_index + 1, borde, border_color=na, bgcolor=color_consumido)
-                    else
-                        ob.gris.set_bottom(borde)
-                else
-                    ob.bx.set_bottom(borde)
-                    if na(ob.gris)
-                        ob.gris := box.new(izq, borde, bar_index + 1, ob.suelo, border_color=na, bgcolor=color_consumido)
-                    else
-                        ob.gris.set_top(borde)
-            ob.bx.set_right(bar_index + 1)
-            if not na(ob.gris)
-                ob.gris.set_right(bar_index + 1)
 
 // FONDO BLANCO (sin colorear por tendencia)
 bgcolor(fondo_blanco ? color.white : na)
@@ -909,107 +900,40 @@ plot(mostrar_emas ? ema_lenta : na, "EMA lenta", color=ema_len_col, linewidth=2)
 //  - FVG alcista (soporte): se consume desde el techo hacia abajo.
 //  - FVG bajista (resistencia): se consume desde el suelo hacia arriba.
 // Cuando se consume del todo (la mecha llega al otro extremo) desaparece.
-borrar_zona(Zona z) =>
-    if not na(z.bx)
-        z.bx.delete()
-    if not na(z.gris)
-        z.gris.delete()
-
-// IFVG: una sola vela atraviesa el FVG entero (abre a un lado y cierra al otro).
-// El FVG se sustituye por una caja IFVG del mismo tamaño que sigue vigente (se alarga) y se
-// consume por partes como el resto de zonas, hasta que el precio la cubre entera en dirección contraria:
-//  - IFVG alcista (soporte, viene de un FVG bajista): se consume desde el techo hacia abajo.
-//  - IFVG bajista (resistencia, viene de un FVG alcista): se consume desde el suelo hacia arriba.
-// La parte tocada queda en gris translúcido y, cuando la mecha llega al otro extremo, desaparece.
-var ifvgs = array.new<Zona>()
+// IFVG: una sola vela atraviesa un FVG intacto entero (abre a un lado y cierra al otro).
+// El FVG pasa a ser un IFVG del mismo tamaño y dirección contraria, que sigue vigente y se consume
+// por partes hasta que el precio lo cubre entero en dirección contraria.
 nuevo_ifvg_alc = false
 nuevo_ifvg_baj = false
 if cerrada and ifvgs.size() > 0
     for i = ifvgs.size() - 1 to 0
-        f = ifvgs.get(i)
-        cubierta = f.dir == 1 ? low <= f.suelo : high >= f.techo
-        if cubierta
-            borrar_zona(f)
+        if consumir(ifvgs.get(i))
             ifvgs.remove(i)
-        else
-            borde = na(f.borde) ? (f.dir == 1 ? f.techo : f.suelo) : f.borde
-            tocada = f.dir == 1 ? low < borde : high > borde
-            if tocada
-                borde := f.dir == 1 ? low : high
-                f.borde := borde
-                izq = f.bx.get_left()
-                if f.dir == 1
-                    f.bx.set_top(borde)
-                    if na(f.gris)
-                        f.gris := box.new(izq, f.techo, bar_index + 1, borde, border_color=na, bgcolor=color_consumido)
-                    else
-                        f.gris.set_bottom(borde)
-                else
-                    f.bx.set_bottom(borde)
-                    if na(f.gris)
-                        f.gris := box.new(izq, borde, bar_index + 1, f.suelo, border_color=na, bgcolor=color_consumido)
-                    else
-                        f.gris.set_top(borde)
-            f.bx.set_right(bar_index + 1)
-            if not na(f.gris)
-                f.gris.set_right(bar_index + 1)
 
 if cerrada and zonas.size() > 0
     for i = zonas.size() - 1 to 0
         z = zonas.get(i)
-        consumida = z.dir == 1 ? low <= z.suelo : high >= z.techo
-        // Solo FVG intactos: si ya se había mitigado en parte (tiene zona gris), no puede pasar a IFVG
-        intacta = na(z.borde)
-        invertida = intacta and (z.dir == 1 ? (open >= z.techo and close < z.suelo) : (open <= z.suelo and close > z.techo))
+        // Solo FVG intactos: si ya se había mitigado en parte, no puede pasar a IFVG
+        invertida = na(z.borde) and (z.dir == 1 ? (open >= z.techo and close < z.suelo) : (open <= z.suelo and close > z.techo))
         if invertida
-            borrar_zona(z)
             zonas.remove(i)
             if z.dir == 1
                 nuevo_ifvg_baj := true
             else
                 nuevo_ifvg_alc := true
-            // La caja IFVG cubre todo el FVG original y desde aquí se alarga mientras siga vigente
-            bi = box.new(na(z.izq) ? bar_index - 1 : z.izq, z.techo, bar_index + 1, z.suelo, border_color=col_ifvg, border_width=1, bgcolor=color.new(col_ifvg, 75), text="IFVG", text_size=size.tiny, text_color=color.new(col_ifvg, 0), text_halign=text.align_right)
-            ifvgs.push(Zona.new(bi, z.techo, z.suelo, -z.dir))
+            ifvgs.push(Zona.new(z.x1, z.techo, z.suelo, -z.dir))
             if ifvgs.size() > max_zonas
-                borrar_zona(ifvgs.shift())
-        else if consumida
-            // Consumida del todo: desaparece
-            borrar_zona(z)
+                ifvgs.shift()
+        else if consumir(z)
             zonas.remove(i)
-        else
-            borde = na(z.borde) ? (z.dir == 1 ? z.techo : z.suelo) : z.borde
-            tocada = z.dir == 1 ? low < borde : high > borde
-            if tocada and not na(z.bx)
-                borde := z.dir == 1 ? low : high
-                z.borde := borde
-                izq = z.bx.get_left()
-                if z.dir == 1
-                    z.bx.set_top(borde)
-                    if na(z.gris)
-                        z.gris := box.new(izq, z.techo, bar_index + 1, borde, border_color=na, bgcolor=color_consumido)
-                    else
-                        z.gris.set_bottom(borde)
-                else
-                    z.bx.set_bottom(borde)
-                    if na(z.gris)
-                        z.gris := box.new(izq, borde, bar_index + 1, z.suelo, border_color=na, bgcolor=color_consumido)
-                    else
-                        z.gris.set_top(borde)
-            if not na(z.bx)
-                z.bx.set_right(bar_index + 1)
-            if not na(z.gris)
-                z.gris.set_right(bar_index + 1)
 
 fvg_alcista = cerrada and low > high[2] and (low - high[2]) / close * 100 > fvg_min_pct
 fvg_bajista = cerrada and high < low[2] and (low[2] - high) / close * 100 > fvg_min_pct
 
 agregar_fvg(float techo, float suelo, int dir) =>
-    col = dir == 1 ? color_alcista : color_bajista
-    b = mostrar_fvg ? box.new(bar_index - 2, techo, bar_index + 1, suelo, border_color=na, bgcolor=color.new(col, 82), text="FVG", text_size=size.tiny, text_color=col, text_halign=text.align_right) : na
-    zonas.push(Zona.new(b, techo, suelo, dir, na, na, bar_index - 2))
+    zonas.push(Zona.new(bar_index - 2, techo, suelo, dir))
     if zonas.size() > max_zonas
-        borrar_zona(zonas.shift())
+        zonas.shift()
 
 if fvg_alcista
     agregar_fvg(low, high[2], 1)
@@ -1046,19 +970,6 @@ if mostrar_horas and timeframe.isintraday and seg_tf <= 900
         marcar_hora("16:00", true)
 
 // --- FVG de M15, H1 y H4 (sin repintado: se evalúa la última vela cerrada de esa temporalidad) ---
-type ZonaHTF
-    box   bx
-    line  mid
-    float techo
-    float suelo
-    int   dir
-    box   gris  = na // parte ya mitigada (gris translúcido)
-    float borde = na // límite de la parte aún sin mitigar
-
-var fvg15  = array.new<ZonaHTF>()
-var fvg60  = array.new<ZonaHTF>()
-var fvg240 = array.new<ZonaHTF>()
-
 fvg_htf() =>
     [low[1] > high[3], high[1] < low[3], low[1], high[3], high[1], low[3], time[3]]
 
@@ -1066,60 +977,29 @@ fvg_htf() =>
 [a60, b60, a60_top, a60_bot, b60_bot, b60_top, t60] = request.security(syminfo.tickerid, "60", fvg_htf(), lookahead = barmerge.lookahead_on)
 [a240, b240, a240_top, a240_bot, b240_bot, b240_top, t240] = request.security(syminfo.tickerid, "240", fvg_htf(), lookahead = barmerge.lookahead_on)
 
-nueva_htf(array<ZonaHTF> arr, float techo, float suelo, int dir, int t_izq, color col, string txt) =>
-    mitad = (techo + suelo) / 2
-    bx  = box.new(t_izq, techo, time, suelo, xloc=xloc.bar_time, border_color=color.new(col, 50), bgcolor=color.new(col, 88), text=txt + (dir == 1 ? " ▲" : " ▼"), text_size=size.tiny, text_color=color.new(col, 20), text_halign=text.align_right, text_valign=dir == 1 ? text.align_bottom : text.align_top)
-    mid = line.new(t_izq, mitad, time, mitad, xloc=xloc.bar_time, color=color.new(col, 25), style=line.style_dashed, width=1)
-    arr.push(ZonaHTF.new(bx, mid, techo, suelo, dir))
-    if arr.size() > max_htf
-        z = arr.shift()
-        z.bx.delete()
-        z.mid.delete()
-        if not na(z.gris)
-            z.gris.delete()
+// Vela (bar_index) en la que empieza una zona de otra temporalidad, a partir de su hora
+vela_de(int t) =>
+    int k = 0
+    while k < 1500 and time[k] > t
+        k += 1
+    bar_index - k
 
-// Consumo progresivo, igual que los FVG del gráfico y los Order Blocks:
-//  - FVG alcista: se consume desde el techo hacia abajo; FVG bajista: desde el suelo hacia arriba.
-//  - La parte mitigada queda en gris translúcido y la de color se encoge hasta lo que queda.
-//  - Cuando la mecha llega al otro extremo, desaparece.
-// Devuelve si el precio tocó el 50% de alguna zona en esta vela.
-actualizar_htf(array<ZonaHTF> arr) =>
+nueva_htf(array<Zona> arr, float techo, float suelo, int dir, int t_izq) =>
+    arr.push(Zona.new(vela_de(t_izq), techo, suelo, dir))
+    if arr.size() > max_htf
+        arr.shift()
+
+// Consumo progresivo igual que el resto de zonas. Devuelve si el precio tocó el 50% de alguna.
+actualizar_htf(array<Zona> arr) =>
     toque = false
     if arr.size() > 0
         for i = arr.size() - 1 to 0
             z = arr.get(i)
             mitad = (z.techo + z.suelo) / 2
-            if (z.dir == 1 and low <= z.suelo) or (z.dir == -1 and high >= z.techo)
-                z.bx.delete()
-                z.mid.delete()
-                if not na(z.gris)
-                    z.gris.delete()
+            if low <= mitad and high >= mitad
+                toque := true
+            if consumir(z)
                 arr.remove(i)
-            else
-                if low <= mitad and high >= mitad
-                    toque := true
-                borde = na(z.borde) ? (z.dir == 1 ? z.techo : z.suelo) : z.borde
-                tocada = z.dir == 1 ? low < borde : high > borde
-                if tocada
-                    borde := z.dir == 1 ? low : high
-                    z.borde := borde
-                    izq = z.bx.get_left()
-                    if z.dir == 1
-                        z.bx.set_top(borde)
-                        if na(z.gris)
-                            z.gris := box.new(izq, z.techo, time, borde, xloc=xloc.bar_time, border_color=na, bgcolor=color_consumido)
-                        else
-                            z.gris.set_bottom(borde)
-                    else
-                        z.bx.set_bottom(borde)
-                        if na(z.gris)
-                            z.gris := box.new(izq, borde, time, z.suelo, xloc=xloc.bar_time, border_color=na, bgcolor=color_consumido)
-                        else
-                            z.gris.set_top(borde)
-                z.bx.set_right(time)
-                z.mid.set_x2(time)
-                if not na(z.gris)
-                    z.gris.set_right(time)
     toque
 
 cambio15  = timeframe.change("15")
@@ -1133,23 +1013,23 @@ if cerrada and timeframe.isintraday
         toque50_m15 := actualizar_htf(fvg15)
         if cambio15
             if a15
-                nueva_htf(fvg15, a15_top, a15_bot, 1, t15, col_fvg15, "FVG M15")
+                nueva_htf(fvg15, a15_top, a15_bot, 1, t15)
             else if b15
-                nueva_htf(fvg15, b15_top, b15_bot, -1, t15, col_fvg15, "FVG M15")
+                nueva_htf(fvg15, b15_top, b15_bot, -1, t15)
     if mostrar_fvg60 and seg_tf < 3600
         toque50_h1 := actualizar_htf(fvg60)
         if cambio60
             if a60
-                nueva_htf(fvg60, a60_top, a60_bot, 1, t60, col_fvg60, "FVG H1")
+                nueva_htf(fvg60, a60_top, a60_bot, 1, t60)
             else if b60
-                nueva_htf(fvg60, b60_top, b60_bot, -1, t60, col_fvg60, "FVG H1")
+                nueva_htf(fvg60, b60_top, b60_bot, -1, t60)
     if mostrar_fvg240 and seg_tf < 14400
         toque50_h4 := actualizar_htf(fvg240)
         if cambio240
             if a240
-                nueva_htf(fvg240, a240_top, a240_bot, 1, t240, col_fvg240, "FVG H4")
+                nueva_htf(fvg240, a240_top, a240_bot, 1, t240)
             else if b240
-                nueva_htf(fvg240, b240_top, b240_bot, -1, t240, col_fvg240, "FVG H4")
+                nueva_htf(fvg240, b240_top, b240_bot, -1, t240)
 
 // --- Niveles clave: altos y bajos relevantes de H4 (vigentes hasta que un cierre los rompe) ---
 type Nivel
@@ -1197,6 +1077,114 @@ if cerrada and mostrar_niv_h4 and timeframe.isintraday and seg_tf < 14400
 ver_pd = mostrar_pd and timeframe.isintraday and not timeframe.change("D")
 plot(ver_pd ? pdh : na, "Alto día anterior", color=color.new(col_niveles, 30), style=plot.style_linebr, linewidth=1)
 plot(ver_pd ? pdl : na, "Bajo día anterior", color=color.new(col_niveles, 30), style=plot.style_linebr, linewidth=1)
+
+// ─────────────────────────────
+// DIBUJO DE ZONAS SIN SOLAPES
+// Cada zona se dibuja solo donde no la tapa otra de más prioridad, así nunca se mezclan colores:
+//   IFVG > FVG del gráfico > OB > FVG M15 > FVG H1 > FVG H4 > rango activo > rangos terminados
+// Dentro del mismo tipo, la más reciente va encima. Ejemplo: un FVG M15 dentro de un FVG H4 se ve
+// con su color, y el H4 solo se ve por encima y por debajo de él.
+// La parte ya consumida de cada zona se ve en gris y también ocupa su sitio.
+// ─────────────────────────────
+type Pieza
+    int   x1
+    int   x2
+    float top
+    float bot
+
+var array<box>   dib_cajas  = array.new<box>()
+var array<line>  dib_lineas = array.new<line>()
+var array<Pieza> ocupado    = array.new<Pieza>()
+
+// Rectángulo p menos el rectángulo o: hasta 4 trozos (izquierda, derecha, arriba y abajo)
+restar(Pieza p, Pieza o) =>
+    out = array.new<Pieza>()
+    if o.x2 <= p.x1 or o.x1 >= p.x2 or o.bot >= p.top or o.top <= p.bot
+        out.push(p)
+    else
+        if o.x1 > p.x1
+            out.push(Pieza.new(p.x1, o.x1, p.top, p.bot))
+        if o.x2 < p.x2
+            out.push(Pieza.new(o.x2, p.x2, p.top, p.bot))
+        cx1 = math.max(p.x1, o.x1)
+        cx2 = math.min(p.x2, o.x2)
+        if o.top < p.top
+            out.push(Pieza.new(cx1, cx2, p.top, o.top))
+        if o.bot > p.bot
+            out.push(Pieza.new(cx1, cx2, o.bot, p.bot))
+    out
+
+// Trozos de p que no tapa ninguna zona ya dibujada
+recortar(Pieza p) =>
+    res = array.from(p)
+    if sin_solape and ocupado.size() > 0
+        for o in ocupado
+            nuevo = array.new<Pieza>()
+            for q in res
+                for r in restar(q, o)
+                    nuevo.push(r)
+            res := nuevo
+    res
+
+pintar_parte(Pieza p, color col, string txt, color coltxt) =>
+    partes = recortar(p)
+    // El texto va en el trozo más ancho
+    int mejor = -1
+    int ancho = 0
+    for [i, q] in partes
+        if q.x2 - q.x1 > ancho
+            ancho := q.x2 - q.x1
+            mejor := i
+    for [i, q] in partes
+        // Tope de cajas para no superar el límite de TradingView (500): se dibujan antes las de más prioridad
+        if q.x2 > q.x1 and q.top > q.bot and dib_cajas.size() < 440
+            dib_cajas.push(box.new(q.x1, q.top, q.x2, q.bot, border_color=na, bgcolor=col, text=i == mejor ? txt : "", text_size=size.tiny, text_color=coltxt, text_halign=text.align_right))
+
+dibujar_zona(int x1, int x2, float techo, float suelo, int dir, float borde, color col, string txt, color coltxt, color colmitad) =>
+    // Parte aún sin tocar (con su color) y parte consumida (gris)
+    ctop = na(borde) ? techo : (dir == 1 ? borde : techo)
+    cbot = na(borde) ? suelo : (dir == 1 ? suelo : borde)
+    pintar_parte(Pieza.new(x1, x2, ctop, cbot), col, txt, coltxt)
+    if not na(borde)
+        pintar_parte(Pieza.new(x1, x2, dir == 1 ? techo : borde, dir == 1 ? borde : suelo), color_consumido, "", na)
+    // Línea del 50% (FVG de M15, H1 y H4), también recortada
+    if not na(colmitad)
+        m = (techo + suelo) / 2
+        for q in recortar(Pieza.new(x1, x2, m, m))
+            if q.x2 > q.x1
+                dib_lineas.push(line.new(q.x1, m, q.x2, m, color=colmitad, style=line.style_dashed, width=1))
+    ocupado.push(Pieza.new(x1, x2, techo, suelo))
+
+dibujar_lista(array<Zona> arr, color c_alc, color c_baj, int transp, string txt, bool flecha, bool mitad) =>
+    if arr.size() > 0
+        for i = arr.size() - 1 to 0
+            z = arr.get(i)
+            c = z.dir == 1 ? c_alc : c_baj
+            t = flecha ? txt + (z.dir == 1 ? " ▲" : " ▼") : txt
+            dibujar_zona(z.x1, bar_index + 1, z.techo, z.suelo, z.dir, z.borde, color.new(c, transp), t, c, mitad ? color.new(c, 25) : na)
+
+if barstate.islast
+    for b in dib_cajas
+        b.delete()
+    dib_cajas.clear()
+    for l in dib_lineas
+        l.delete()
+    dib_lineas.clear()
+    ocupado.clear()
+    dibujar_lista(ifvgs, col_ifvg, col_ifvg, 75, "IFVG", false, false)
+    if mostrar_fvg
+        dibujar_lista(zonas, color_alcista, color_bajista, 82, "FVG", false, false)
+    dibujar_lista(obs, col_ob_alc, col_ob_baj, 82, "OB", true, false)
+    dibujar_lista(fvg15, col_fvg15, col_fvg15, 85, "FVG M15", true, true)
+    dibujar_lista(fvg60, col_fvg60, col_fvg60, 85, "FVG H1", true, true)
+    dibujar_lista(fvg240, col_fvg240, col_fvg240, 85, "FVG H4", true, true)
+    if sin_solape
+        if range_active and not na(range_left)
+            dibujar_zona(range_left, bar_index + 1, range_top, range_bottom, 0, na, color.new(range_fill_color, fill_transparency), "", na, na)
+        if rangos_hist.size() > 0
+            for i = rangos_hist.size() - 1 to 0
+                r = rangos_hist.get(i)
+                dibujar_zona(r.x1, r.x2, r.techo, r.suelo, 0, na, color.new(r.col, fill_transparency), "", na, na)
 
 // ─────────────────────────────
 // ALERTAS
