@@ -25,8 +25,12 @@ filtro_rango = input.bool(true, "Sin CHoCH ni BOS dentro de un rango (hasta el b
 mostrar_fvg     = input.bool(true, "Mostrar FVG", group="FVG")
 fvg_min_pct     = input.float(0.0, "Tamaño mínimo FVG (% precio)", minval=0, step=0.05, group="FVG")
 max_zonas       = input.int(50, "Máx. zonas vigiladas", minval=1, maxval=250, group="FVG")
-color_consumido = input.color(color.new(#424242, 55), "Parte consumida: FVG, IFVG y OB del gráfico (gris oscuro)", group="FVG")
-color_cons_htf  = input.color(color.new(#9E9E9E, 75), "Parte consumida: FVG de M15, H1 y H4 (gris claro)", group="FVG")
+// Parte consumida: cuanto más baja la temporalidad, más oscuro el gris (igual en cualquier gráfico,
+// porque las zonas del gráfico siempre son de la temporalidad más baja de las que se muestran)
+color_consumido = input.color(color.new(#303030, 45), "Parte consumida · temporalidad del gráfico (FVG, IFVG, OB)", group="FVG")
+color_cons_m15  = input.color(color.new(#5F5F5F, 55), "Parte consumida · FVG M15", group="FVG")
+color_cons_h1   = input.color(color.new(#8F8F8F, 62), "Parte consumida · FVG H1", group="FVG")
+color_cons_h4   = input.color(color.new(#C2C2C2, 65), "Parte consumida · FVG H4", group="FVG")
 
 // Estrategia apertura de Nueva York (Bias + PO3)
 // Order Blocks: la última vela contraria antes del impulso que rompe estructura (CHoCH o BOS)
@@ -1176,9 +1180,9 @@ if barstate.islast
     if mostrar_fvg
         dibujar_lista(zonas, color_alcista, color_bajista, 82, "FVG", false, false, color_consumido)
     dibujar_lista(obs, col_ob_alc, col_ob_baj, 82, "OB", true, false, color_consumido)
-    dibujar_lista(fvg15, col_fvg15, col_fvg15, 85, "FVG M15", true, true, color_cons_htf)
-    dibujar_lista(fvg60, col_fvg60, col_fvg60, 85, "FVG H1", true, true, color_cons_htf)
-    dibujar_lista(fvg240, col_fvg240, col_fvg240, 85, "FVG H4", true, true, color_cons_htf)
+    dibujar_lista(fvg15, col_fvg15, col_fvg15, 85, "FVG M15", true, true, color_cons_m15)
+    dibujar_lista(fvg60, col_fvg60, col_fvg60, 85, "FVG H1", true, true, color_cons_h1)
+    dibujar_lista(fvg240, col_fvg240, col_fvg240, 85, "FVG H4", true, true, color_cons_h4)
     if sin_solape
         if range_active and not na(range_left)
             dibujar_zona(range_left, bar_index + 1, range_top, range_bottom, 0, na, color.new(range_fill_color, fill_transparency), "", na, na, na)
