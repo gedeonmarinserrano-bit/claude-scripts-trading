@@ -419,7 +419,7 @@ if bar_ready and not range_active and not range_dormant and cooldown_left <= 0 a
     midpoint         = math.avg(range_top, range_bottom)
     quartile_low     = range_bottom + (range_top - range_bottom) * 0.25
     quartile_high    = range_bottom + (range_top - range_bottom) * 0.75
-    range_box       := box.new(range_left, range_top, bar_index, range_bottom, border_color = color.new(color.gray, 65), border_width = 2, border_style = line.style_dashed, bgcolor = na, xloc = xloc.bar_index)
+    range_box       := box.new(range_left, range_top, bar_index, range_bottom, border_color = color.new(range_line_color, 55), border_width = 2, border_style = line.style_dashed, bgcolor = na, xloc = xloc.bar_index)
     buildShade(shade_boxes, range_left, range_top, range_bottom)
     if show_equilibrium
         equilibrium_line := line.new(range_left, midpoint, bar_index, midpoint, xloc.bar_index, extend.none, color.new(color.gray, 45), line.style_dotted, 1)
@@ -452,8 +452,8 @@ if range_active and bar_ready
             retire_base = break_direction == 1 ? bullish_color : break_direction == -1 ? bearish_color : range_input
             box.set_lefttop(range_box, range_left, range_top)
             box.set_rightbottom(range_box, bar_index, range_bottom)
-            // Rango terminado: solo el letrero lleva el color de la ruptura; sin fondo y con borde neutro
-            box.set_border_color(range_box, color.new(color.gray, 60))
+            // Rango terminado: sin fondo; el marco y el letrero toman el color de la ruptura
+            box.set_border_color(range_box, color.new(retire_line, 30))
             box.set_border_style(range_box, line.style_solid)
             paintShade(shade_boxes, range_top, range_bottom, range_left, bar_index, na)
             rangos_hist.push(Rango.new(range_left, bar_index, range_top, range_bottom, retire_fill))
@@ -527,7 +527,7 @@ if range_dormant and bar_ready
         label.delete(break_marker)
         break_marker := na
         if not na(range_box)
-            box.set_border_color(range_box, color.new(color.gray, 60))
+            box.set_border_color(range_box, color.new(range_line_color, 30))
             paintShade(shade_boxes, range_top, range_bottom, range_left, bar_index, na)
         if not na(range_tag)
             label.set_textcolor(range_tag, color.new(range_line_color, 10))
@@ -558,9 +558,9 @@ if range_active
     quartile_high = range_bottom + (range_top - range_bottom) * 0.75
     box.set_lefttop(range_box, range_left, range_top)
     box.set_rightbottom(range_box, bar_index, range_bottom)
-    box.set_border_color(range_box, color.new(color.gray, range_confirmed ? 60 : 75))
+    box.set_border_color(range_box, color.new(range_line_color, range_confirmed ? 30 : 55))
     box.set_border_style(range_box, range_confirmed ? line.style_solid : line.style_dashed)
-    // Sin fondo: el rango solo se distingue por su borde gris y el color de su letrero
+    // Sin fondo: el rango se distingue por su marco y su letrero, del color de su estado
     paintShade(shade_boxes, range_top, range_bottom, range_left, bar_index, na)
     if not na(equilibrium_line)
         line.set_xy1(equilibrium_line, range_left, midpoint)
