@@ -1204,13 +1204,9 @@ dibujar_zona(int x1_zona, int x2, float techo, float suelo, int dir, float borde
     pintar_parte(Pieza.new(x1, x2, ctop, cbot), col)
     if not na(borde)
         pintar_parte(Pieza.new(x1, x2, dir == 1 ? techo : borde, dir == 1 ? borde : suelo), colgris)
-    // Letreros: uno al principio y otro al final de la zona, a la altura de la parte sin tocar.
-    // Si la zona es muy estrecha (menos de 8 velas) solo se pone el del principio, para que no se monten.
+    // Letrero solo al final de la zona (junto a la vela actual), a la altura de la parte sin tocar
     if txt != "" and letreros.size() < 80
-        y = (ctop + cbot) / 2
-        letreros.push(Letrero.new(x1, y, txt, coltxt, false, fondo))
-        if x2 - x1 >= 8
-            letreros.push(Letrero.new(x2, y, txt, coltxt, true, fondo))
+        letreros.push(Letrero.new(x2, (ctop + cbot) / 2, txt, coltxt, true, fondo))
     // Línea del 50% (FVG de M15, H1 y H4), también recortada
     if not na(colmitad)
         m = (techo + suelo) / 2
