@@ -452,9 +452,10 @@ if range_active and bar_ready
             retire_base = break_direction == 1 ? bullish_color : break_direction == -1 ? bearish_color : range_input
             box.set_lefttop(range_box, range_left, range_top)
             box.set_rightbottom(range_box, bar_index, range_bottom)
-            box.set_border_color(range_box, color.new(retire_line, 35))
+            // Rango terminado: solo el letrero lleva el color de la ruptura; sin fondo y con borde neutro
+            box.set_border_color(range_box, color.new(color.gray, 60))
             box.set_border_style(range_box, line.style_solid)
-            paintShade(shade_boxes, range_top, range_bottom, range_left, bar_index, retire_fill)
+            paintShade(shade_boxes, range_top, range_bottom, range_left, bar_index, na)
             rangos_hist.push(Rango.new(range_left, bar_index, range_top, range_bottom, retire_fill))
             if rangos_hist.size() > 8
                 rangos_hist.shift()
@@ -1249,10 +1250,6 @@ if barstate.islast
     if sin_solape
         if range_active and not na(range_left)
             dibujar_zona(range_left, bar_index + 1, range_top, range_bottom, 0, na, color.new(range_fill_color, fill_transparency), "", na, na, na, false)
-        if rangos_hist.size() > 0
-            for i = rangos_hist.size() - 1 to 0
-                r = rangos_hist.get(i)
-                dibujar_zona(r.x1, r.x2, r.techo, r.suelo, 0, na, color.new(r.col, fill_transparency), "", na, na, na, false)
     // Colocar los letreros de arriba abajo. Si uno queda demasiado cerca de otro ya colocado del mismo
     // lado y a pocas velas, se baja lo justo para que no se monten (queda junto a su zona).
     if letreros.size() > 0
