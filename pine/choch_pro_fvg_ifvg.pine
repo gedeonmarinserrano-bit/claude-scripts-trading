@@ -954,9 +954,74 @@ retest_ifvg_graf = retesteo(ifvgs)
 retest_ifvg_m15  = retesteo(ifvg15)
 retest_ifvg_h1   = retesteo(ifvg60)
 retest_ifvg_h4   = retesteo(ifvg240)
-retest_ifvg      = retest_ifvg_graf or retest_ifvg_m15 or retest_ifvg_h1 or retest_ifvg_h4
+
+// --- IFVG de M1 solo para la alerta (no se dibujan) ---
+// En gráficos de más de 1 minuto se recorren las velas de M1 de cada vela del gráfico con las mismas
+// reglas (FVG de 3 velas, consumo, IFVG cuando una sola vela de M1 atraviesa un FVG intacto) y se
+// avisa si la vela de M1 siguiente a la que crea el IFVG lo toca. En el gráfico de 1 minuto ya lo
+// cubre el IFVG del propio gráfico.
+alerta_m1 = input.bool(true, "Alerta de retesteo también para IFVG de M1 (sin dibujarlos)", group=g_ny)
+[m1o, m1h, m1l, m1c] = request.security_lower_tf(syminfo.tickerid, "1", [open, high, low, close])
+var fvg_m1  = array.new<Zona>()
+var ifvg_m1 = array.new<Zona>()
+var float m1_h2 = na
+var float m1_l2 = na
+var float m1_h1 = na
+var float m1_l1 = na
+var int   m1_n  = 0     // número de vela de M1 (para saber cuál es la siguiente a la del IFVG)
+
+consumir_m1(Zona z, float hi, float lo) =>
+    completa = z.dir == 1 ? lo <= z.suelo : hi >= z.techo
+    if not completa
+        borde = na(z.borde) ? (z.dir == 1 ? z.techo : z.suelo) : z.borde
+        if z.dir == 1 ? lo < borde : hi > borde
+            z.borde := z.dir == 1 ? lo : hi
+    completa
+
+retest_ifvg_m1 = false
+if alerta_m1 and timeframe.isintraday and timeframe.in_seconds() > 60 and m1h.size() > 0
+    // En tiempo real la última vela de M1 aún no ha cerrado: solo se usa para comprobar el toque
+    ultima_cerrada = barstate.isconfirmed ? m1h.size() - 1 : m1h.size() - 2
+    for k = 0 to m1h.size() - 1
+        o1 = m1o.get(k)
+        h1 = m1h.get(k)
+        l1 = m1l.get(k)
+        c1 = m1c.get(k)
+        for z in ifvg_m1
+            if z.creado == m1_n - 1 and h1 >= z.suelo and l1 <= z.techo
+                retest_ifvg_m1 := true
+        if k <= ultima_cerrada
+            if ifvg_m1.size() > 0
+                for i = ifvg_m1.size() - 1 to 0
+                    if consumir_m1(ifvg_m1.get(i), h1, l1)
+                        ifvg_m1.remove(i)
+            if fvg_m1.size() > 0
+                for i = fvg_m1.size() - 1 to 0
+                    z = fvg_m1.get(i)
+                    inv = na(z.borde) and (z.dir == 1 ? (o1 >= z.techo and c1 < z.suelo) : (o1 <= z.suelo and c1 > z.techo))
+                    if inv
+                        fvg_m1.remove(i)
+                        ifvg_m1.push(Zona.new(na, z.techo, z.suelo, -z.dir, na, m1_n))
+                        if ifvg_m1.size() > 20
+                            ifvg_m1.shift()
+                    else if consumir_m1(z, h1, l1)
+                        fvg_m1.remove(i)
+            if not na(m1_h2)
+                if l1 > m1_h2
+                    fvg_m1.push(Zona.new(na, l1, m1_h2, 1))
+                else if h1 < m1_l2
+                    fvg_m1.push(Zona.new(na, m1_l2, h1, -1))
+                if fvg_m1.size() > 30
+                    fvg_m1.shift()
+            m1_h2 := m1_h1
+            m1_l2 := m1_l1
+            m1_h1 := h1
+            m1_l1 := l1
+            m1_n  += 1
+
+retest_ifvg      = retest_ifvg_graf or retest_ifvg_m15 or retest_ifvg_h1 or retest_ifvg_h4 or retest_ifvg_m1
 if retest_ifvg
-    tfs = (retest_ifvg_graf ? " " + tf_graf : "") + (retest_ifvg_m15 ? " M15" : "") + (retest_ifvg_h1 ? " H1" : "") + (retest_ifvg_h4 ? " H4" : "")
+    tfs = (retest_ifvg_m1 ? " M1" : "") + (retest_ifvg_graf ? " " + tf_graf : "") + (retest_ifvg_m15 ? " M15" : "") + (retest_ifvg_h1 ? " H1" : "") + (retest_ifvg_h4 ? " H4" : "")
     alert("Retesteo de IFVG en la vela siguiente (" + str.trim(tfs) + ") en " + syminfo.ticker + " a " + str.tostring(close), alert.freq_once_per_bar)
 
 if cerrada and ifvgs.size() > 0
