@@ -104,6 +104,7 @@ type Zona
     int   dir         // 1 alcista, -1 bajista
     float borde = na  // límite de la parte aún sin tocar (na = intacta)
     int   creado = na // vela en la que se creó (esa vela no la consume)
+    bool  avisado = false // IFVG: ya ha saltado la alerta de retesteo
 
 var zonas  = array.new<Zona>()   // FVG del gráfico (el riesgo del CHoCH las consulta)
 var ifvgs  = array.new<Zona>()
@@ -940,13 +941,17 @@ tf_graf = tf_nombre()
 
 // ─────────────────────────────
 // RETESTEO DE IFVG EN LA VELA SIGUIENTE
-// Avisa cuando, en la vela inmediatamente posterior a la que crea un IFVG (de cualquier temporalidad),
-// el precio vuelve a tocarlo. Se comprueba en tiempo real, sin esperar al cierre de la vela.
+// Avisa cuando, en alguna de las velas_retest velas posteriores a la que crea un IFVG (de cualquier
+// temporalidad), el precio vuelve a tocarlo. Una sola vez por IFVG. Se comprueba en tiempo real.
 // ─────────────────────────────
+velas_retest = input.int(4, "Alerta de retesteo de IFVG: velas posteriores a vigilar", minval=1, maxval=20, group=g_ny)
+
 retesteo(array<Zona> arr) =>
     toca = false
     for z in arr
-        if z.creado == bar_index - 1 and high >= z.suelo and low <= z.techo
+        n = bar_index - z.creado
+        if not z.avisado and n >= 1 and n <= velas_retest and high >= z.suelo and low <= z.techo
+            z.avisado := true
             toca := true
     toca
 
@@ -988,7 +993,10 @@ if alerta_m1 and timeframe.isintraday and timeframe.in_seconds() > 60 and m1h.si
         l1 = m1l.get(k)
         c1 = m1c.get(k)
         for z in ifvg_m1
-            if z.creado == m1_n - 1 and h1 >= z.suelo and l1 <= z.techo
+            n = m1_n - z.creado
+            if not z.avisado and n >= 1 and n <= velas_retest and h1 >= z.suelo and l1 <= z.techo
+                if k <= ultima_cerrada
+                    z.avisado := true
                 retest_ifvg_m1 := true
         if k <= ultima_cerrada
             if ifvg_m1.size() > 0
@@ -1022,7 +1030,7 @@ if alerta_m1 and timeframe.isintraday and timeframe.in_seconds() > 60 and m1h.si
 retest_ifvg      = retest_ifvg_graf or retest_ifvg_m15 or retest_ifvg_h1 or retest_ifvg_h4 or retest_ifvg_m1
 if retest_ifvg
     tfs = (retest_ifvg_m1 ? " M1" : "") + (retest_ifvg_graf ? " " + tf_graf : "") + (retest_ifvg_m15 ? " M15" : "") + (retest_ifvg_h1 ? " H1" : "") + (retest_ifvg_h4 ? " H4" : "")
-    alert("Retesteo de IFVG en la vela siguiente (" + str.trim(tfs) + ") en " + syminfo.ticker + " a " + str.tostring(close), alert.freq_once_per_bar)
+    alert("Retesteo de IFVG (" + str.trim(tfs) + ") en " + syminfo.ticker + " a " + str.tostring(close), alert.freq_once_per_bar)
 
 if cerrada and ifvgs.size() > 0
     for i = ifvgs.size() - 1 to 0
@@ -1369,7 +1377,7 @@ alertcondition(choch_fallido_alc, "CHoCH alcista fallido (✗)", "CHoCH alcista 
 alertcondition(choch_fallido_baj, "CHoCH bajista fallido (✗)", "CHoCH bajista fallido: posible reversión alcista en {{ticker}} ({{interval}})")
 alertcondition(reactivada_alc, "Tendencia alcista reactivada", "Tendencia alcista reactivada tras CHoCH fallido en {{ticker}} ({{interval}})")
 alertcondition(reactivada_baj, "Tendencia bajista reactivada", "Tendencia bajista reactivada tras CHoCH fallido en {{ticker}} ({{interval}})")
-alertcondition(retest_ifvg, "Retesteo de IFVG (vela siguiente)", "El precio toca un IFVG en la vela siguiente a su creación en {{ticker}} ({{interval}})")
+alertcondition(retest_ifvg, "Retesteo de IFVG (velas siguientes)", "El precio toca un IFVG en las velas siguientes a su creación en {{ticker}} ({{interval}})")
 alertcondition(nuevo_ifvg_alc, "IFVG alcista", "Un FVG bajista se ha invertido (IFVG alcista) en {{ticker}} ({{interval}})")
 alertcondition(nuevo_ifvg_baj, "IFVG bajista", "Un FVG alcista se ha invertido (IFVG bajista) en {{ticker}} ({{interval}})")
 alertcondition(fvg_alcista, "FVG alcista", "Nuevo FVG alcista en {{ticker}} ({{interval}})")
