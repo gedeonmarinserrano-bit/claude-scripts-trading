@@ -1112,9 +1112,14 @@ vela_de(int t) =>
     bar_index - k
 
 nueva_htf(array<Zona> arr, float techo, float suelo, int dir, int t_izq) =>
-    arr.push(Zona.new(vela_de(t_izq), techo, suelo, dir))
-    if arr.size() > max_htf
-        arr.shift()
+    z = Zona.new(vela_de(t_izq), techo, suelo, dir)
+    // El FVG de M15/H1/H4 se conoce al cerrar su vela, pero se crea en la primera vela del gráfico
+    // de la siguiente: esa vela también puede haber entrado ya en el hueco, así que se consume ya
+    // con ella (antes se la saltaba y el FVG quedaba sin consumir aunque el precio hubiera pasado)
+    if not consumir(z)
+        arr.push(z)
+        if arr.size() > max_htf
+            arr.shift()
 
 // Consumo progresivo igual que el resto de zonas. Devuelve si el precio tocó el 50% de alguna.
 // Misma regla de IFVG que en el gráfico: una sola vela atraviesa entero un FVG intacto (abre a un
