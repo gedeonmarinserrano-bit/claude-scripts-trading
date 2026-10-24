@@ -922,6 +922,43 @@ plot(mostrar_emas ? ema_lenta : na, "EMA lenta", color=ema_len_col, linewidth=2)
 // por partes hasta que el precio lo cubre entero en dirección contraria.
 nuevo_ifvg_alc = false
 nuevo_ifvg_baj = false
+// Temporalidad del gráfico en el mismo formato que los letreros de M15, H1 y H4 (M5, M15, H1, D…)
+tf_nombre() =>
+    string r = timeframe.period
+    if timeframe.isseconds
+        r := "S" + str.tostring(timeframe.multiplier)
+    else if timeframe.isminutes
+        r := timeframe.multiplier % 60 == 0 ? "H" + str.tostring(int(timeframe.multiplier / 60)) : "M" + str.tostring(timeframe.multiplier)
+    else if timeframe.isdaily
+        r := timeframe.multiplier == 1 ? "D" : str.tostring(timeframe.multiplier) + "D"
+    else if timeframe.isweekly
+        r := timeframe.multiplier == 1 ? "W" : str.tostring(timeframe.multiplier) + "W"
+    else if timeframe.ismonthly
+        r := timeframe.multiplier == 1 ? "MN" : str.tostring(timeframe.multiplier) + "MN"
+    r
+tf_graf = tf_nombre()
+
+// ─────────────────────────────
+// RETESTEO DE IFVG EN LA VELA SIGUIENTE
+// Avisa cuando, en la vela inmediatamente posterior a la que crea un IFVG (de cualquier temporalidad),
+// el precio vuelve a tocarlo. Se comprueba en tiempo real, sin esperar al cierre de la vela.
+// ─────────────────────────────
+retesteo(array<Zona> arr) =>
+    toca = false
+    for z in arr
+        if z.creado == bar_index - 1 and high >= z.suelo and low <= z.techo
+            toca := true
+    toca
+
+retest_ifvg_graf = retesteo(ifvgs)
+retest_ifvg_m15  = retesteo(ifvg15)
+retest_ifvg_h1   = retesteo(ifvg60)
+retest_ifvg_h4   = retesteo(ifvg240)
+retest_ifvg      = retest_ifvg_graf or retest_ifvg_m15 or retest_ifvg_h1 or retest_ifvg_h4
+if retest_ifvg
+    tfs = (retest_ifvg_graf ? " " + tf_graf : "") + (retest_ifvg_m15 ? " M15" : "") + (retest_ifvg_h1 ? " H1" : "") + (retest_ifvg_h4 ? " H4" : "")
+    alert("Retesteo de IFVG en la vela siguiente (" + str.trim(tfs) + ") en " + syminfo.ticker + " a " + str.tostring(close), alert.freq_once_per_bar)
+
 if cerrada and ifvgs.size() > 0
     for i = ifvgs.size() - 1 to 0
         if consumir(ifvgs.get(i))
@@ -938,7 +975,7 @@ if cerrada and zonas.size() > 0
                 nuevo_ifvg_baj := true
             else
                 nuevo_ifvg_alc := true
-            ifvgs.push(Zona.new(z.x1, z.techo, z.suelo, -z.dir))
+            ifvgs.push(Zona.new(z.x1, z.techo, z.suelo, -z.dir, na, bar_index))
             if ifvgs.size() > max_zonas
                 ifvgs.shift()
         else if consumir(z)
@@ -1024,7 +1061,7 @@ actualizar_htf(array<Zona> arr, array<Zona> arr_ifvg) =>
             invertida = na(z.borde) and (z.dir == 1 ? (open >= z.techo and close < z.suelo) : (open <= z.suelo and close > z.techo))
             if invertida
                 arr.remove(i)
-                arr_ifvg.push(Zona.new(z.x1, z.techo, z.suelo, -z.dir))
+                arr_ifvg.push(Zona.new(z.x1, z.techo, z.suelo, -z.dir, na, bar_index))
                 if arr_ifvg.size() > max_htf
                     arr_ifvg.shift()
             else if consumir(z)
@@ -1138,21 +1175,6 @@ var array<Letrero> letreros = array.new<Letrero>()
 // Separación vertical mínima entre letreros cercanos, en precio
 sep_letrero = nz(ta.atr(50)) * 0.5
 
-// Temporalidad del gráfico en el mismo formato que los letreros de M15, H1 y H4 (M5, M15, H1, D…)
-tf_nombre() =>
-    string r = timeframe.period
-    if timeframe.isseconds
-        r := "S" + str.tostring(timeframe.multiplier)
-    else if timeframe.isminutes
-        r := timeframe.multiplier % 60 == 0 ? "H" + str.tostring(int(timeframe.multiplier / 60)) : "M" + str.tostring(timeframe.multiplier)
-    else if timeframe.isdaily
-        r := timeframe.multiplier == 1 ? "D" : str.tostring(timeframe.multiplier) + "D"
-    else if timeframe.isweekly
-        r := timeframe.multiplier == 1 ? "W" : str.tostring(timeframe.multiplier) + "W"
-    else if timeframe.ismonthly
-        r := timeframe.multiplier == 1 ? "MN" : str.tostring(timeframe.multiplier) + "MN"
-    r
-tf_graf = tf_nombre()
 var array<Pieza> ocupado    = array.new<Pieza>()
 
 // Rectángulo p menos el rectángulo o: hasta 4 trozos (izquierda, derecha, arriba y abajo)
@@ -1282,6 +1304,7 @@ alertcondition(choch_fallido_alc, "CHoCH alcista fallido (✗)", "CHoCH alcista 
 alertcondition(choch_fallido_baj, "CHoCH bajista fallido (✗)", "CHoCH bajista fallido: posible reversión alcista en {{ticker}} ({{interval}})")
 alertcondition(reactivada_alc, "Tendencia alcista reactivada", "Tendencia alcista reactivada tras CHoCH fallido en {{ticker}} ({{interval}})")
 alertcondition(reactivada_baj, "Tendencia bajista reactivada", "Tendencia bajista reactivada tras CHoCH fallido en {{ticker}} ({{interval}})")
+alertcondition(retest_ifvg, "Retesteo de IFVG (vela siguiente)", "El precio toca un IFVG en la vela siguiente a su creación en {{ticker}} ({{interval}})")
 alertcondition(nuevo_ifvg_alc, "IFVG alcista", "Un FVG bajista se ha invertido (IFVG alcista) en {{ticker}} ({{interval}})")
 alertcondition(nuevo_ifvg_baj, "IFVG bajista", "Un FVG alcista se ha invertido (IFVG bajista) en {{ticker}} ({{interval}})")
 alertcondition(fvg_alcista, "FVG alcista", "Nuevo FVG alcista en {{ticker}} ({{interval}})")
