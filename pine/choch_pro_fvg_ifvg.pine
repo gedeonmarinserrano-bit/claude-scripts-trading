@@ -1344,28 +1344,28 @@ if barstate.islast
     dibujar_lista(fvg60, fvg_alc_60, fvg_baj_60, 82, "FVG H1", true, true, color_cons_h1, true)
     dibujar_lista(ifvg240, col_ifvg, col_ifvg, 88, "IFVG H4", true, false, color_cons_h4, false)
     dibujar_lista(fvg240, fvg_alc_240, fvg_baj_240, 80, "FVG H4", true, true, color_cons_h4, true)
-    // Colocar los letreros de arriba abajo. Si uno queda demasiado cerca de otro ya colocado del mismo
-    // lado y a pocas velas, se baja lo justo para que no se monten (queda junto a su zona).
+    // Colocar los letreros dentro de su zona: a la altura de la zona y pegados a su borde derecho.
+    // Si dos coinciden (misma altura aproximada), el segundo se pone a la izquierda del primero, en
+    // la misma línea, en vez de subirlo o bajarlo. El ancho de cada letrero se estima en velas
+    // (~1 vela por letra), así que con mucho zoom puede quedar algo de hueco entre ellos.
     if letreros.size() > 0
-        ys = array.new_float()
-        for l in letreros
-            ys.push(l.y)
-        orden = ys.sort_indices(order.descending)
         colocados = array.new<Letrero>()
-        for k in orden
-            l = letreros.get(k)
-            y = l.y
-            for intento = 0 to 6
+        for l in letreros
+            x = l.x
+            ancho = str.length(l.txt) + 2
+            for intento = 0 to 8
                 choca = false
                 for c in colocados
-                    if c.derecha == l.derecha and math.abs(c.x - l.x) < 12 and math.abs(c.y - y) < sep_letrero
-                        y := c.y - sep_letrero
+                    ancho_c = str.length(c.txt) + 2
+                    // Ambos letreros terminan en su x y ocupan [x - ancho, x]
+                    if math.abs(c.y - l.y) < sep_letrero and x > c.x - ancho_c and x - ancho < c.x
+                        x := c.x - ancho_c
                         choca := true
                 if not choca
                     break
-            colocados.push(Letrero.new(l.x, y, l.txt, l.col, l.derecha, l.fondo))
+            colocados.push(Letrero.new(x, l.y, l.txt, l.col, true, l.fondo))
             // Solo el nombre, en el color de su zona, sin caja ni fondo
-            dib_letreros.push(label.new(l.x, y, l.txt, style=l.derecha ? label.style_label_right : label.style_label_left, color=color.new(color.white, 100), textcolor=color.new(l.col, 20), size=size.tiny))
+            dib_letreros.push(label.new(x, l.y, l.txt, style=label.style_label_right, color=color.new(color.white, 100), textcolor=color.new(l.col, 20), size=size.tiny))
 
 // ─────────────────────────────
 // ALERTAS
