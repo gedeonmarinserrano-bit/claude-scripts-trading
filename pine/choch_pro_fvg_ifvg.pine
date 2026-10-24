@@ -1317,7 +1317,8 @@ dibujar_lista(array<Zona> arr, color c_alc, color c_baj, int transp, string txt,
         for i = arr.size() - 1 to 0
             z = arr.get(i)
             c = z.dir == 1 ? c_alc : c_baj
-            t = flecha ? txt + (z.dir == 1 ? " ▲" : " ▼") : txt
+            // Letrero solo con el nombre (sin flecha de dirección)
+            t = txt
             dibujar_zona(z.x1, bar_index + 1, z.techo, z.suelo, z.dir, z.borde, color.new(c, transp), t, c, mitad ? color.new(c, 55) : na, colgris, fondo)
 
 if barstate.islast
@@ -1363,8 +1364,8 @@ if barstate.islast
                 if not choca
                     break
             colocados.push(Letrero.new(l.x, y, l.txt, l.col, l.derecha, l.fondo))
-            // FVG: letrero en blanco sobre el color de su zona; IFVG y OB: texto de color sin fondo
-            dib_letreros.push(label.new(l.x, y, l.txt, style=l.derecha ? label.style_label_right : label.style_label_left, color=l.fondo ? color.new(l.col, 45) : color.new(color.white, 100), textcolor=l.fondo ? color.new(color.white, 10) : color.new(l.col, 35), size=size.tiny))
+            // Solo el nombre, en el color de su zona, sin caja ni fondo
+            dib_letreros.push(label.new(l.x, y, l.txt, style=l.derecha ? label.style_label_right : label.style_label_left, color=color.new(color.white, 100), textcolor=color.new(l.col, 20), size=size.tiny))
 
 // ─────────────────────────────
 // ALERTAS
