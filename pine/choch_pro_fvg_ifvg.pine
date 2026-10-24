@@ -26,7 +26,7 @@ mostrar_fvg     = input.bool(true, "Mostrar FVG", group="FVG")
 fvg_min_pct     = input.float(0.0, "Tamaño mínimo FVG (% precio)", minval=0, step=0.05, group="FVG")
 max_zonas       = input.int(20, "Máx. zonas vigiladas", minval=1, maxval=250, group="FVG")
 // Parte consumida: el mismo gris para todas las zonas y temporalidades
-color_consumido = input.color(color.new(#6B6B6B, 72), "Parte consumida (todas las zonas)", group="FVG")
+color_consumido = input.color(color.new(#B0B0B0, 75), "Parte consumida (todas las zonas)", group="FVG")
 
 // Estrategia apertura de Nueva York (Bias + PO3)
 // Order Blocks: la última vela contraria antes del impulso que rompe estructura (CHoCH o BOS)
