@@ -11,6 +11,9 @@ Colección de pequeños scripts de utilidad para análisis de trading, desarroll
   - `find_structure_breaks` / `find_choch`: rupturas de estructura (BOS) y Change of Character (CHoCH) a partir de swings confirmados, sin mirar al futuro.
 - `pine/choch_fvg_ifvg.pine`: indicador de TradingView que **marca en el gráfico** CHoCH/BOS (línea + etiqueta), FVG (cajas) e IFVG (caja nueva al invertirse), con alertas para cada evento. Copiar el contenido en el editor de Pine y pulsar «Añadir al gráfico».
 
+- `pine/choch_pro_fvg_ifvg.pine`: indicador principal de TradingView **«Po3 + CHoCH PRO - High Contrast + FVG + Rangos + OB»** (Pine v6): CHoCH/BOS sin repintado, FVG e IFVG del gráfico y de M15/H1/H4 con consumo progresivo, Order Blocks, rangos (Auto Range Detector de QuantAlgo, CC BY-NC-SA 4.0), EMAs 9/20/200, horas de la apertura de Nueva York, niveles clave y alertas (incluido el retesteo de IFVG).
+- `docs/estrategia/`: documento de la estrategia de apertura de Nueva York (Bias + PO3) y sus gráficos.
+
 ## Uso
 
 ```bash
