@@ -40,7 +40,8 @@ col_ob_alc      = input.color(#1565C0, "OB alcista (demanda)", group=g_ob)
 col_ob_baj      = input.color(#EF6C00, "OB bajista (oferta)", group=g_ob)
 
 g_ny            = "Estrategia NY (Bias + PO3)"
-mostrar_horas   = input.bool(true, "Marcar horas 15:00 / 15:30 / 15:45 / 16:00 (Madrid)", group=g_ny)
+mostrar_horas   = input.bool(true, "Marcar horas de la apertura de Nueva York (hora de Madrid)", group=g_ny)
+modo_horas      = input.string("Verano (15:00 / 15:30 / 15:45 / 16:00)", "Horario de las marcas", options=["Verano (15:00 / 15:30 / 15:45 / 16:00)", "Invierno (14:00 / 14:30 / 14:45 / 15:00)", "Automático (según la apertura de Nueva York)"], group=g_ny)
 mostrar_fvg15   = input.bool(true, "FVG de M15 (con línea del 50%)", group=g_ny)
 mostrar_fvg60   = input.bool(true, "FVG de H1 (con línea del 50%)", group=g_ny)
 mostrar_fvg240  = input.bool(true, "FVG de H4 (con línea del 50%)", group=g_ny)
@@ -1074,24 +1075,36 @@ else if fvg_bajista
 seg_tf = timeframe.in_seconds()
 
 // --- Horas de Madrid ---
-mins_mad = hour(time, "Europe/Madrid") * 60 + minute(time, "Europe/Madrid")
+// Verano: 15:00 / 15:30 / 15:45 / 16:00. Invierno: una hora antes (14:00 / 14:30 / 14:45 / 15:00).
+// Automático: se sigue la apertura de Nueva York (9:00 / 9:30 / 9:45 / 10:00 en Nueva York) y la
+// marca muestra la hora de Madrid que corresponda, así también acierta en las semanas en que
+// Europa y Estados Unidos cambian de hora en fechas distintas.
+es_auto     = str.startswith(modo_horas, "Automático")
+es_invierno = str.startswith(modo_horas, "Invierno")
+zona_marcas = es_auto ? "America/New_York" : "Europe/Madrid"
+base_marcas = es_auto ? 9 * 60 : es_invierno ? 14 * 60 : 15 * 60   // primera marca, en minutos
+mins_mad = hour(time, zona_marcas) * 60 + minute(time, zona_marcas)
 prev_mad = nz(mins_mad[1], mins_mad)
 cruza_hora(int objetivo) =>
     mins_mad >= objetivo and (prev_mad < objetivo or prev_mad > mins_mad)
+
+// Texto de la marca: la hora de Madrid del momento marcado (p. ej. «14:30» en invierno)
+texto_hora(int objetivo) =>
+    es_auto ? str.format_time(time - (mins_mad - objetivo) * 60000, "HH:mm", "Europe/Madrid") : str.format("{0,number,00}:{1,number,00}", int(objetivo / 60), objetivo % 60)
 
 marcar_hora(string txt, bool fuerte) =>
     line.new(bar_index, low, bar_index, high, extend=extend.both, color=color.new(col_horas, fuerte ? 30 : 60), style=fuerte ? line.style_dashed : line.style_dotted, width=1)
     label.new(bar_index, high, txt, yloc=yloc.abovebar, style=label.style_none, textcolor=color.new(col_horas, 10), size=size.tiny)
 
 if mostrar_horas and timeframe.isintraday and seg_tf <= 900
-    if cruza_hora(15 * 60)
-        marcar_hora("15:00", false)
-    if cruza_hora(15 * 60 + 30)
-        marcar_hora("15:30", false)
-    if cruza_hora(15 * 60 + 45)
-        marcar_hora("15:45", false)
-    if cruza_hora(16 * 60)
-        marcar_hora("16:00", true)
+    if cruza_hora(base_marcas)
+        marcar_hora(texto_hora(base_marcas), false)
+    if cruza_hora(base_marcas + 30)
+        marcar_hora(texto_hora(base_marcas + 30), false)
+    if cruza_hora(base_marcas + 45)
+        marcar_hora(texto_hora(base_marcas + 45), false)
+    if cruza_hora(base_marcas + 60)
+        marcar_hora(texto_hora(base_marcas + 60), true)
 
 // --- FVG de M15, H1 y H4 (sin repintado: se evalúa la última vela cerrada de esa temporalidad) ---
 fvg_htf() =>
