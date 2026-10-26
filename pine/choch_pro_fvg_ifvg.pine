@@ -41,7 +41,7 @@ col_ob_baj      = input.color(#EF6C00, "OB bajista (oferta)", group=g_ob)
 
 g_ny            = "Estrategia NY (Bias + PO3)"
 mostrar_horas   = input.bool(true, "Marcar horas de la apertura de Nueva York (hora de Madrid)", group=g_ny)
-modo_horas      = input.string("Verano (15:00 / 15:30 / 15:45 / 16:00)", "Horario de las marcas", options=["Verano (15:00 / 15:30 / 15:45 / 16:00)", "Invierno (14:00 / 14:30 / 14:45 / 15:00)", "Automático (según la apertura de Nueva York)"], group=g_ny)
+modo_horas      = input.string("Invierno (14:00 / 14:30 / 14:45 / 15:00)", "Horario de las marcas", options=["Verano (15:00 / 15:30 / 15:45 / 16:00)", "Invierno (14:00 / 14:30 / 14:45 / 15:00)", "Automático (según la apertura de Nueva York)"], group=g_ny)
 mostrar_fvg15   = input.bool(true, "FVG de M15 (con línea del 50%)", group=g_ny)
 mostrar_fvg60   = input.bool(true, "FVG de H1 (con línea del 50%)", group=g_ny)
 mostrar_fvg240  = input.bool(true, "FVG de H4 (con línea del 50%)", group=g_ny)
