@@ -1271,10 +1271,13 @@ smt_yo  = str.replace(syminfo.ticker, "1!", "")
 smt_ok1 = mostrar_smt and smt_usa1 and smt_n1 != smt_yo
 smt_ok2 = mostrar_smt and smt_usa2 and smt_n2 != smt_yo
 
-// Extremo del otro índice en la ventana del pivote (las 2N+1 velas centradas en él)
-smt_ext() => [ta.highest(high, 2 * smt_len + 1), ta.lowest(low, 2 * smt_len + 1)]
-[smt_h1, smt_l1] = request.security(smt_sym1, timeframe.period, smt_ext(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
-[smt_h2, smt_l2] = request.security(smt_sym2, timeframe.period, smt_ext(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+// Extremo del otro índice en la ventana del pivote (las 2N+1 velas centradas en él) y cuántas velas
+// atrás lo hizo, para poder marcar la vela exacta
+smt_ext() =>
+    w = 2 * smt_len + 1
+    [ta.highest(high, w), ta.lowest(low, w), ta.highestbars(high, w), ta.lowestbars(low, w)]
+[smt_h1, smt_l1, smt_hb1, smt_lb1] = request.security(smt_sym1, timeframe.period, smt_ext(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+[smt_h2, smt_l2, smt_hb2, smt_lb2] = request.security(smt_sym2, timeframe.period, smt_ext(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
 
 smt_ph = ta.pivothigh(high, smt_len, smt_len)
 smt_pl = ta.pivotlow(low, smt_len, smt_len)
@@ -1298,9 +1301,17 @@ smt_diverge(float y, float y_ant, float c, float c_ant, bool altos) =>
     nuevo_c = altos ? c > c_ant : c < c_ant
     not na(y_ant) and not na(c_ant) and not na(c) and nuevo_y != nuevo_c
 
-smt_marcar(int x1, float y1, float y2, string txt, color col, bool altos) =>
-    smt_lineas.push(line.new(x1, y1, smt_x, y2, color=col))
-    smt_textos.push(label.new(smt_x, y2, txt, style=altos ? label.style_label_down : label.style_label_up, color=col, textcolor=color.white, size=size.tiny, tooltip="SMT: un índice marca un " + (altos ? "alto más alto" : "bajo más bajo") + " y el otro no lo confirma"))
+// Ticker + flecha: dónde quedó el otro índice respecto a su alto/bajo anterior
+//   ↑ = más alto que antes, ↓ = más bajo que antes, = = igual
+smt_texto(string t, float c, float c_ant) =>
+    t + (c > c_ant ? " ↑" : c < c_ant ? " ↓" : " =")
+
+smt_marcar(int x1, float y1, int xv, string txt, color col, bool altos) =>
+    // xv = vela exacta de la divergencia: el alto/bajo de MNQ si fue él quien barrió, o la vela en la
+    // que el otro índice hizo su alto/bajo si fue el otro el que barrió y MNQ no le acompañó
+    yv = altos ? high[bar_index - xv] : low[bar_index - xv]
+    smt_lineas.push(line.new(x1, y1, xv, yv, color=col))
+    smt_textos.push(label.new(xv, yv, txt, style=altos ? label.style_label_down : label.style_label_up, color=col, textcolor=color.white, size=size.tiny, tooltip="SMT " + (altos ? "bajista" : "alcista") + ". Flecha = dónde quedó ese índice respecto a su " + (altos ? "alto" : "bajo") + " anterior: ↑ más alto, ↓ más bajo, = igual"))
     if smt_lineas.size() > smt_max
         smt_lineas.shift().delete()
     if smt_textos.size() > smt_max
@@ -1315,7 +1326,11 @@ if barstate.isconfirmed
         d2 = cerca and smt_ok2 and smt_diverge(smt_ph, smt_ph_y, smt_h2, smt_ph_c2, true)
         if d1 or d2
             smt_bajista := true
-            smt_marcar(smt_ph_x, smt_ph_y, smt_ph, d1 and d2 ? smt_t1 + " | " + smt_t2 : d1 ? smt_t1 : smt_t2, smt_col_baj, true)
+            mnq_barre = smt_ph > smt_ph_y
+            xv = mnq_barre ? smt_x : bar_index + int(d1 ? smt_hb1 : smt_hb2)
+            t1 = smt_texto(smt_t1, smt_h1, smt_ph_c1)
+            t2 = smt_texto(smt_t2, smt_h2, smt_ph_c2)
+            smt_marcar(smt_ph_x, smt_ph_y, xv, d1 and d2 ? t1 + " | " + t2 : d1 ? t1 : t2, smt_col_baj, true)
         smt_ph_x  := smt_x
         smt_ph_y  := smt_ph
         smt_ph_c1 := smt_h1
@@ -1326,7 +1341,11 @@ if barstate.isconfirmed
         d2 = cerca and smt_ok2 and smt_diverge(smt_pl, smt_pl_y, smt_l2, smt_pl_c2, false)
         if d1 or d2
             smt_alcista := true
-            smt_marcar(smt_pl_x, smt_pl_y, smt_pl, d1 and d2 ? smt_t1 + " | " + smt_t2 : d1 ? smt_t1 : smt_t2, smt_col_alc, false)
+            mnq_barre = smt_pl < smt_pl_y
+            xv = mnq_barre ? smt_x : bar_index + int(d1 ? smt_lb1 : smt_lb2)
+            t1 = smt_texto(smt_t1, smt_l1, smt_pl_c1)
+            t2 = smt_texto(smt_t2, smt_l2, smt_pl_c2)
+            smt_marcar(smt_pl_x, smt_pl_y, xv, d1 and d2 ? t1 + " | " + t2 : d1 ? t1 : t2, smt_col_alc, false)
         smt_pl_x  := smt_x
         smt_pl_y  := smt_pl
         smt_pl_c1 := smt_l1
