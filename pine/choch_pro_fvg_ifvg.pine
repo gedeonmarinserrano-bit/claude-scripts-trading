@@ -1248,6 +1248,7 @@ plot(ver_pd ? pdl : na, "Bajo día anterior", color=color.new(col_niveles, 30), 
 // ─────────────────────────────
 g_smt        = "SMT (divergencias entre índices)"
 mostrar_smt  = input.bool(true, "Mostrar SMT", group=g_smt)
+smt_etiquetas = input.bool(true, "Mostrar etiquetas de la SMT (si se apaga, solo queda la línea)", group=g_smt)
 smt_usa1     = input.bool(true, "Comparar con", inline="smt1", group=g_smt)
 smt_sym1     = input.symbol("CME_MINI:ES1!", "", inline="smt1", group=g_smt)
 smt_usa2     = input.bool(true, "Comparar con", inline="smt2", group=g_smt)
@@ -1311,7 +1312,8 @@ smt_marcar(int x1, float y1, int xv, string txt, color col, bool altos) =>
     // que el otro índice hizo su alto/bajo si fue el otro el que barrió y MNQ no le acompañó
     yv = altos ? high[bar_index - xv] : low[bar_index - xv]
     smt_lineas.push(line.new(x1, y1, xv, yv, color=col))
-    smt_textos.push(label.new(xv, yv, txt, style=altos ? label.style_label_down : label.style_label_up, color=col, textcolor=color.white, size=size.tiny, tooltip="SMT " + (altos ? "bajista" : "alcista") + ". Flecha = dónde quedó ese índice respecto a su " + (altos ? "alto" : "bajo") + " anterior: ↑ más alto, ↓ más bajo, = igual"))
+    if smt_etiquetas
+        smt_textos.push(label.new(xv, yv, txt, style=altos ? label.style_label_down : label.style_label_up, color=col, textcolor=color.white, size=size.tiny, tooltip="SMT " + (altos ? "bajista" : "alcista") + ". Flecha = dónde quedó ese índice respecto a su " + (altos ? "alto" : "bajo") + " anterior: ↑ más alto, ↓ más bajo, = igual"))
     if smt_lineas.size() > smt_max
         smt_lineas.shift().delete()
     if smt_textos.size() > smt_max
