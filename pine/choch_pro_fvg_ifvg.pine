@@ -3,6 +3,7 @@
 // Incluye "Auto Range Detector [QuantAlgo]" © QuantAlgo, licenciado bajo
 // Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
 // https://creativecommons.org/licenses/by-nc-sa/4.0/
+// Incluye una versión mejorada de "SMT Divergences [LuxAlgo]" © LuxAlgo, también CC BY-NC-SA 4.0.
 // Por esa licencia, este script combinado se distribuye bajo la misma licencia (CC BY-NC-SA 4.0).
 
 //@version=6
@@ -1233,6 +1234,105 @@ plot(ver_pd ? pdh : na, "Alto día anterior", color=color.new(col_niveles, 30), 
 plot(ver_pd ? pdl : na, "Bajo día anterior", color=color.new(col_niveles, 30), style=plot.style_linebr, linewidth=1)
 
 // ─────────────────────────────
+// SMT: DIVERGENCIAS ENTRE ÍNDICES (basado en "SMT Divergences [LuxAlgo]" © LuxAlgo, CC BY-NC-SA 4.0)
+// Mejoras sobre el original:
+//  - El original solo detectaba SMT si el otro índice marcaba su pivote EXACTAMENTE en la misma vela;
+//    aquí se toma el máximo/mínimo del otro índice en la misma ventana del pivote (± N velas), así no
+//    se pierden las SMT con un desfase de 1-2 velas.
+//  - El original perdía la referencia tras un pivote sin pareja; aquí siempre se compara con el pivote
+//    anterior del gráfico, y solo si está cerca (máx. velas configurable), para evitar SMT sin sentido.
+//  - Cuenta también los dobles techos/suelos (igualar el alto sin superarlo es "no confirmar").
+//  - Solo se marca al cierre de la vela (sin repintado) y el número de marcas está limitado.
+//  - Una sola etiqueta por SMT con el estilo del original (caja de color y texto blanco) y el ticker
+//    de los activos que divergen. Alertas incluidas. Se ignora el activo si es el mismo del gráfico.
+// ─────────────────────────────
+g_smt        = "SMT (divergencias entre índices)"
+mostrar_smt  = input.bool(true, "Mostrar SMT", group=g_smt)
+smt_usa1     = input.bool(true, "Comparar con", inline="smt1", group=g_smt)
+smt_sym1     = input.symbol("CME_MINI:ES1!", "", inline="smt1", group=g_smt)
+smt_usa2     = input.bool(true, "Comparar con", inline="smt2", group=g_smt)
+smt_sym2     = input.symbol("CBOT_MINI:YM1!", "", inline="smt2", group=g_smt)
+smt_len      = input.int(5, "Sensibilidad pivotes SMT (velas a cada lado)", minval=2, maxval=20, group=g_smt)
+smt_dist     = input.int(60, "Máx. velas entre los dos altos/bajos comparados", minval=5, maxval=400, group=g_smt)
+smt_max      = input.int(20, "Máx. SMT en el gráfico", minval=1, maxval=60, group=g_smt)
+smt_col_baj  = input.color(#ff1100, "SMT bajista (en altos)", group=g_smt)
+smt_col_alc  = input.color(#2157f3, "SMT alcista (en bajos)", group=g_smt)
+
+// Ticker de un símbolo: "CME_MINI:ES1!" -> "ES1!" (el que se muestra en la etiqueta)
+smt_ticker(string s) =>
+    partes = str.split(s, ":")
+    partes.size() > 0 ? partes.last() : s
+
+smt_t1  = smt_ticker(smt_sym1)
+smt_t2  = smt_ticker(smt_sym2)
+smt_n1  = str.replace(smt_t1, "1!", "")
+smt_n2  = str.replace(smt_t2, "1!", "")
+smt_yo  = str.replace(syminfo.ticker, "1!", "")
+smt_ok1 = mostrar_smt and smt_usa1 and smt_n1 != smt_yo
+smt_ok2 = mostrar_smt and smt_usa2 and smt_n2 != smt_yo
+
+// Extremo del otro índice en la ventana del pivote (las 2N+1 velas centradas en él)
+smt_ext() => [ta.highest(high, 2 * smt_len + 1), ta.lowest(low, 2 * smt_len + 1)]
+[smt_h1, smt_l1] = request.security(smt_sym1, timeframe.period, smt_ext(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+[smt_h2, smt_l2] = request.security(smt_sym2, timeframe.period, smt_ext(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+smt_ph = ta.pivothigh(high, smt_len, smt_len)
+smt_pl = ta.pivotlow(low, smt_len, smt_len)
+smt_x  = bar_index - smt_len
+
+// Pivote anterior del gráfico y valor de cada índice en ese pivote
+var int   smt_ph_x  = na
+var float smt_ph_y  = na
+var float smt_ph_c1 = na
+var float smt_ph_c2 = na
+var int   smt_pl_x  = na
+var float smt_pl_y  = na
+var float smt_pl_c1 = na
+var float smt_pl_c2 = na
+var array<line>  smt_lineas = array.new<line>()
+var array<label> smt_textos = array.new<label>()
+
+// true si uno hace un alto más alto (bajo más bajo) y el otro no lo confirma
+smt_diverge(float y, float y_ant, float c, float c_ant, bool altos) =>
+    nuevo_y = altos ? y > y_ant : y < y_ant
+    nuevo_c = altos ? c > c_ant : c < c_ant
+    not na(y_ant) and not na(c_ant) and not na(c) and nuevo_y != nuevo_c
+
+smt_marcar(int x1, float y1, float y2, string txt, color col, bool altos) =>
+    smt_lineas.push(line.new(x1, y1, smt_x, y2, color=col))
+    smt_textos.push(label.new(smt_x, y2, txt, style=altos ? label.style_label_down : label.style_label_up, color=col, textcolor=color.white, size=size.tiny, tooltip="SMT: un índice marca un " + (altos ? "alto más alto" : "bajo más bajo") + " y el otro no lo confirma"))
+    if smt_lineas.size() > smt_max
+        smt_lineas.shift().delete()
+    if smt_textos.size() > smt_max
+        smt_textos.shift().delete()
+
+smt_bajista = false
+smt_alcista = false
+if barstate.isconfirmed
+    if not na(smt_ph)
+        cerca = not na(smt_ph_x) and smt_x - smt_ph_x <= smt_dist
+        d1 = cerca and smt_ok1 and smt_diverge(smt_ph, smt_ph_y, smt_h1, smt_ph_c1, true)
+        d2 = cerca and smt_ok2 and smt_diverge(smt_ph, smt_ph_y, smt_h2, smt_ph_c2, true)
+        if d1 or d2
+            smt_bajista := true
+            smt_marcar(smt_ph_x, smt_ph_y, smt_ph, d1 and d2 ? smt_t1 + " | " + smt_t2 : d1 ? smt_t1 : smt_t2, smt_col_baj, true)
+        smt_ph_x  := smt_x
+        smt_ph_y  := smt_ph
+        smt_ph_c1 := smt_h1
+        smt_ph_c2 := smt_h2
+    if not na(smt_pl)
+        cerca = not na(smt_pl_x) and smt_x - smt_pl_x <= smt_dist
+        d1 = cerca and smt_ok1 and smt_diverge(smt_pl, smt_pl_y, smt_l1, smt_pl_c1, false)
+        d2 = cerca and smt_ok2 and smt_diverge(smt_pl, smt_pl_y, smt_l2, smt_pl_c2, false)
+        if d1 or d2
+            smt_alcista := true
+            smt_marcar(smt_pl_x, smt_pl_y, smt_pl, d1 and d2 ? smt_t1 + " | " + smt_t2 : d1 ? smt_t1 : smt_t2, smt_col_alc, false)
+        smt_pl_x  := smt_x
+        smt_pl_y  := smt_pl
+        smt_pl_c1 := smt_l1
+        smt_pl_c2 := smt_l2
+
+// ─────────────────────────────
 // DIBUJO DE ZONAS SIN SOLAPES
 // Cada zona se dibuja solo donde no la tapa otra de más prioridad, así nunca se mezclan colores:
 //   IFVG > FVG del gráfico > OB > IFVG/FVG M15 > IFVG/FVG H1 > IFVG/FVG H4 > rangos
@@ -1385,6 +1485,8 @@ if barstate.islast
 // ─────────────────────────────
 // ALERTAS
 // ─────────────────────────────
+alertcondition(smt_bajista, "SMT bajista", "SMT bajista (divergencia en altos entre índices) en {{ticker}} ({{interval}})")
+alertcondition(smt_alcista, "SMT alcista", "SMT alcista (divergencia en bajos entre índices) en {{ticker}} ({{interval}})")
 alertcondition(choch_alcista, "CHoCH alcista", "CHoCH alcista en {{ticker}} ({{interval}})")
 alertcondition(choch_bajista, "CHoCH bajista", "CHoCH bajista en {{ticker}} ({{interval}})")
 alertcondition(choch_riesgo_alc, "CHoCH alcista de riesgo (⚠)", "CHoCH alcista con riesgo de fallo en {{ticker}} ({{interval}})")
