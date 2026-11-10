@@ -22,6 +22,10 @@ mostrar_bos  = input.bool(true, "Mostrar BOS (salvo con tendencia invalidada)")
 borrar_bos_giro = input.bool(true, "Borrar el BOS contrario previo al CHoCH (modifica el pasado)")
 bos_ventana  = input.int(0, "Borrar BOS previo al CHoCH: máx. velas (0 = sin límite)", minval=0)
 filtro_rango = input.bool(true, "Sin CHoCH ni BOS dentro de un rango (hasta el breakout)")
+// TradingView limita el tiempo total de cálculo: las partes pesadas (rangos, Order Blocks, FVG de
+// otras temporalidades) solo se calculan en las últimas N velas del historial
+velas_calc   = input.int(2000, "Velas de historial a calcular (menos = más rápido)", minval=300, maxval=20000)
+en_calc      = bar_index >= last_bar_index - velas_calc
 
 // Interruptores de FVG por temporalidad: solo se ven (y se calculan) los que estén activados.
 // Cada interruptor muestra los FVG y los IFVG de esa temporalidad, sea más alta o más baja que el gráfico.
@@ -380,9 +384,31 @@ scanWindow(simple int len) =>
     qualified   = context_ok and not na(rank) and bar_index > len + 5 and rank <= compression_pct and crossings >= math.max(3, math.round(min_rotation * len)) and hits_top >= min_touches and hits_bottom >= min_touches and drift <= max_drift and containment >= min_containment
     [qualified, top, bottom]
 
-[qualified_a, top_a, bottom_a] = scanWindow(base_length)
-[qualified_b, top_b, bottom_b] = scanWindow(base_length * 2)
-[qualified_c, top_c, bottom_c] = scanWindow(base_length * 3)
+// Solo dentro de las velas a calcular (es la parte que más tiempo cuesta)
+bool  qualified_a = false
+bool  qualified_b = false
+bool  qualified_c = false
+float top_a = na
+float top_b = na
+float top_c = na
+float bottom_a = na
+float bottom_b = na
+float bottom_c = na
+if en_calc
+    [qa, ta_, ba] = scanWindow(base_length)
+    qualified_a := qa
+    top_a       := ta_
+    bottom_a    := ba
+    if scan_scaling != 'Base only'
+        [qb, tb, bb] = scanWindow(base_length * 2)
+        qualified_b := qb
+        top_b       := tb
+        bottom_b    := bb
+    if scan_scaling == 'Base + 2x + 3x'
+        [qc, tc, bc] = scanWindow(base_length * 3)
+        qualified_c := qc
+        top_c       := tc
+        bottom_c    := bc
 
 use_double = scan_scaling != 'Base only' and qualified_b
 use_triple = scan_scaling == 'Base + 2x + 3x' and qualified_c
@@ -874,7 +900,8 @@ if cruce_arriba and not na(ultimo_pico)
         ultimo_bos_dir := 1
         registrar_marca(ultimo_bos_lbl, na, bar_index)
     if mostrar_ob and (tendencia <= 0 or not ob_solo_choch)
-        crear_ob(1, bar_pico)
+        if en_calc
+            crear_ob(1, bar_pico)
     tendencia := 1
     ultimo_pico := na 
 
@@ -898,7 +925,8 @@ if cruce_abajo and not na(ultimo_valle)
         ultimo_bos_dir := -1
         registrar_marca(ultimo_bos_lbl, na, bar_index)
     if mostrar_ob and (tendencia >= 0 or not ob_solo_choch)
-        crear_ob(-1, bar_valle)
+        if en_calc
+            crear_ob(-1, bar_valle)
     tendencia := -1
     ultimo_valle := na 
 
@@ -1065,11 +1093,11 @@ usa240 = mostrar_fvg240 and seg_graf > 14400
 
 // Retesteo de IFVG: los de temporalidades más altas se vigilan con las velas del gráfico y los de
 // temporalidades más bajas, vela a vela de su temporalidad dentro de procesar_ltf
-retest_ifvg_m1  = usa1 ? procesar_ltf(fvg1, ifvg1, est1, lo1, lh1, ll1, lc1, 30) : false
-retest_ifvg_m5  = seg_graf < 300 ? retesteo(ifvg5) : usa5 ? procesar_ltf(fvg5, ifvg5, est5, lo5, lh5, ll5, lc5, max_htf) : false
-retest_ifvg_m15 = seg_graf < 900 ? retesteo(ifvg15) : usa15 ? procesar_ltf(fvg15, ifvg15, est15, lo15, lh15, ll15, lc15, max_htf) : false
-retest_ifvg_h1  = seg_graf < 3600 ? retesteo(ifvg60) : usa60 ? procesar_ltf(fvg60, ifvg60, est60, lo60, lh60, ll60, lc60, max_htf) : false
-retest_ifvg_h4  = seg_graf < 14400 ? retesteo(ifvg240) : usa240 ? procesar_ltf(fvg240, ifvg240, est240, lo240, lh240, ll240, lc240, max_htf) : false
+retest_ifvg_m1  = usa1 and en_calc ? procesar_ltf(fvg1, ifvg1, est1, lo1, lh1, ll1, lc1, 30) : false
+retest_ifvg_m5  = seg_graf < 300 ? retesteo(ifvg5) : usa5 and en_calc ? procesar_ltf(fvg5, ifvg5, est5, lo5, lh5, ll5, lc5, max_htf) : false
+retest_ifvg_m15 = seg_graf < 900 ? retesteo(ifvg15) : usa15 and en_calc ? procesar_ltf(fvg15, ifvg15, est15, lo15, lh15, ll15, lc15, max_htf) : false
+retest_ifvg_h1  = seg_graf < 3600 ? retesteo(ifvg60) : usa60 and en_calc ? procesar_ltf(fvg60, ifvg60, est60, lo60, lh60, ll60, lc60, max_htf) : false
+retest_ifvg_h4  = seg_graf < 14400 ? retesteo(ifvg240) : usa240 and en_calc ? procesar_ltf(fvg240, ifvg240, est240, lo240, lh240, ll240, lc240, max_htf) : false
 
 retest_ifvg      = retest_ifvg_graf or retest_ifvg_m1 or retest_ifvg_m5 or retest_ifvg_m15 or retest_ifvg_h1 or retest_ifvg_h4
 if retest_ifvg
@@ -1211,7 +1239,7 @@ toque50_m5  = false
 toque50_m15 = false
 toque50_h1  = false
 toque50_h4  = false
-if cerrada and timeframe.isintraday
+if cerrada and timeframe.isintraday and en_calc
     if mostrar_fvg5 and seg_tf < 300
         toque50_m5 := actualizar_htf(fvg5, ifvg5)
         if cambio5
