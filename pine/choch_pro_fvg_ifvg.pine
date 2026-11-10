@@ -53,6 +53,7 @@ mostrar_horas   = input.bool(true, "Marcar horas de la apertura de Nueva York (h
 modo_horas      = input.string("Automático (según la apertura de Nueva York)", "Horario de las marcas", options=["Verano (15:00 / 15:30 / 15:45 / 16:00)", "Invierno (14:00 / 14:30 / 14:45 / 15:00)", "Automático (según la apertura de Nueva York)"], group=g_ny)
 max_htf         = input.int(10, "Máx. FVG por temporalidad (M5, M15, H1, H4)", minval=1, maxval=50, group=g_fvgtf)
 // Las zonas muy lejos del precio no aportan en intradía y son las que más tiempo de cálculo cuestan
+max_dibujadas   = input.int(35, "Máx. zonas dibujadas a la vez (menos = más rápido)", minval=5, maxval=120, group=g_fvgtf)
 dist_max        = input.float(2.0, "Dibujar solo zonas a menos de este % del precio (0 = todas)", minval=0, step=0.5, group=g_fvgtf)
 // Colores de los FVG: verde (alcista) y rojo (bajista), cada vez más oscuros cuanto más alta la temporalidad
 g_cfvg          = "Colores FVG (más oscuro = temporalidad más alta)"
@@ -1473,7 +1474,7 @@ recortar(Pieza p) =>
                         nuevo.push(r)
                 res := nuevo
                 // Tapada del todo, o demasiados trozos: no hace falta seguir recortando
-                if res.size() == 0 or res.size() > 16
+                if res.size() == 0 or res.size() > 10
                     break
     res
 
@@ -1494,7 +1495,7 @@ dibujar_zona(int x1_zona, int x2, float techo, float suelo, int dir, float borde
     if not na(borde)
         pintar_parte(Pieza.new(x1, x2, dir == 1 ? techo : borde, dir == 1 ? borde : suelo), colgris)
     // Letrero solo al final de la zona (junto a la vela actual), a la altura de la parte sin tocar
-    if txt != "" and letreros.size() < 50
+    if txt != "" and letreros.size() < 30
         letreros.push(Letrero.new(x2, (ctop + cbot) / 2, txt, coltxt, true, fondo))
     // Línea del 50% (FVG de M15, H1 y H4), también recortada
     if not na(colmitad)
@@ -1513,7 +1514,7 @@ dibujar_lista(array<Zona> arr, color c_alc, color c_baj, int transp, string txt,
             t = txt
             dist = z.suelo > close ? z.suelo - close : close > z.techo ? close - z.techo : 0.0
             // Si ya no caben más cajas o la zona está demasiado lejos del precio, no se calcula
-            if dib_cajas.size() < 300 and (dist_max == 0 or dist / close * 100 <= dist_max)
+            if dib_cajas.size() < 300 and ocupado.size() < max_dibujadas and (dist_max == 0 or dist / close * 100 <= dist_max)
                 dibujar_zona(z.x1, bar_index + 1, z.techo, z.suelo, z.dir, z.borde, color.new(c, transp), t, c, mitad ? color.new(c, 55) : na, colgris, fondo)
 
 // FVG/IFVG y OB del propio gráfico
@@ -1575,7 +1576,7 @@ if barstate.islast
         for l in letreros
             x = l.x
             ancho = str.length(l.txt) + 2
-            for intento = 0 to 5
+            for intento = 0 to 3
                 choca = false
                 for c in colocados
                     ancho_c = str.length(c.txt) + 2
