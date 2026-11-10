@@ -1455,6 +1455,43 @@ type Pieza
 var array<box>   dib_cajas  = array.new<box>()
 var array<line>  dib_lineas = array.new<line>()
 var array<label> dib_letreros = array.new<label>()
+// Las cajas, líneas y letreros se reutilizan de un dibujo al siguiente (solo se mueven y se cambia su
+// color) en vez de borrarlos y crearlos de nuevo: crear cientos de objetos en cada actualización es
+// lo que más tiempo cuesta. uso = cuántos de cada tipo lleva usados el dibujo actual.
+var array<int> uso = array.from(0, 0, 0)
+
+poner_caja(int x1, float top, int x2, float bot, color col) =>
+    i = uso.get(0)
+    if i < dib_cajas.size()
+        b = dib_cajas.get(i)
+        b.set_lefttop(x1, top)
+        b.set_rightbottom(x2, bot)
+        b.set_bgcolor(col)
+    else
+        dib_cajas.push(box.new(x1, top, x2, bot, border_color=na, bgcolor=col))
+    uso.set(0, i + 1)
+
+poner_linea(int x1, int x2, float y, color col) =>
+    i = uso.get(1)
+    if i < dib_lineas.size()
+        l = dib_lineas.get(i)
+        l.set_xy1(x1, y)
+        l.set_xy2(x2, y)
+        l.set_color(col)
+    else
+        dib_lineas.push(line.new(x1, y, x2, y, color=col, style=line.style_dashed, width=1))
+    uso.set(1, i + 1)
+
+poner_letrero(int x, float y, string txt, color col) =>
+    i = uso.get(2)
+    if i < dib_letreros.size()
+        e = dib_letreros.get(i)
+        e.set_xy(x, y)
+        e.set_text(txt)
+        e.set_textcolor(col)
+    else
+        dib_letreros.push(label.new(x, y, txt, style=label.style_label_right, color=color.new(color.white, 100), textcolor=col, size=size.tiny))
+    uso.set(2, i + 1)
 
 // Letreros pendientes de colocar (se colocan todos juntos al final para que no se monten)
 type Letrero
@@ -1509,8 +1546,8 @@ recortar(Pieza p) =>
 pintar_parte(Pieza p, color col) =>
     for q in recortar(p)
         // Tope de cajas para no superar el límite de TradingView (500): se dibujan antes las de más prioridad
-        if q.x2 > q.x1 and q.top > q.bot and dib_cajas.size() < 300
-            dib_cajas.push(box.new(q.x1, q.top, q.x2, q.bot, border_color=na, bgcolor=col))
+        if q.x2 > q.x1 and q.top > q.bot and uso.get(0) < 200
+            poner_caja(q.x1, q.top, q.x2, q.bot, col)
 
 dibujar_zona(int x1_zona, int x2, float techo, float suelo, int dir, float borde, color col, string txt, color coltxt, color colmitad, color colgris, bool fondo) =>
     // TradingView no deja dibujar con bar_index demasiado lejos hacia atrás: las zonas muy antiguas
@@ -1530,7 +1567,7 @@ dibujar_zona(int x1_zona, int x2, float techo, float suelo, int dir, float borde
         m = (techo + suelo) / 2
         for q in recortar(Pieza.new(x1, x2, m, m))
             if q.x2 > q.x1
-                dib_lineas.push(line.new(q.x1, m, q.x2, m, color=colmitad, style=line.style_dashed, width=1))
+                poner_linea(q.x1, q.x2, m, colmitad)
     ocupado.push(Pieza.new(x1, x2, techo, suelo))
 
 dibujar_lista(array<Zona> arr, color c_alc, color c_baj, int transp, string txt, bool flecha, bool mitad, color colgris, bool fondo) =>
@@ -1542,7 +1579,7 @@ dibujar_lista(array<Zona> arr, color c_alc, color c_baj, int transp, string txt,
             t = txt
             dist = z.suelo > close ? z.suelo - close : close > z.techo ? close - z.techo : 0.0
             // Si ya no caben más cajas o la zona está demasiado lejos del precio, no se calcula
-            if dib_cajas.size() < 300 and ocupado.size() < max_dibujadas and (dist_max == 0 or dist / close * 100 <= dist_max)
+            if uso.get(0) < 200 and ocupado.size() < max_dibujadas and (dist_max == 0 or dist / close * 100 <= dist_max)
                 dibujar_zona(z.x1, bar_index + 1, z.techo, z.suelo, z.dir, z.borde, color.new(c, transp), t, c, mitad ? color.new(c, 55) : na, colgris, fondo)
 
 // FVG/IFVG y OB del propio gráfico
@@ -1559,15 +1596,9 @@ dibujar_tf(bool ver, int mins, array<Zona> f, array<Zona> fi, color ca, color cb
         dibujar_lista(f, ca, cb, transp, "FVG " + nom, true, mins >= 15, color_consumido, true)
 
 if barstate.islast
-    for b in dib_cajas
-        b.delete()
-    dib_cajas.clear()
-    for l in dib_lineas
-        l.delete()
-    dib_lineas.clear()
-    for e in dib_letreros
-        e.delete()
-    dib_letreros.clear()
+    uso.set(0, 0)
+    uso.set(1, 0)
+    uso.set(2, 0)
     letreros.clear()
     ocupado.clear()
     // Cada temporalidad se dibuja solo si su interruptor está activado, de la más baja (encima) a la
@@ -1616,7 +1647,14 @@ if barstate.islast
                     break
             colocados.push(Letrero.new(x, l.y, l.txt, l.col, true, l.fondo))
             // Solo el nombre, en el color de su zona, sin caja ni fondo
-            dib_letreros.push(label.new(x, l.y, l.txt, style=label.style_label_right, color=color.new(color.white, 100), textcolor=color.new(l.col, 20), size=size.tiny))
+            poner_letrero(x, l.y, l.txt, color.new(l.col, 20))
+    // Los objetos que sobran de un dibujo anterior con más zonas se borran
+    while dib_cajas.size() > uso.get(0)
+        dib_cajas.pop().delete()
+    while dib_lineas.size() > uso.get(1)
+        dib_lineas.pop().delete()
+    while dib_letreros.size() > uso.get(2)
+        dib_letreros.pop().delete()
 
 // ─────────────────────────────
 // ALERTAS
