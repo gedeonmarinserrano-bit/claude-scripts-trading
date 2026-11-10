@@ -23,7 +23,15 @@ borrar_bos_giro = input.bool(true, "Borrar el BOS contrario previo al CHoCH (mod
 bos_ventana  = input.int(0, "Borrar BOS previo al CHoCH: máx. velas (0 = sin límite)", minval=0)
 filtro_rango = input.bool(true, "Sin CHoCH ni BOS dentro de un rango (hasta el breakout)")
 
-mostrar_fvg     = input.bool(true, "Mostrar FVG", group="FVG")
+// Interruptores de FVG por temporalidad: solo se ven (y se calculan) los que estén activados.
+// Cada interruptor muestra los FVG y los IFVG de esa temporalidad, sea más alta o más baja que el gráfico.
+g_fvgtf         = "FVG por temporalidad (solo se ven los activados)"
+mostrar_fvg240  = input.bool(true,  "FVG H4", inline="fvgtf1", group=g_fvgtf)
+mostrar_fvg60   = input.bool(true,  "FVG H1", inline="fvgtf1", group=g_fvgtf)
+mostrar_fvg15   = input.bool(true,  "FVG M15", inline="fvgtf1", group=g_fvgtf)
+mostrar_fvg5    = input.bool(true,  "FVG M5", inline="fvgtf2", group=g_fvgtf)
+mostrar_fvg1    = input.bool(false, "FVG M1", inline="fvgtf2", group=g_fvgtf)
+mostrar_fvg     = input.bool(true, "FVG del gráfico si no es ninguna de las 5 (M3, M30, D…)", group=g_fvgtf)
 fvg_min_pct     = input.float(0.0, "Tamaño mínimo FVG (% precio)", minval=0, step=0.05, group="FVG")
 max_zonas       = input.int(20, "Máx. zonas vigiladas", minval=1, maxval=250, group="FVG")
 // Parte consumida: el mismo gris para todas las zonas y temporalidades
@@ -43,17 +51,18 @@ col_ob_baj      = input.color(#EF6C00, "OB bajista (oferta)", group=g_ob)
 g_ny            = "Estrategia NY (Bias + PO3)"
 mostrar_horas   = input.bool(true, "Marcar horas de la apertura de Nueva York (hora de Madrid)", group=g_ny)
 modo_horas      = input.string("Automático (según la apertura de Nueva York)", "Horario de las marcas", options=["Verano (15:00 / 15:30 / 15:45 / 16:00)", "Invierno (14:00 / 14:30 / 14:45 / 15:00)", "Automático (según la apertura de Nueva York)"], group=g_ny)
-mostrar_fvg15   = input.bool(true, "FVG de M15 (con línea del 50%)", group=g_ny)
-mostrar_fvg60   = input.bool(true, "FVG de H1 (con línea del 50%)", group=g_ny)
-mostrar_fvg240  = input.bool(true, "FVG de H4 (con línea del 50%)", group=g_ny)
-max_htf         = input.int(10, "Máx. FVG M15/H1 por temporalidad", minval=1, maxval=50, group=g_ny)
+max_htf         = input.int(10, "Máx. FVG por temporalidad (M5, M15, H1, H4)", minval=1, maxval=50, group=g_fvgtf)
 // Colores de los FVG: verde (alcista) y rojo (bajista), cada vez más oscuros cuanto más alta la temporalidad
 g_cfvg          = "Colores FVG (más oscuro = temporalidad más alta)"
-fvg_alc_0       = input.color(#A5F2B4, "Alcista · temporalidad del gráfico", group=g_cfvg)
+fvg_alc_0       = input.color(#A5F2B4, "Alcista · gráfico (si no es M1/M5/M15/H1/H4)", group=g_cfvg)
+fvg_alc_1       = input.color(#D4F8DC, "Alcista · M1", group=g_cfvg)
+fvg_alc_5       = input.color(#A5F2B4, "Alcista · M5", group=g_cfvg)
 fvg_alc_15      = input.color(#2ECC40, "Alcista · M15", group=g_cfvg)
 fvg_alc_60      = input.color(#00796B, "Alcista · H1", group=g_cfvg)
 fvg_alc_240     = input.color(#003300, "Alcista · H4", group=g_cfvg)
-fvg_baj_0       = input.color(#FF8080, "Bajista · temporalidad del gráfico", group=g_cfvg)
+fvg_baj_0       = input.color(#FF8080, "Bajista · gráfico (si no es M1/M5/M15/H1/H4)", group=g_cfvg)
+fvg_baj_1       = input.color(#FFBDBD, "Bajista · M1", group=g_cfvg)
+fvg_baj_5       = input.color(#FF8080, "Bajista · M5", group=g_cfvg)
 fvg_baj_15      = input.color(#FF1A1A, "Bajista · M15", group=g_cfvg)
 fvg_baj_60      = input.color(#B30000, "Bajista · H1", group=g_cfvg)
 fvg_baj_240     = input.color(#4D0000, "Bajista · H4", group=g_cfvg)
@@ -108,10 +117,14 @@ type Zona
 var zonas  = array.new<Zona>()   // FVG del gráfico (el riesgo del CHoCH las consulta)
 var ifvgs  = array.new<Zona>()
 var obs    = array.new<Zona>()
+var fvg1   = array.new<Zona>()
+var fvg5   = array.new<Zona>()
 var fvg15  = array.new<Zona>()
 var fvg60  = array.new<Zona>()
 var fvg240 = array.new<Zona>()
-// IFVG que vienen de FVG de M15, H1 y H4
+// IFVG que vienen de FVG de M1, M5, M15, H1 y H4
+var ifvg1   = array.new<Zona>()
+var ifvg5   = array.new<Zona>()
 var ifvg15  = array.new<Zona>()
 var ifvg60  = array.new<Zona>()
 var ifvg240 = array.new<Zona>()
@@ -937,6 +950,11 @@ tf_nombre() =>
         r := timeframe.multiplier == 1 ? "MN" : str.tostring(timeframe.multiplier) + "MN"
     r
 tf_graf = tf_nombre()
+seg_graf = timeframe.in_seconds()
+// El FVG del propio gráfico usa el interruptor y el color de su temporalidad si es una de las 5
+ver_graf = seg_graf == 60 ? mostrar_fvg1 : seg_graf == 300 ? mostrar_fvg5 : seg_graf == 900 ? mostrar_fvg15 : seg_graf == 3600 ? mostrar_fvg60 : seg_graf == 14400 ? mostrar_fvg240 : mostrar_fvg
+graf_alc = seg_graf == 60 ? fvg_alc_1 : seg_graf == 300 ? fvg_alc_5 : seg_graf == 900 ? fvg_alc_15 : seg_graf == 3600 ? fvg_alc_60 : seg_graf == 14400 ? fvg_alc_240 : fvg_alc_0
+graf_baj = seg_graf == 60 ? fvg_baj_1 : seg_graf == 300 ? fvg_baj_5 : seg_graf == 900 ? fvg_baj_15 : seg_graf == 3600 ? fvg_baj_60 : seg_graf == 14400 ? fvg_baj_240 : fvg_baj_0
 
 // ─────────────────────────────
 // RETESTEO DE IFVG EN LA VELA SIGUIENTE
@@ -955,26 +973,23 @@ retesteo(array<Zona> arr) =>
     toca
 
 retest_ifvg_graf = retesteo(ifvgs)
-retest_ifvg_m15  = retesteo(ifvg15)
-retest_ifvg_h1   = retesteo(ifvg60)
-retest_ifvg_h4   = retesteo(ifvg240)
 
-// --- IFVG de M1 solo para la alerta (no se dibujan) ---
-// En gráficos de más de 1 minuto se recorren las velas de M1 de cada vela del gráfico con las mismas
-// reglas (FVG de 3 velas, consumo, IFVG cuando una sola vela de M1 atraviesa un FVG intacto) y se
-// avisa si la vela de M1 siguiente a la que crea el IFVG lo toca. En el gráfico de 1 minuto ya lo
-// cubre el IFVG del propio gráfico.
-alerta_m1 = input.bool(true, "Alerta de retesteo también para IFVG de M1 (sin dibujarlos)", group=g_ny)
-[m1o, m1h, m1l, m1c] = request.security_lower_tf(syminfo.tickerid, "1", [open, high, low, close])
-var fvg_m1  = array.new<Zona>()
-var ifvg_m1 = array.new<Zona>()
-var float m1_h2 = na
-var float m1_l2 = na
-var float m1_h1 = na
-var float m1_l1 = na
-var int   m1_n  = 0     // número de vela de M1 (para saber cuál es la siguiente a la del IFVG)
+// --- FVG/IFVG de temporalidades MÁS BAJAS que el gráfico (p. ej. M5 y M1 en un gráfico de M15) ---
+// Solo si su interruptor está activado. Se recorren las velas de esa temporalidad dentro de cada vela
+// del gráfico con las mismas reglas (FVG de 3 velas, consumo por partes, IFVG cuando una sola vela
+// atraviesa entero un FVG intacto) y se avisa si el precio toca un IFVG en las velas siguientes a su
+// creación. Solo se usan velas ya cerradas, así que no repintan. El M1 también se calcula sin
+// dibujarlo cuando solo está activada su alerta de retesteo.
+alerta_m1 = input.bool(true, "Alerta de retesteo también para IFVG de M1 (aunque no se dibujen)", group=g_ny)
 
-consumir_m1(Zona z, float hi, float lo) =>
+type EstadoLTF
+    float h2
+    float l2
+    float h1
+    float l1
+    int   n = 0   // número de vela de esa temporalidad (para saber cuál es la siguiente a la del IFVG)
+
+consumir_ltf(Zona z, float hi, float lo) =>
     completa = z.dir == 1 ? lo <= z.suelo : hi >= z.techo
     if not completa
         borde = na(z.borde) ? (z.dir == 1 ? z.techo : z.suelo) : z.borde
@@ -982,53 +997,80 @@ consumir_m1(Zona z, float hi, float lo) =>
             z.borde := z.dir == 1 ? lo : hi
     completa
 
-retest_ifvg_m1 = false
-if alerta_m1 and timeframe.isintraday and timeframe.in_seconds() > 60 and m1h.size() > 0
-    // En tiempo real la última vela de M1 aún no ha cerrado: solo se usa para comprobar el toque
-    ultima_cerrada = barstate.isconfirmed ? m1h.size() - 1 : m1h.size() - 2
-    for k = 0 to m1h.size() - 1
-        o1 = m1o.get(k)
-        h1 = m1h.get(k)
-        l1 = m1l.get(k)
-        c1 = m1c.get(k)
-        for z in ifvg_m1
-            n = m1_n - z.creado
-            if not z.avisado and n >= 1 and n <= velas_retest and h1 >= z.suelo and l1 <= z.techo
-                if k <= ultima_cerrada
-                    z.avisado := true
-                retest_ifvg_m1 := true
-        if k <= ultima_cerrada
-            if ifvg_m1.size() > 0
-                for i = ifvg_m1.size() - 1 to 0
-                    if consumir_m1(ifvg_m1.get(i), h1, l1)
-                        ifvg_m1.remove(i)
-            if fvg_m1.size() > 0
-                for i = fvg_m1.size() - 1 to 0
-                    z = fvg_m1.get(i)
-                    inv = na(z.borde) and (z.dir == 1 ? (o1 >= z.techo and c1 < z.suelo) : (o1 <= z.suelo and c1 > z.techo))
-                    if inv
-                        fvg_m1.remove(i)
-                        ifvg_m1.push(Zona.new(na, z.techo, z.suelo, -z.dir, na, m1_n))
-                        if ifvg_m1.size() > 20
-                            ifvg_m1.shift()
-                    else if consumir_m1(z, h1, l1)
-                        fvg_m1.remove(i)
-            if not na(m1_h2)
-                if l1 > m1_h2
-                    fvg_m1.push(Zona.new(na, l1, m1_h2, 1))
-                else if h1 < m1_l2
-                    fvg_m1.push(Zona.new(na, m1_l2, h1, -1))
-                if fvg_m1.size() > 30
-                    fvg_m1.shift()
-            m1_h2 := m1_h1
-            m1_l2 := m1_l1
-            m1_h1 := h1
-            m1_l1 := l1
-            m1_n  += 1
+procesar_ltf(array<Zona> fvg, array<Zona> ifvg, EstadoLTF s, array<float> ao, array<float> ah, array<float> al, array<float> ac, int tope) =>
+    retest = false
+    if ah.size() > 0
+        // En tiempo real la última vela de esa temporalidad aún no ha cerrado: solo sirve para el toque
+        ultima_cerrada = barstate.isconfirmed ? ah.size() - 1 : ah.size() - 2
+        for k = 0 to ah.size() - 1
+            o1 = ao.get(k)
+            h1 = ah.get(k)
+            l1 = al.get(k)
+            c1 = ac.get(k)
+            for z in ifvg
+                n = s.n - z.creado
+                if not z.avisado and n >= 1 and n <= velas_retest and h1 >= z.suelo and l1 <= z.techo
+                    if k <= ultima_cerrada
+                        z.avisado := true
+                    retest := true
+            if k <= ultima_cerrada
+                if ifvg.size() > 0
+                    for i = ifvg.size() - 1 to 0
+                        if consumir_ltf(ifvg.get(i), h1, l1)
+                            ifvg.remove(i)
+                if fvg.size() > 0
+                    for i = fvg.size() - 1 to 0
+                        z = fvg.get(i)
+                        inv = na(z.borde) and (z.dir == 1 ? (o1 >= z.techo and c1 < z.suelo) : (o1 <= z.suelo and c1 > z.techo))
+                        if inv
+                            fvg.remove(i)
+                            ifvg.push(Zona.new(z.x1, z.techo, z.suelo, -z.dir, na, s.n))
+                            if ifvg.size() > tope
+                                ifvg.shift()
+                        else if consumir_ltf(z, h1, l1)
+                            fvg.remove(i)
+                if not na(s.h2)
+                    if l1 > s.h2
+                        fvg.push(Zona.new(bar_index, l1, s.h2, 1))
+                    else if h1 < s.l2
+                        fvg.push(Zona.new(bar_index, s.l2, h1, -1))
+                    if fvg.size() > tope
+                        fvg.shift()
+                s.h2 := s.h1
+                s.l2 := s.l1
+                s.h1 := h1
+                s.l1 := l1
+                s.n  := s.n + 1
+    retest
 
-retest_ifvg      = retest_ifvg_graf or retest_ifvg_m15 or retest_ifvg_h1 or retest_ifvg_h4 or retest_ifvg_m1
+var est1   = EstadoLTF.new()
+var est5   = EstadoLTF.new()
+var est15  = EstadoLTF.new()
+var est60  = EstadoLTF.new()
+var est240 = EstadoLTF.new()
+// Solo se piden las velas de una temporalidad más baja si hace falta (si no, se pide la del gráfico)
+usa1   = timeframe.isintraday and (mostrar_fvg1 or alerta_m1) and seg_graf > 60
+usa5   = timeframe.isintraday and mostrar_fvg5 and seg_graf > 300
+usa15  = timeframe.isintraday and mostrar_fvg15 and seg_graf > 900
+usa60  = timeframe.isintraday and mostrar_fvg60 and seg_graf > 3600
+usa240 = mostrar_fvg240 and seg_graf > 14400
+[lo1, lh1, ll1, lc1] = request.security_lower_tf(syminfo.tickerid, usa1 ? "1" : timeframe.period, [open, high, low, close])
+[lo5, lh5, ll5, lc5] = request.security_lower_tf(syminfo.tickerid, usa5 ? "5" : timeframe.period, [open, high, low, close])
+[lo15, lh15, ll15, lc15] = request.security_lower_tf(syminfo.tickerid, usa15 ? "15" : timeframe.period, [open, high, low, close])
+[lo60, lh60, ll60, lc60] = request.security_lower_tf(syminfo.tickerid, usa60 ? "60" : timeframe.period, [open, high, low, close])
+[lo240, lh240, ll240, lc240] = request.security_lower_tf(syminfo.tickerid, usa240 ? "240" : timeframe.period, [open, high, low, close])
+
+// Retesteo de IFVG: los de temporalidades más altas se vigilan con las velas del gráfico y los de
+// temporalidades más bajas, vela a vela de su temporalidad dentro de procesar_ltf
+retest_ifvg_m1  = usa1 ? procesar_ltf(fvg1, ifvg1, est1, lo1, lh1, ll1, lc1, 30) : false
+retest_ifvg_m5  = seg_graf < 300 ? retesteo(ifvg5) : usa5 ? procesar_ltf(fvg5, ifvg5, est5, lo5, lh5, ll5, lc5, max_htf) : false
+retest_ifvg_m15 = seg_graf < 900 ? retesteo(ifvg15) : usa15 ? procesar_ltf(fvg15, ifvg15, est15, lo15, lh15, ll15, lc15, max_htf) : false
+retest_ifvg_h1  = seg_graf < 3600 ? retesteo(ifvg60) : usa60 ? procesar_ltf(fvg60, ifvg60, est60, lo60, lh60, ll60, lc60, max_htf) : false
+retest_ifvg_h4  = seg_graf < 14400 ? retesteo(ifvg240) : usa240 ? procesar_ltf(fvg240, ifvg240, est240, lo240, lh240, ll240, lc240, max_htf) : false
+
+retest_ifvg      = retest_ifvg_graf or retest_ifvg_m1 or retest_ifvg_m5 or retest_ifvg_m15 or retest_ifvg_h1 or retest_ifvg_h4
 if retest_ifvg
-    tfs = (retest_ifvg_m1 ? " M1" : "") + (retest_ifvg_graf ? " " + tf_graf : "") + (retest_ifvg_m15 ? " M15" : "") + (retest_ifvg_h1 ? " H1" : "") + (retest_ifvg_h4 ? " H4" : "")
+    tfs = (retest_ifvg_m1 ? " M1" : "") + (retest_ifvg_m5 ? " M5" : "") + (retest_ifvg_graf ? " " + tf_graf : "") + (retest_ifvg_m15 ? " M15" : "") + (retest_ifvg_h1 ? " H1" : "") + (retest_ifvg_h4 ? " H4" : "")
     alert("Retesteo de IFVG (" + str.trim(tfs) + ") en " + syminfo.ticker + " a " + str.tostring(close), alert.freq_once_per_bar)
 
 if cerrada and ifvgs.size() > 0
@@ -1111,6 +1153,7 @@ if mostrar_horas and timeframe.isintraday and seg_tf <= 900
 fvg_htf() =>
     [low[1] > high[3], high[1] < low[3], low[1], high[3], high[1], low[3], time[3]]
 
+[a5, b5, a5_top, a5_bot, b5_bot, b5_top, t5] = request.security(syminfo.tickerid, "5", fvg_htf(), lookahead = barmerge.lookahead_on)
 [a15, b15, a15_top, a15_bot, b15_bot, b15_top, t15] = request.security(syminfo.tickerid, "15", fvg_htf(), lookahead = barmerge.lookahead_on)
 [a60, b60, a60_top, a60_bot, b60_bot, b60_top, t60] = request.security(syminfo.tickerid, "60", fvg_htf(), lookahead = barmerge.lookahead_on)
 [a240, b240, a240_top, a240_bot, b240_bot, b240_top, t240] = request.security(syminfo.tickerid, "240", fvg_htf(), lookahead = barmerge.lookahead_on)
@@ -1157,13 +1200,22 @@ actualizar_htf(array<Zona> arr, array<Zona> arr_ifvg) =>
                 arr.remove(i)
     toque
 
+cambio5   = timeframe.change("5")
 cambio15  = timeframe.change("15")
 cambio60  = timeframe.change("60")
 cambio240 = timeframe.change("240")
+toque50_m5  = false
 toque50_m15 = false
 toque50_h1  = false
 toque50_h4  = false
 if cerrada and timeframe.isintraday
+    if mostrar_fvg5 and seg_tf < 300
+        toque50_m5 := actualizar_htf(fvg5, ifvg5)
+        if cambio5
+            if a5
+                nueva_htf(fvg5, a5_top, a5_bot, 1, t5)
+            else if b5
+                nueva_htf(fvg5, b5_top, b5_bot, -1, t5)
     if mostrar_fvg15 and seg_tf < 900
         toque50_m15 := actualizar_htf(fvg15, ifvg15)
         if cambio15
@@ -1248,7 +1300,8 @@ plot(ver_pd ? pdl : na, "Bajo día anterior", color=color.new(col_niveles, 30), 
 // ─────────────────────────────
 g_smt        = "SMT (divergencias entre índices)"
 mostrar_smt  = input.bool(true, "Mostrar SMT", group=g_smt)
-smt_etiquetas = input.bool(true, "Mostrar etiquetas de la SMT (si se apaga, solo queda la línea)", group=g_smt)
+smt_etiquetas = input.bool(true, "Mostrar etiquetas de la SMT", group=g_smt)
+smt_linea    = input.bool(true, "Mostrar línea de la SMT", group=g_smt)
 smt_usa1     = input.bool(true, "Comparar con", inline="smt1", group=g_smt)
 smt_sym1     = input.symbol("CME_MINI:ES1!", "", inline="smt1", group=g_smt)
 smt_usa2     = input.bool(true, "Comparar con", inline="smt2", group=g_smt)
@@ -1311,7 +1364,8 @@ smt_marcar(int x1, float y1, int xv, string txt, color col, bool altos) =>
     // xv = vela exacta de la divergencia: el alto/bajo de MNQ si fue él quien barrió, o la vela en la
     // que el otro índice hizo su alto/bajo si fue el otro el que barrió y MNQ no le acompañó
     yv = altos ? high[bar_index - xv] : low[bar_index - xv]
-    smt_lineas.push(line.new(x1, y1, xv, yv, color=col))
+    if smt_linea
+        smt_lineas.push(line.new(x1, y1, xv, yv, color=col))
     if smt_etiquetas
         smt_textos.push(label.new(xv, yv, txt, style=altos ? label.style_label_down : label.style_label_up, color=col, textcolor=color.white, size=size.tiny, tooltip="SMT " + (altos ? "bajista" : "alcista") + ". Flecha = dónde quedó ese índice respecto a su " + (altos ? "alto" : "bajo") + " anterior: ↑ más alto, ↓ más bajo, = igual"))
     if smt_lineas.size() > smt_max
@@ -1457,6 +1511,19 @@ dibujar_lista(array<Zona> arr, color c_alc, color c_baj, int transp, string txt,
             t = txt
             dibujar_zona(z.x1, bar_index + 1, z.techo, z.suelo, z.dir, z.borde, color.new(c, transp), t, c, mitad ? color.new(c, 55) : na, colgris, fondo)
 
+// FVG/IFVG y OB del propio gráfico
+dibujar_graf() =>
+    if ver_graf
+        dibujar_lista(ifvgs, col_ifvg, col_ifvg, 88, "IFVG " + tf_graf, true, false, color_consumido, false)
+        dibujar_lista(zonas, graf_alc, graf_baj, 80, "FVG " + tf_graf, true, false, color_consumido, true)
+    dibujar_lista(obs, col_ob_alc, col_ob_baj, 90, "OB " + tf_graf, true, false, color_consumido, false)
+
+// FVG/IFVG de otra temporalidad (más alta o más baja que el gráfico). Los de M15 o más llevan su 50%.
+dibujar_tf(bool ver, int mins, array<Zona> f, array<Zona> fi, color ca, color cb, int transp, string nom) =>
+    if ver and seg_graf != mins * 60
+        dibujar_lista(fi, col_ifvg, col_ifvg, 88, "IFVG " + nom, true, false, color_consumido, false)
+        dibujar_lista(f, ca, cb, transp, "FVG " + nom, true, mins >= 15, color_consumido, true)
+
 if barstate.islast
     for b in dib_cajas
         b.delete()
@@ -1469,17 +1536,31 @@ if barstate.islast
     dib_letreros.clear()
     letreros.clear()
     ocupado.clear()
-    // Solo se muestran zonas de la temporalidad del gráfico y de las superiores (M15, H1 y H4)
-    dibujar_lista(ifvgs, col_ifvg, col_ifvg, 88, "IFVG " + tf_graf, true, false, color_consumido, false)
-    if mostrar_fvg
-        dibujar_lista(zonas, fvg_alc_0, fvg_baj_0, 80, "FVG " + tf_graf, true, false, color_consumido, true)
-    dibujar_lista(obs, col_ob_alc, col_ob_baj, 90, "OB " + tf_graf, true, false, color_consumido, false)
-    dibujar_lista(ifvg15, col_ifvg, col_ifvg, 88, "IFVG M15", true, false, color_consumido, false)
-    dibujar_lista(fvg15, fvg_alc_15, fvg_baj_15, 84, "FVG M15", true, true, color_consumido, true)
-    dibujar_lista(ifvg60, col_ifvg, col_ifvg, 88, "IFVG H1", true, false, color_consumido, false)
-    dibujar_lista(fvg60, fvg_alc_60, fvg_baj_60, 82, "FVG H1", true, true, color_consumido, true)
-    dibujar_lista(ifvg240, col_ifvg, col_ifvg, 88, "IFVG H4", true, false, color_consumido, false)
-    dibujar_lista(fvg240, fvg_alc_240, fvg_baj_240, 80, "FVG H4", true, true, color_consumido, true)
+    // Cada temporalidad se dibuja solo si su interruptor está activado, de la más baja (encima) a la
+    // más alta (alrededor). El FVG del propio gráfico ocupa el sitio de su temporalidad.
+    graf_hecho = false
+    if seg_graf <= 60
+        dibujar_graf()
+        graf_hecho := true
+    dibujar_tf(mostrar_fvg1, 1, fvg1, ifvg1, fvg_alc_1, fvg_baj_1, 84, "M1")
+    if not graf_hecho and seg_graf <= 300
+        dibujar_graf()
+        graf_hecho := true
+    dibujar_tf(mostrar_fvg5, 5, fvg5, ifvg5, fvg_alc_5, fvg_baj_5, 84, "M5")
+    if not graf_hecho and seg_graf <= 900
+        dibujar_graf()
+        graf_hecho := true
+    dibujar_tf(mostrar_fvg15, 15, fvg15, ifvg15, fvg_alc_15, fvg_baj_15, 84, "M15")
+    if not graf_hecho and seg_graf <= 3600
+        dibujar_graf()
+        graf_hecho := true
+    dibujar_tf(mostrar_fvg60, 60, fvg60, ifvg60, fvg_alc_60, fvg_baj_60, 82, "H1")
+    if not graf_hecho and seg_graf <= 14400
+        dibujar_graf()
+        graf_hecho := true
+    dibujar_tf(mostrar_fvg240, 240, fvg240, ifvg240, fvg_alc_240, fvg_baj_240, 80, "H4")
+    if not graf_hecho
+        dibujar_graf()
     // Colocar los letreros dentro de su zona: a la altura de la zona y pegados a su borde derecho.
     // Si dos coinciden (misma altura aproximada), el segundo se pone a la izquierda del primero, en
     // la misma línea, en vez de subirlo o bajarlo. El ancho de cada letrero se estima en velas
