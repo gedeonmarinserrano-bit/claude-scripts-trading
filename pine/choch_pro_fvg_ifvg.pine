@@ -1493,6 +1493,7 @@ type Pieza
     int   x2
     float top
     float bot
+    int   dir = 0   // en las zonas ya dibujadas: 1 alcista, -1 bajista (para separar las contrarias)
 
 var array<box>   dib_cajas  = array.new<box>()
 var array<line>  dib_lineas = array.new<line>()
@@ -1547,6 +1548,9 @@ type Letrero
 var array<Letrero> letreros = array.new<Letrero>()
 // Separación vertical mínima entre letreros cercanos, en precio
 sep_letrero = nz(ta.atr(50)) * 0.5
+// Hueco entre una zona alcista y una bajista que se tocan, para que no parezcan una sola
+sep_pct     = input.float(8.0, "Separación entre zonas alcistas y bajistas que se tocan (% del ATR, 0 = sin hueco)", minval=0, maxval=50, step=1, group=g_col)
+sep_zonas   = nz(ta.atr(50)) * sep_pct / 100
 
 var array<Pieza> ocupado    = array.new<Pieza>()
 
@@ -1585,11 +1589,21 @@ recortar(Pieza p) =>
                     break
     res
 
-pintar_parte(Pieza p, color col) =>
+pintar_parte(Pieza p, color col, int dir) =>
     for q in recortar(p)
+        top = q.top
+        bot = q.bot
+        // Si toca una zona de dirección contraria ya dibujada, se deja un pequeño hueco en ese borde
+        if sep_zonas > 0 and dir != 0
+            for o in ocupado
+                if o.dir == -dir and not (o.x2 <= q.x1 or o.x1 >= q.x2)
+                    if math.abs(top - o.bot) <= sep_zonas
+                        top := math.min(top, o.bot - sep_zonas)
+                    if math.abs(bot - o.top) <= sep_zonas
+                        bot := math.max(bot, o.top + sep_zonas)
         // Tope de cajas para no superar el límite de TradingView (500): se dibujan antes las de más prioridad
-        if q.x2 > q.x1 and q.top > q.bot and uso.get(0) < 200
-            poner_caja(q.x1, q.top, q.x2, q.bot, col)
+        if q.x2 > q.x1 and top > bot and uso.get(0) < 200
+            poner_caja(q.x1, top, q.x2, bot, col)
 
 dibujar_zona(int x1_zona, int x2, float techo, float suelo, int dir, float borde, color col, string txt, color coltxt, color colmitad, color colgris, bool fondo) =>
     // TradingView no deja dibujar con bar_index demasiado lejos hacia atrás: las zonas muy antiguas
@@ -1598,9 +1612,9 @@ dibujar_zona(int x1_zona, int x2, float techo, float suelo, int dir, float borde
     // Parte aún sin tocar (con su color) y parte consumida (gris)
     ctop = na(borde) ? techo : (dir == 1 ? borde : techo)
     cbot = na(borde) ? suelo : (dir == 1 ? suelo : borde)
-    pintar_parte(Pieza.new(x1, x2, ctop, cbot), col)
+    pintar_parte(Pieza.new(x1, x2, ctop, cbot), col, dir)
     if not na(borde)
-        pintar_parte(Pieza.new(x1, x2, dir == 1 ? techo : borde, dir == 1 ? borde : suelo), colgris)
+        pintar_parte(Pieza.new(x1, x2, dir == 1 ? techo : borde, dir == 1 ? borde : suelo), colgris, dir)
     // Letrero solo al final de la zona (junto a la vela actual), a la altura de la parte sin tocar
     if txt != "" and letreros.size() < 30
         letreros.push(Letrero.new(x2, (ctop + cbot) / 2, txt, coltxt, true, fondo))
@@ -1610,7 +1624,7 @@ dibujar_zona(int x1_zona, int x2, float techo, float suelo, int dir, float borde
         for q in recortar(Pieza.new(x1, x2, m, m))
             if q.x2 > q.x1
                 poner_linea(q.x1, q.x2, m, colmitad)
-    ocupado.push(Pieza.new(x1, x2, techo, suelo))
+    ocupado.push(Pieza.new(x1, x2, techo, suelo, dir))
 
 dibujar_lista(array<Zona> arr, color c_alc, color c_baj, int transp, string txt, bool flecha, bool mitad, color colgris, bool fondo) =>
     if arr.size() > 0
