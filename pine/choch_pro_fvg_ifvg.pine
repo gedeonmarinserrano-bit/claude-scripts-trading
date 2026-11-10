@@ -1085,19 +1085,38 @@ usa5   = timeframe.isintraday and mostrar_fvg5 and seg_graf > 300
 usa15  = timeframe.isintraday and mostrar_fvg15 and seg_graf > 900
 usa60  = timeframe.isintraday and mostrar_fvg60 and seg_graf > 3600
 usa240 = mostrar_fvg240 and seg_graf > 14400
-[lo1, lh1, ll1, lc1] = request.security_lower_tf(syminfo.tickerid, usa1 ? "1" : timeframe.period, [open, high, low, close])
-[lo5, lh5, ll5, lc5] = request.security_lower_tf(syminfo.tickerid, usa5 ? "5" : timeframe.period, [open, high, low, close])
-[lo15, lh15, ll15, lc15] = request.security_lower_tf(syminfo.tickerid, usa15 ? "15" : timeframe.period, [open, high, low, close])
-[lo60, lh60, ll60, lc60] = request.security_lower_tf(syminfo.tickerid, usa60 ? "60" : timeframe.period, [open, high, low, close])
-[lo240, lh240, ll240, lc240] = request.security_lower_tf(syminfo.tickerid, usa240 ? "240" : timeframe.period, [open, high, low, close])
 
 // Retesteo de IFVG: los de temporalidades más altas se vigilan con las velas del gráfico y los de
-// temporalidades más bajas, vela a vela de su temporalidad dentro de procesar_ltf
-retest_ifvg_m1  = usa1 and en_calc ? procesar_ltf(fvg1, ifvg1, est1, lo1, lh1, ll1, lc1, 30) : false
-retest_ifvg_m5  = seg_graf < 300 ? retesteo(ifvg5) : usa5 and en_calc ? procesar_ltf(fvg5, ifvg5, est5, lo5, lh5, ll5, lc5, max_htf) : false
-retest_ifvg_m15 = seg_graf < 900 ? retesteo(ifvg15) : usa15 and en_calc ? procesar_ltf(fvg15, ifvg15, est15, lo15, lh15, ll15, lc15, max_htf) : false
-retest_ifvg_h1  = seg_graf < 3600 ? retesteo(ifvg60) : usa60 and en_calc ? procesar_ltf(fvg60, ifvg60, est60, lo60, lh60, ll60, lc60, max_htf) : false
-retest_ifvg_h4  = seg_graf < 14400 ? retesteo(ifvg240) : usa240 and en_calc ? procesar_ltf(fvg240, ifvg240, est240, lo240, lh240, ll240, lc240, max_htf) : false
+// temporalidades más bajas, vela a vela de su temporalidad dentro de procesar_ltf. Las velas de una
+// temporalidad más baja solo se piden si su interruptor está activado y dentro de las velas a calcular.
+retest_ifvg_m1 = false
+if usa1 and en_calc
+    [o_, h_, l_, c_] = request.security_lower_tf(syminfo.tickerid, "1", [open, high, low, close])
+    retest_ifvg_m1 := procesar_ltf(fvg1, ifvg1, est1, o_, h_, l_, c_, 30)
+retest_ifvg_m5 = false
+if seg_graf < 300
+    retest_ifvg_m5 := retesteo(ifvg5)
+else if usa5 and en_calc
+    [o_, h_, l_, c_] = request.security_lower_tf(syminfo.tickerid, "5", [open, high, low, close])
+    retest_ifvg_m5 := procesar_ltf(fvg5, ifvg5, est5, o_, h_, l_, c_, max_htf)
+retest_ifvg_m15 = false
+if seg_graf < 900
+    retest_ifvg_m15 := retesteo(ifvg15)
+else if usa15 and en_calc
+    [o_, h_, l_, c_] = request.security_lower_tf(syminfo.tickerid, "15", [open, high, low, close])
+    retest_ifvg_m15 := procesar_ltf(fvg15, ifvg15, est15, o_, h_, l_, c_, max_htf)
+retest_ifvg_h1 = false
+if seg_graf < 3600
+    retest_ifvg_h1 := retesteo(ifvg60)
+else if usa60 and en_calc
+    [o_, h_, l_, c_] = request.security_lower_tf(syminfo.tickerid, "60", [open, high, low, close])
+    retest_ifvg_h1 := procesar_ltf(fvg60, ifvg60, est60, o_, h_, l_, c_, max_htf)
+retest_ifvg_h4 = false
+if seg_graf < 14400
+    retest_ifvg_h4 := retesteo(ifvg240)
+else if usa240 and en_calc
+    [o_, h_, l_, c_] = request.security_lower_tf(syminfo.tickerid, "240", [open, high, low, close])
+    retest_ifvg_h4 := procesar_ltf(fvg240, ifvg240, est240, o_, h_, l_, c_, max_htf)
 
 retest_ifvg      = retest_ifvg_graf or retest_ifvg_m1 or retest_ifvg_m5 or retest_ifvg_m15 or retest_ifvg_h1 or retest_ifvg_h4
 if retest_ifvg
@@ -1181,13 +1200,11 @@ if mostrar_horas and timeframe.isintraday and seg_tf <= 900
         marcar_hora(texto_hora(base_marcas + 60), true)
 
 // --- FVG de M15, H1 y H4 (sin repintado: se evalúa la última vela cerrada de esa temporalidad) ---
+// La petición se hace solo cuando hace falta (al cambiar de vela de esa temporalidad, con su
+// interruptor activado y dentro de las velas a calcular): así no cuesta tiempo el resto del historial.
 fvg_htf() =>
     [low[1] > high[3], high[1] < low[3], low[1], high[3], high[1], low[3], time[3]]
 
-[a5, b5, a5_top, a5_bot, b5_bot, b5_top, t5] = request.security(syminfo.tickerid, "5", fvg_htf(), lookahead = barmerge.lookahead_on)
-[a15, b15, a15_top, a15_bot, b15_bot, b15_top, t15] = request.security(syminfo.tickerid, "15", fvg_htf(), lookahead = barmerge.lookahead_on)
-[a60, b60, a60_top, a60_bot, b60_bot, b60_top, t60] = request.security(syminfo.tickerid, "60", fvg_htf(), lookahead = barmerge.lookahead_on)
-[a240, b240, a240_top, a240_bot, b240_bot, b240_top, t240] = request.security(syminfo.tickerid, "240", fvg_htf(), lookahead = barmerge.lookahead_on)
 
 // Vela (bar_index) en la que empieza una zona de otra temporalidad, a partir de su hora
 vela_de(int t) =>
@@ -1243,6 +1260,7 @@ if cerrada and timeframe.isintraday and en_calc
     if mostrar_fvg5 and seg_tf < 300
         toque50_m5 := actualizar_htf(fvg5, ifvg5)
         if cambio5
+            [a5, b5, a5_top, a5_bot, b5_bot, b5_top, t5] = request.security(syminfo.tickerid, "5", fvg_htf(), lookahead = barmerge.lookahead_on)
             if a5
                 nueva_htf(fvg5, a5_top, a5_bot, 1, t5)
             else if b5
@@ -1250,6 +1268,7 @@ if cerrada and timeframe.isintraday and en_calc
     if mostrar_fvg15 and seg_tf < 900
         toque50_m15 := actualizar_htf(fvg15, ifvg15)
         if cambio15
+            [a15, b15, a15_top, a15_bot, b15_bot, b15_top, t15] = request.security(syminfo.tickerid, "15", fvg_htf(), lookahead = barmerge.lookahead_on)
             if a15
                 nueva_htf(fvg15, a15_top, a15_bot, 1, t15)
             else if b15
@@ -1257,6 +1276,7 @@ if cerrada and timeframe.isintraday and en_calc
     if mostrar_fvg60 and seg_tf < 3600
         toque50_h1 := actualizar_htf(fvg60, ifvg60)
         if cambio60
+            [a60, b60, a60_top, a60_bot, b60_bot, b60_top, t60] = request.security(syminfo.tickerid, "60", fvg_htf(), lookahead = barmerge.lookahead_on)
             if a60
                 nueva_htf(fvg60, a60_top, a60_bot, 1, t60)
             else if b60
@@ -1264,6 +1284,7 @@ if cerrada and timeframe.isintraday and en_calc
     if mostrar_fvg240 and seg_tf < 14400
         toque50_h4 := actualizar_htf(fvg240, ifvg240)
         if cambio240
+            [a240, b240, a240_top, a240_bot, b240_bot, b240_top, t240] = request.security(syminfo.tickerid, "240", fvg_htf(), lookahead = barmerge.lookahead_on)
             if a240
                 nueva_htf(fvg240, a240_top, a240_bot, 1, t240)
             else if b240
@@ -1330,7 +1351,7 @@ plot(ver_pd ? pdl : na, "Bajo día anterior", color=color.new(col_niveles, 30), 
 //    de los activos que divergen. Alertas incluidas. Se ignora el activo si es el mismo del gráfico.
 // ─────────────────────────────
 g_smt        = "SMT (divergencias entre índices)"
-mostrar_smt  = input.bool(true, "Mostrar SMT", group=g_smt)
+mostrar_smt  = input.bool(false, "Mostrar SMT (pide datos de ES/YM: hace el indicador más lento)", group=g_smt)
 smt_etiquetas = input.bool(true, "Mostrar etiquetas de la SMT", group=g_smt)
 smt_linea    = input.bool(true, "Mostrar línea de la SMT", group=g_smt)
 smt_usa1     = input.bool(true, "Comparar con", inline="smt1", group=g_smt)
@@ -1361,8 +1382,27 @@ smt_ok2 = mostrar_smt and smt_usa2 and smt_n2 != smt_yo
 smt_ext() =>
     w = 2 * smt_len + 1
     [ta.highest(high, w), ta.lowest(low, w), ta.highestbars(high, w), ta.lowestbars(low, w)]
-[smt_h1, smt_l1, smt_hb1, smt_lb1] = request.security(smt_sym1, timeframe.period, smt_ext(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
-[smt_h2, smt_l2, smt_hb2, smt_lb2] = request.security(smt_sym2, timeframe.period, smt_ext(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+float smt_h1  = na
+float smt_l1  = na
+int   smt_hb1 = na
+int   smt_lb1 = na
+float smt_h2  = na
+float smt_l2  = na
+int   smt_hb2 = na
+int   smt_lb2 = na
+// Los datos de ES/YM solo se piden si la SMT está activada y dentro de las velas a calcular
+if smt_ok1 and en_calc
+    [h_, l_, hb_, lb_] = request.security(smt_sym1, timeframe.period, smt_ext(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+    smt_h1  := h_
+    smt_l1  := l_
+    smt_hb1 := hb_
+    smt_lb1 := lb_
+if smt_ok2 and en_calc
+    [h_, l_, hb_, lb_] = request.security(smt_sym2, timeframe.period, smt_ext(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+    smt_h2  := h_
+    smt_l2  := l_
+    smt_hb2 := hb_
+    smt_lb2 := lb_
 
 smt_ph = ta.pivothigh(high, smt_len, smt_len)
 smt_pl = ta.pivotlow(low, smt_len, smt_len)
