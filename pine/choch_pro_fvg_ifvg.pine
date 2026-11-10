@@ -1089,33 +1089,35 @@ usa240 = mostrar_fvg240 and seg_graf > 14400
 // Retesteo de IFVG: los de temporalidades más altas se vigilan con las velas del gráfico y los de
 // temporalidades más bajas, vela a vela de su temporalidad dentro de procesar_ltf. Las velas de una
 // temporalidad más baja solo se piden si su interruptor está activado y dentro de las velas a calcular.
+// TradingView revisa todas las peticiones aunque no se ejecuten: si la temporalidad no es más baja que
+// la del gráfico se pide la del propio gráfico (nunca se usa) para que no dé error.
 retest_ifvg_m1 = false
 if usa1 and en_calc
-    [o_, h_, l_, c_] = request.security_lower_tf(syminfo.tickerid, "1", [open, high, low, close])
+    [o_, h_, l_, c_] = request.security_lower_tf(syminfo.tickerid, usa1 ? "1" : timeframe.period, [open, high, low, close])
     retest_ifvg_m1 := procesar_ltf(fvg1, ifvg1, est1, o_, h_, l_, c_, 30)
 retest_ifvg_m5 = false
 if seg_graf < 300
     retest_ifvg_m5 := retesteo(ifvg5)
 else if usa5 and en_calc
-    [o_, h_, l_, c_] = request.security_lower_tf(syminfo.tickerid, "5", [open, high, low, close])
+    [o_, h_, l_, c_] = request.security_lower_tf(syminfo.tickerid, usa5 ? "5" : timeframe.period, [open, high, low, close])
     retest_ifvg_m5 := procesar_ltf(fvg5, ifvg5, est5, o_, h_, l_, c_, max_htf)
 retest_ifvg_m15 = false
 if seg_graf < 900
     retest_ifvg_m15 := retesteo(ifvg15)
 else if usa15 and en_calc
-    [o_, h_, l_, c_] = request.security_lower_tf(syminfo.tickerid, "15", [open, high, low, close])
+    [o_, h_, l_, c_] = request.security_lower_tf(syminfo.tickerid, usa15 ? "15" : timeframe.period, [open, high, low, close])
     retest_ifvg_m15 := procesar_ltf(fvg15, ifvg15, est15, o_, h_, l_, c_, max_htf)
 retest_ifvg_h1 = false
 if seg_graf < 3600
     retest_ifvg_h1 := retesteo(ifvg60)
 else if usa60 and en_calc
-    [o_, h_, l_, c_] = request.security_lower_tf(syminfo.tickerid, "60", [open, high, low, close])
+    [o_, h_, l_, c_] = request.security_lower_tf(syminfo.tickerid, usa60 ? "60" : timeframe.period, [open, high, low, close])
     retest_ifvg_h1 := procesar_ltf(fvg60, ifvg60, est60, o_, h_, l_, c_, max_htf)
 retest_ifvg_h4 = false
 if seg_graf < 14400
     retest_ifvg_h4 := retesteo(ifvg240)
 else if usa240 and en_calc
-    [o_, h_, l_, c_] = request.security_lower_tf(syminfo.tickerid, "240", [open, high, low, close])
+    [o_, h_, l_, c_] = request.security_lower_tf(syminfo.tickerid, usa240 ? "240" : timeframe.period, [open, high, low, close])
     retest_ifvg_h4 := procesar_ltf(fvg240, ifvg240, est240, o_, h_, l_, c_, max_htf)
 
 retest_ifvg      = retest_ifvg_graf or retest_ifvg_m1 or retest_ifvg_m5 or retest_ifvg_m15 or retest_ifvg_h1 or retest_ifvg_h4
