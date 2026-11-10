@@ -52,6 +52,8 @@ g_ny            = "Estrategia NY (Bias + PO3)"
 mostrar_horas   = input.bool(true, "Marcar horas de la apertura de Nueva York (hora de Madrid)", group=g_ny)
 modo_horas      = input.string("Automático (según la apertura de Nueva York)", "Horario de las marcas", options=["Verano (15:00 / 15:30 / 15:45 / 16:00)", "Invierno (14:00 / 14:30 / 14:45 / 15:00)", "Automático (según la apertura de Nueva York)"], group=g_ny)
 max_htf         = input.int(10, "Máx. FVG por temporalidad (M5, M15, H1, H4)", minval=1, maxval=50, group=g_fvgtf)
+// Las zonas muy lejos del precio no aportan en intradía y son las que más tiempo de cálculo cuestan
+dist_max        = input.float(2.0, "Dibujar solo zonas a menos de este % del precio (0 = todas)", minval=0, step=0.5, group=g_fvgtf)
 // Colores de los FVG: verde (alcista) y rojo (bajista), cada vez más oscuros cuanto más alta la temporalidad
 g_cfvg          = "Colores FVG (más oscuro = temporalidad más alta)"
 fvg_alc_0       = input.color(#A5F2B4, "Alcista · gráfico (si no es M1/M5/M15/H1/H4)", group=g_cfvg)
@@ -1470,15 +1472,15 @@ recortar(Pieza p) =>
                     for r in restar(q, o)
                         nuevo.push(r)
                 res := nuevo
-                // Tope de trozos por zona para que el cálculo nunca se dispare
-                if res.size() > 24
+                // Tapada del todo, o demasiados trozos: no hace falta seguir recortando
+                if res.size() == 0 or res.size() > 16
                     break
     res
 
 pintar_parte(Pieza p, color col) =>
     for q in recortar(p)
         // Tope de cajas para no superar el límite de TradingView (500): se dibujan antes las de más prioridad
-        if q.x2 > q.x1 and q.top > q.bot and dib_cajas.size() < 440
+        if q.x2 > q.x1 and q.top > q.bot and dib_cajas.size() < 300
             dib_cajas.push(box.new(q.x1, q.top, q.x2, q.bot, border_color=na, bgcolor=col))
 
 dibujar_zona(int x1_zona, int x2, float techo, float suelo, int dir, float borde, color col, string txt, color coltxt, color colmitad, color colgris, bool fondo) =>
@@ -1492,7 +1494,7 @@ dibujar_zona(int x1_zona, int x2, float techo, float suelo, int dir, float borde
     if not na(borde)
         pintar_parte(Pieza.new(x1, x2, dir == 1 ? techo : borde, dir == 1 ? borde : suelo), colgris)
     // Letrero solo al final de la zona (junto a la vela actual), a la altura de la parte sin tocar
-    if txt != "" and letreros.size() < 80
+    if txt != "" and letreros.size() < 50
         letreros.push(Letrero.new(x2, (ctop + cbot) / 2, txt, coltxt, true, fondo))
     // Línea del 50% (FVG de M15, H1 y H4), también recortada
     if not na(colmitad)
@@ -1509,7 +1511,10 @@ dibujar_lista(array<Zona> arr, color c_alc, color c_baj, int transp, string txt,
             c = z.dir == 1 ? c_alc : c_baj
             // Letrero solo con el nombre (sin flecha de dirección)
             t = txt
-            dibujar_zona(z.x1, bar_index + 1, z.techo, z.suelo, z.dir, z.borde, color.new(c, transp), t, c, mitad ? color.new(c, 55) : na, colgris, fondo)
+            dist = z.suelo > close ? z.suelo - close : close > z.techo ? close - z.techo : 0.0
+            // Si ya no caben más cajas o la zona está demasiado lejos del precio, no se calcula
+            if dib_cajas.size() < 300 and (dist_max == 0 or dist / close * 100 <= dist_max)
+                dibujar_zona(z.x1, bar_index + 1, z.techo, z.suelo, z.dir, z.borde, color.new(c, transp), t, c, mitad ? color.new(c, 55) : na, colgris, fondo)
 
 // FVG/IFVG y OB del propio gráfico
 dibujar_graf() =>
@@ -1570,7 +1575,7 @@ if barstate.islast
         for l in letreros
             x = l.x
             ancho = str.length(l.txt) + 2
-            for intento = 0 to 8
+            for intento = 0 to 5
                 choca = false
                 for c in colocados
                     ancho_c = str.length(c.txt) + 2
