@@ -960,6 +960,7 @@ plot(mostrar_emas ? ema_media : na, "EMA media", color=ema_med_col, linewidth=1,
 plot(mostrar_emas ? ema_lenta : na, "EMA lenta", color=ema_len_col, linewidth=2, display=display.data_window + display.status_line)
 
 var array<polyline> polis_ema = array.new<polyline>()
+var array<line> ema_tramos = array.new<line>()
 if barstate.islast
     for pl in polis_ema
         pl.delete()
@@ -1718,6 +1719,28 @@ if barstate.islast
     dibujar_tf(mostrar_fvg240, 240, fvg240, ifvg240, fvg_alc_240, fvg_baj_240, 80, "H4")
     if not graf_hecho
         dibujar_graf()
+    // EMAs por encima de las zonas: TradingView pinta las cajas por encima de las polilíneas de las
+    // EMAs, así que donde una EMA cruza una zona se repasa con tramos de línea (que sí van encima).
+    // Se usan pocos tramos por zona (la EMA es suave) para no gastar el límite de líneas.
+    for l in ema_tramos
+        l.delete()
+    ema_tramos.clear()
+    if mostrar_emas
+        for o in ocupado
+            xa = math.max(o.x1, bar_index - 1500)
+            xb = math.min(o.x2, bar_index)
+            if xb > xa
+                paso = math.max(1, int(math.ceil((xb - xa) / 25.0)))
+                for k = 0 to 2
+                    col_k = k == 0 ? ema_rap_col : k == 1 ? ema_med_col : ema_len_col
+                    x = xa
+                    while x < xb and ema_tramos.size() < 150
+                        x2 = math.min(x + paso, xb)
+                        v1 = k == 0 ? ema_rapida[bar_index - x] : k == 1 ? ema_media[bar_index - x] : ema_lenta[bar_index - x]
+                        v2 = k == 0 ? ema_rapida[bar_index - x2] : k == 1 ? ema_media[bar_index - x2] : ema_lenta[bar_index - x2]
+                        if not na(v1) and not na(v2) and math.max(v1, v2) >= o.bot and math.min(v1, v2) <= o.top
+                            ema_tramos.push(line.new(x, v1, x2, v2, color=col_k, width=k == 2 ? 2 : 1))
+                        x := x2
     // Colocar los letreros dentro de su zona: a la altura de la zona y pegados a su borde derecho.
     // Si dos coinciden (misma altura aproximada), el segundo se pone a la izquierda del primero, en
     // la misma línea, en vez de subirlo o bajarlo. El ancho de cada letrero se estima en velas
