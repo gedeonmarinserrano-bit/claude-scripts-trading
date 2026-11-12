@@ -18,6 +18,9 @@ mostrar_fvg15   = input.bool(true,  "FVG M15", inline="fvgtf1", group=g_fvgtf)
 mostrar_fvg5    = input.bool(true,  "FVG M5", inline="fvgtf2", group=g_fvgtf)
 mostrar_fvg1    = input.bool(false, "FVG M1", inline="fvgtf2", group=g_fvgtf)
 mostrar_fvg     = input.bool(true, "FVG del gráfico si no es ninguna de las 5 (M3, M30, D…)", group=g_fvgtf)
+// Activado: cada temporalidad solo se ve en su propio gráfico (los FVG de H4 solo en el gráfico de H4,
+// los de M15 solo en el de M15…) y no se mezclan; los interruptores dicen en qué gráficos se ven.
+solo_su_graf    = input.bool(true, "Cada FVG solo en el gráfico de su temporalidad (sin mezclar)", group=g_fvgtf)
 max_htf         = input.int(10, "Máx. FVG por temporalidad (M5, M15, H1, H4)", minval=1, maxval=50, group=g_fvgtf)
 // Las zonas muy lejos del precio no aportan en intradía y son las que más tiempo de cálculo cuestan
 max_dibujadas   = input.int(35, "Máx. zonas dibujadas a la vez (menos = más rápido)", minval=5, maxval=120, group=g_fvgtf)
@@ -1081,11 +1084,11 @@ var est15  = EstadoLTF.new()
 var est60  = EstadoLTF.new()
 var est240 = EstadoLTF.new()
 // Solo se piden las velas de una temporalidad más baja si hace falta (si no, se pide la del gráfico)
-usa1   = timeframe.isintraday and (mostrar_fvg1 or alerta_m1) and seg_graf > 60
-usa5   = timeframe.isintraday and mostrar_fvg5 and seg_graf > 300
-usa15  = timeframe.isintraday and mostrar_fvg15 and seg_graf > 900
-usa60  = timeframe.isintraday and mostrar_fvg60 and seg_graf > 3600
-usa240 = mostrar_fvg240 and seg_graf > 14400
+usa1   = timeframe.isintraday and ((mostrar_fvg1 and not solo_su_graf) or alerta_m1) and seg_graf > 60
+usa5   = timeframe.isintraday and mostrar_fvg5 and not solo_su_graf and seg_graf > 300
+usa15  = timeframe.isintraday and mostrar_fvg15 and not solo_su_graf and seg_graf > 900
+usa60  = timeframe.isintraday and mostrar_fvg60 and not solo_su_graf and seg_graf > 3600
+usa240 = mostrar_fvg240 and not solo_su_graf and seg_graf > 14400
 
 // Retesteo de IFVG: los de temporalidades más altas se vigilan con las velas del gráfico y los de
 // temporalidades más bajas, vela a vela de su temporalidad dentro de procesar_ltf. Las velas de una
@@ -1260,7 +1263,7 @@ toque50_m15 = false
 toque50_h1  = false
 toque50_h4  = false
 if cerrada and timeframe.isintraday and en_calc
-    if mostrar_fvg5 and seg_tf < 300
+    if mostrar_fvg5 and not solo_su_graf and seg_tf < 300
         toque50_m5 := actualizar_htf(fvg5, ifvg5)
         if cambio5
             [a5, b5, a5_top, a5_bot, b5_bot, b5_top, t5] = request.security(syminfo.tickerid, "5", fvg_htf(), lookahead = barmerge.lookahead_on)
@@ -1268,7 +1271,7 @@ if cerrada and timeframe.isintraday and en_calc
                 nueva_htf(fvg5, a5_top, a5_bot, 1, t5)
             else if b5
                 nueva_htf(fvg5, b5_top, b5_bot, -1, t5)
-    if mostrar_fvg15 and seg_tf < 900
+    if mostrar_fvg15 and not solo_su_graf and seg_tf < 900
         toque50_m15 := actualizar_htf(fvg15, ifvg15)
         if cambio15
             [a15, b15, a15_top, a15_bot, b15_bot, b15_top, t15] = request.security(syminfo.tickerid, "15", fvg_htf(), lookahead = barmerge.lookahead_on)
@@ -1276,7 +1279,7 @@ if cerrada and timeframe.isintraday and en_calc
                 nueva_htf(fvg15, a15_top, a15_bot, 1, t15)
             else if b15
                 nueva_htf(fvg15, b15_top, b15_bot, -1, t15)
-    if mostrar_fvg60 and seg_tf < 3600
+    if mostrar_fvg60 and not solo_su_graf and seg_tf < 3600
         toque50_h1 := actualizar_htf(fvg60, ifvg60)
         if cambio60
             [a60, b60, a60_top, a60_bot, b60_bot, b60_top, t60] = request.security(syminfo.tickerid, "60", fvg_htf(), lookahead = barmerge.lookahead_on)
@@ -1284,7 +1287,7 @@ if cerrada and timeframe.isintraday and en_calc
                 nueva_htf(fvg60, a60_top, a60_bot, 1, t60)
             else if b60
                 nueva_htf(fvg60, b60_top, b60_bot, -1, t60)
-    if mostrar_fvg240 and seg_tf < 14400
+    if mostrar_fvg240 and not solo_su_graf and seg_tf < 14400
         toque50_h4 := actualizar_htf(fvg240, ifvg240)
         if cambio240
             [a240, b240, a240_top, a240_bot, b240_bot, b240_top, t240] = request.security(syminfo.tickerid, "240", fvg_htf(), lookahead = barmerge.lookahead_on)
@@ -1648,7 +1651,7 @@ dibujar_graf() =>
 
 // FVG/IFVG de otra temporalidad (más alta o más baja que el gráfico). Los de M15 o más llevan su 50%.
 dibujar_tf(bool ver, int mins, array<Zona> f, array<Zona> fi, color ca, color cb, int transp, string nom) =>
-    if ver and seg_graf != mins * 60
+    if ver and not solo_su_graf and seg_graf != mins * 60
         dibujar_lista(fi, col_ifvg, col_ifvg, 88, "IFVG " + nom, true, false, color_consumido, false)
         dibujar_lista(f, ca, cb, transp, "FVG " + nom, true, mins >= 15, color_consumido, true)
 
