@@ -112,8 +112,9 @@ color_alcista   = input.color(#00A651, "Estructura y FVG alcista (verde)", group
 color_bajista   = input.color(#E4002B, "Estructura y FVG bajista (rojo)", group=g_col)
 pintar_velas    = input.bool(true, "Marcar la vela del OB", group=g_col)
 col_ifvg        = input.color(#FF00C8, "IFVG (magenta)", group=g_col)
-// Zonas a color pleno, detrás de las velas (behind_chart); las EMAs se ven a través de un hueco fino
-transp_zonas    = input.int(0, "Transparencia de las zonas (0 = color pleno)", minval=0, maxval=95, step=5, group=g_col)
+// Zonas intensas pero algo transparentes: TradingView pinta siempre las cajas por encima de las EMAs
+// (plot), y solo con transparencia se ven las EMAs a través de ellas. Todo queda detrás de las velas.
+transp_zonas    = input.int(40, "Transparencia de las zonas (0 = color pleno, tapa las EMAs)", minval=0, maxval=95, step=5, group=g_col)
 sin_solape      = input.bool(true, "Zonas sin solaparse (la más concreta encima, la mayor alrededor)", group=g_col)
 
 // Zonas (FVG, IFVG, OB, FVG M15/H1/H4): aquí solo se guardan los datos. Se dibujan al final,
@@ -1557,8 +1558,6 @@ sep_letrero = nz(ta.atr(50)) * 0.5
 // Hueco entre una zona alcista y una bajista que se tocan, para que no parezcan una sola
 sep_pct     = input.float(8.0, "Separación entre zonas alcistas y bajistas que se tocan (% del ATR, 0 = sin hueco)", minval=0, maxval=50, step=1, group=g_col)
 sep_zonas   = nz(ta.atr(50)) * sep_pct / 100
-// Hueco que se deja en las zonas por donde pasan las EMAs (ver pintar_con_huecos)
-hueco_ema   = nz(ta.atr(50)) * 0.06
 
 var array<Pieza> ocupado    = array.new<Pieza>()
 
@@ -1597,57 +1596,6 @@ recortar(Pieza p) =>
                     break
     res
 
-// Valor de la EMA k (0 rápida, 1 media, 2 lenta) en la vela x
-ema_en(int x, int k) =>
-    o = bar_index - x
-    k == 0 ? ema_rapida[o] : k == 1 ? ema_media[o] : ema_lenta[o]
-
-// TradingView pinta siempre las cajas por encima de las EMAs (plot), y con color pleno las tapaban.
-// Por eso cada caja se pinta dejando un hueco fino justo por donde pasa cada EMA: la caja se divide en
-// columnas de pocas velas y, donde una EMA la cruza, se dibujan solo los trozos por encima y por
-// debajo de ella. Así la EMA se ve entera "por encima" del FVG sin perder el color pleno.
-pintar_con_huecos(Pieza q, color col) =>
-    if not mostrar_emas
-        poner_caja(q.x1, q.top, q.x2, q.bot, col)
-    else
-        // Como mucho ~40 columnas por caja, para no gastar el límite de cajas
-        paso = math.max(2, int(math.ceil((q.x2 - q.x1) / 40.0)))
-        ini = q.x1
-        x = q.x1
-        while x < q.x2 and uso.get(0) < 440
-            x2 = math.min(x + paso, q.x2)
-            los = array.new<float>()
-            his = array.new<float>()
-            for k = 0 to 2
-                a = ema_en(math.min(x, bar_index), k)
-                b = ema_en(math.min(x2, bar_index), k)
-                if not na(a) and not na(b)
-                    lo = math.min(a, b) - hueco_ema
-                    hi = math.max(a, b) + hueco_ema
-                    if hi > q.bot and lo < q.top
-                        los.push(lo)
-                        his.push(hi)
-            if los.size() > 0
-                // Parte de la caja antes de esta columna, de una sola pieza
-                if x > ini
-                    poner_caja(ini, q.top, x, q.bot, col)
-                // En esta columna: la caja menos las bandas de las EMAs (de abajo arriba)
-                orden = los.sort_indices()
-                cursor = q.bot
-                for j in orden
-                    lo = los.get(j)
-                    hi = his.get(j)
-                    tope = math.min(lo, q.top)
-                    if tope > cursor
-                        poner_caja(x, tope, x2, cursor, col)
-                    cursor := math.max(cursor, hi)
-                if cursor < q.top
-                    poner_caja(x, q.top, x2, cursor, col)
-                ini := x2
-            x := x2
-        if q.x2 > ini and uso.get(0) < 440
-            poner_caja(ini, q.top, q.x2, q.bot, col)
-
 pintar_parte(Pieza p, color col, int dir) =>
     for q in recortar(p)
         top = q.top
@@ -1662,7 +1610,7 @@ pintar_parte(Pieza p, color col, int dir) =>
                         bot := math.max(bot, o.top + sep_zonas)
         // Tope de cajas para no superar el límite de TradingView (500): se dibujan antes las de más prioridad
         if q.x2 > q.x1 and top > bot and uso.get(0) < 440
-            pintar_con_huecos(Pieza.new(q.x1, q.x2, top, bot), col)
+            poner_caja(q.x1, top, q.x2, bot, col)
 
 dibujar_zona(int x1_zona, int x2, float techo, float suelo, int dir, float borde, color col, string txt, color coltxt, color colmitad, color colgris, bool fondo) =>
     // TradingView no deja dibujar con bar_index demasiado lejos hacia atrás: las zonas muy antiguas

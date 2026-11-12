@@ -112,8 +112,9 @@ color_alcista   = input.color(#00A651, "Estructura y FVG alcista (verde)", group
 color_bajista   = input.color(#E4002B, "Estructura y FVG bajista (rojo)", group=g_col)
 pintar_velas    = input.bool(true, "Marcar la vela del OB", group=g_col)
 col_ifvg        = input.color(#FF00C8, "IFVG (magenta)", group=g_col)
-// Zonas a color pleno, detrás de las velas (behind_chart); las EMAs se ven a través de un hueco fino
-transp_zonas    = input.int(0, "Transparencia de las zonas (0 = color pleno)", minval=0, maxval=95, step=5, group=g_col)
+// Zonas intensas pero algo transparentes: TradingView pinta siempre las cajas por encima de las EMAs
+// (plot), y solo con transparencia se ven las EMAs a través de ellas. Todo queda detrás de las velas.
+transp_zonas    = input.int(40, "Transparencia de las zonas (0 = color pleno, tapa las EMAs)", minval=0, maxval=95, step=5, group=g_col)
 sin_solape      = input.bool(true, "Zonas sin solaparse (la más concreta encima, la mayor alrededor)", group=g_col)
 
 // Zonas (FVG, IFVG, OB, FVG M15/H1/H4): aquí solo se guardan los datos. Se dibujan al final,
@@ -841,48 +842,4 @@ choch_alcista = cruce_arriba and not na(ultimo_pico) and tendencia <= 0
 choch_bajista = cruce_abajo and not na(ultimo_valle) and tendencia >= 0
 choch_riesgo_alc = false
 choch_riesgo_baj = false
-
-// ─────────────────────────────
-// ORDER BLOCKS
-// Al romper estructura se busca, entre el swing roto y la vela de ruptura:
-//  - OB alcista: la vela BAJISTA con el mínimo más bajo (origen del impulso alcista).
-//  - OB bajista: la vela ALCISTA con el máximo más alto (origen del impulso bajista).
-// Si no hay ninguna vela de ese color, se usa la del extremo.
-// ─────────────────────────────
-crear_caja_ob(int dir, int idx) =>
-    techo = ob_cuerpo ? math.max(open[idx], close[idx]) : high[idx]
-    suelo = ob_cuerpo ? math.min(open[idx], close[idx]) : low[idx]
-    col = dir == 1 ? col_ob_alc : col_ob_baj
-    if pintar_velas
-        // La vela del OB queda pintada con su color (no se puede recolorear una vela pasada con barcolor)
-        line.new(bar_index - idx, high[idx], bar_index - idx, low[idx], color=color.new(col, 10), width=5)
-    obs.push(Zona.new(bar_index - idx, techo, suelo, dir, na, bar_index))
-    if obs.size() > max_ob
-        obs.shift()
-
-crear_ob(int dir, int bar_desde) =>
-    n = math.min(math.max(bar_index - bar_desde, 1), 150)
-    int idx = na
-    float ext = na
-    for i = 0 to n
-        contraria = dir == 1 ? close[i] < open[i] : close[i] > open[i]
-        valor = dir == 1 ? low[i] : high[i]
-        if contraria and (na(ext) or (dir == 1 ? valor < ext : valor > ext))
-            ext := valor
-            idx := i
-    if na(idx)
-        for i = 0 to n
-            valor = dir == 1 ? low[i] : high[i]
-            if na(ext) or (dir == 1 ? valor < ext : valor > ext)
-                ext := valor
-                idx := i
-    // Solo es OB si deja un imbalance (FVG) a continuación en la dirección del impulso.
-    // El FVG empieza en la vela del OB (j = idx) o en una de las siguientes, hasta ob_imb_velas.
-    hay_imbalance = false
-    if idx >= 2
-        for j = idx to math.max(idx - ob_imb_velas + 1, 2)
-            if dir == 1 ? low[j - 2] > high[j] : high[j - 2] < low[j]
-                hay_imbalance := true
-    if hay_imbalance
-        crear_caja_ob(dir, idx)
 
