@@ -952,9 +952,31 @@ bgcolor(fondo_blanco ? color.white : na)
 // ─────────────────────────────
 // EMAs
 // ─────────────────────────────
-plot(mostrar_emas ? ema_rapida : na, "EMA rápida", color=ema_rap_col, linewidth=1)
-plot(mostrar_emas ? ema_media : na, "EMA media", color=ema_med_col, linewidth=1)
-plot(mostrar_emas ? ema_lenta : na, "EMA lenta", color=ema_len_col, linewidth=2)
+// Las EMAs se dibujan como polilíneas y no como plot: TradingView pinta siempre las cajas por encima
+// de los plot, y así las EMAs quedan por encima de las zonas de color (y todo detrás de las velas).
+// Los plot se mantienen solo para la ventana de datos y la línea de estado.
+plot(mostrar_emas ? ema_rapida : na, "EMA rápida", color=ema_rap_col, linewidth=1, display=display.data_window + display.status_line)
+plot(mostrar_emas ? ema_media : na, "EMA media", color=ema_med_col, linewidth=1, display=display.data_window + display.status_line)
+plot(mostrar_emas ? ema_lenta : na, "EMA lenta", color=ema_len_col, linewidth=2, display=display.data_window + display.status_line)
+
+var array<polyline> polis_ema = array.new<polyline>()
+ema_poli(float serie, color col, int ancho) =>
+    pts = array.new<chart.point>()
+    n = math.min(bar_index, 1500)
+    for i = n to 0
+        if not na(serie[i])
+            pts.push(chart.point.from_index(bar_index - i, serie[i]))
+    if pts.size() > 1
+        polis_ema.push(polyline.new(pts, line_color=col, line_width=ancho))
+
+if barstate.islast
+    for pl in polis_ema
+        pl.delete()
+    polis_ema.clear()
+    if mostrar_emas
+        ema_poli(ema_rapida, ema_rap_col, 1)
+        ema_poli(ema_media, ema_med_col, 1)
+        ema_poli(ema_lenta, ema_len_col, 2)
 
 // ─────────────────────────────
 // FVG
