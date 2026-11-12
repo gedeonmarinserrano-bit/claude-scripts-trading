@@ -1,21 +1,3 @@
-// ─────────────────────────────
-// ORDER BLOCKS
-// Al romper estructura se busca, entre el swing roto y la vela de ruptura:
-//  - OB alcista: la vela BAJISTA con el mínimo más bajo (origen del impulso alcista).
-//  - OB bajista: la vela ALCISTA con el máximo más alto (origen del impulso bajista).
-// Si no hay ninguna vela de ese color, se usa la del extremo.
-// ─────────────────────────────
-crear_caja_ob(int dir, int idx) =>
-    techo = ob_cuerpo ? math.max(open[idx], close[idx]) : high[idx]
-    suelo = ob_cuerpo ? math.min(open[idx], close[idx]) : low[idx]
-    col = dir == 1 ? col_ob_alc : col_ob_baj
-    if pintar_velas
-        // La vela del OB queda pintada con su color (no se puede recolorear una vela pasada con barcolor)
-        line.new(bar_index - idx, high[idx], bar_index - idx, low[idx], color=color.new(col, 10), width=5)
-    obs.push(Zona.new(bar_index - idx, techo, suelo, dir, na, bar_index))
-    if obs.size() > max_ob
-        obs.shift()
-
 crear_ob(int dir, int bar_desde) =>
     n = math.min(math.max(bar_index - bar_desde, 1), 150)
     int idx = na

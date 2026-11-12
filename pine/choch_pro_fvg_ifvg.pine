@@ -63,20 +63,23 @@ col_ob_baj      = input.color(#EF6C00, "OB bajista (oferta)", group=g_ob)
 g_ny            = "Estrategia NY (Bias + PO3)"
 mostrar_horas   = input.bool(true, "Marcar horas de la apertura de Nueva York (hora de Madrid)", group=g_ny)
 modo_horas      = input.string("Automático (según la apertura de Nueva York)", "Horario de las marcas", options=["Verano (15:00 / 15:30 / 15:45 / 16:00)", "Invierno (14:00 / 14:30 / 14:45 / 15:00)", "Automático (según la apertura de Nueva York)"], group=g_ny)
-// Colores de los FVG: verde (alcista) y rojo (bajista), cada vez más oscuros cuanto más alta la temporalidad
-g_cfvg          = "Colores FVG (más oscuro = temporalidad más alta)"
-fvg_alc_0       = input.color(#A5F2B4, "Alcista · gráfico (si no es M1/M5/M15/H1/H4)", group=g_cfvg)
-fvg_alc_1       = input.color(#D4F8DC, "Alcista · M1", group=g_cfvg)
-fvg_alc_5       = input.color(#A5F2B4, "Alcista · M5", group=g_cfvg)
-fvg_alc_15      = input.color(#2ECC40, "Alcista · M15", group=g_cfvg)
-fvg_alc_60      = input.color(#00796B, "Alcista · H1", group=g_cfvg)
-fvg_alc_240     = input.color(#003300, "Alcista · H4", group=g_cfvg)
-fvg_baj_0       = input.color(#FF8080, "Bajista · gráfico (si no es M1/M5/M15/H1/H4)", group=g_cfvg)
-fvg_baj_1       = input.color(#FFBDBD, "Bajista · M1", group=g_cfvg)
-fvg_baj_5       = input.color(#FF8080, "Bajista · M5", group=g_cfvg)
-fvg_baj_15      = input.color(#FF1A1A, "Bajista · M15", group=g_cfvg)
-fvg_baj_60      = input.color(#B30000, "Bajista · H1", group=g_cfvg)
-fvg_baj_240     = input.color(#4D0000, "Bajista · H4", group=g_cfvg)
+// Colores de los FVG: un mismo verde para todos los alcistas y un mismo rojo para todos los bajistas,
+// sea cual sea la temporalidad (el letrero dice cuál es)
+g_cfvg          = "Colores FVG"
+fvg_alc_todos   = input.color(#00A651, "FVG alcista (todas las temporalidades)", group=g_cfvg)
+fvg_baj_todos   = input.color(#E4002B, "FVG bajista (todas las temporalidades)", group=g_cfvg)
+fvg_alc_0       = fvg_alc_todos
+fvg_alc_1       = fvg_alc_todos
+fvg_alc_5       = fvg_alc_todos
+fvg_alc_15      = fvg_alc_todos
+fvg_alc_60      = fvg_alc_todos
+fvg_alc_240     = fvg_alc_todos
+fvg_baj_0       = fvg_baj_todos
+fvg_baj_1       = fvg_baj_todos
+fvg_baj_5       = fvg_baj_todos
+fvg_baj_15      = fvg_baj_todos
+fvg_baj_60      = fvg_baj_todos
+fvg_baj_240     = fvg_baj_todos
 mostrar_niv_h4  = input.bool(true, "Niveles clave: altos/bajos relevantes de H4", group=g_ny)
 piv_h4_len      = input.int(3, "Sensibilidad altos/bajos H4", minval=1, maxval=10, group=g_ny)
 max_niv_h4      = input.int(6, "Máx. niveles H4 vigentes", minval=1, maxval=20, group=g_ny)
