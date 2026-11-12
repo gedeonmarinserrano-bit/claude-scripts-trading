@@ -1,3 +1,47 @@
+// ─────────────────────────────
+// ORDER BLOCKS
+// Al romper estructura se busca, entre el swing roto y la vela de ruptura:
+//  - OB alcista: la vela BAJISTA con el mínimo más bajo (origen del impulso alcista).
+//  - OB bajista: la vela ALCISTA con el máximo más alto (origen del impulso bajista).
+// Si no hay ninguna vela de ese color, se usa la del extremo.
+// ─────────────────────────────
+crear_caja_ob(int dir, int idx) =>
+    techo = ob_cuerpo ? math.max(open[idx], close[idx]) : high[idx]
+    suelo = ob_cuerpo ? math.min(open[idx], close[idx]) : low[idx]
+    col = dir == 1 ? col_ob_alc : col_ob_baj
+    if pintar_velas
+        // La vela del OB queda pintada con su color (no se puede recolorear una vela pasada con barcolor)
+        line.new(bar_index - idx, high[idx], bar_index - idx, low[idx], color=color.new(col, 10), width=5)
+    obs.push(Zona.new(bar_index - idx, techo, suelo, dir, na, bar_index))
+    if obs.size() > max_ob
+        obs.shift()
+
+crear_ob(int dir, int bar_desde) =>
+    n = math.min(math.max(bar_index - bar_desde, 1), 150)
+    int idx = na
+    float ext = na
+    for i = 0 to n
+        contraria = dir == 1 ? close[i] < open[i] : close[i] > open[i]
+        valor = dir == 1 ? low[i] : high[i]
+        if contraria and (na(ext) or (dir == 1 ? valor < ext : valor > ext))
+            ext := valor
+            idx := i
+    if na(idx)
+        for i = 0 to n
+            valor = dir == 1 ? low[i] : high[i]
+            if na(ext) or (dir == 1 ? valor < ext : valor > ext)
+                ext := valor
+                idx := i
+    // Solo es OB si deja un imbalance (FVG) a continuación en la dirección del impulso.
+    // El FVG empieza en la vela del OB (j = idx) o en una de las siguientes, hasta ob_imb_velas.
+    hay_imbalance = false
+    if idx >= 2
+        for j = idx to math.max(idx - ob_imb_velas + 1, 2)
+            if dir == 1 ? low[j - 2] > high[j] : high[j - 2] < low[j]
+                hay_imbalance := true
+    if hay_imbalance
+        crear_caja_ob(dir, idx)
+
 // --- ALCISTA (BUY) ---
 if cruce_arriba and not na(ultimo_pico)
     if tendencia <= 0
@@ -64,40 +108,9 @@ bgcolor(fondo_blanco ? color.white : na)
 // ─────────────────────────────
 // EMAs
 // ─────────────────────────────
-// Las EMAs se dibujan como polilíneas y no como plot: TradingView pinta siempre las cajas por encima
-// de los plot, y así las EMAs quedan por encima de las zonas de color (y todo detrás de las velas).
-// Los plot se mantienen solo para la ventana de datos y la línea de estado.
-plot(mostrar_emas ? ema_rapida : na, "EMA rápida", color=ema_rap_col, linewidth=1, display=display.data_window + display.status_line)
-plot(mostrar_emas ? ema_media : na, "EMA media", color=ema_med_col, linewidth=1, display=display.data_window + display.status_line)
-plot(mostrar_emas ? ema_lenta : na, "EMA lenta", color=ema_len_col, linewidth=2, display=display.data_window + display.status_line)
-
-var array<polyline> polis_ema = array.new<polyline>()
-var array<line> ema_tramos = array.new<line>()
-if barstate.islast
-    for pl in polis_ema
-        pl.delete()
-    polis_ema.clear()
-    if mostrar_emas
-        // Los puntos se toman aquí (no dentro de una función): dentro de una función que solo se llama
-        // en la última vela, el historial de su parámetro está vacío y la EMA no se veía
-        p_rap = array.new<chart.point>()
-        p_med = array.new<chart.point>()
-        p_len = array.new<chart.point>()
-        n = math.min(bar_index, 1500)
-        for i = n to 0
-            x = bar_index - i
-            if not na(ema_rapida[i])
-                p_rap.push(chart.point.from_index(x, ema_rapida[i]))
-            if not na(ema_media[i])
-                p_med.push(chart.point.from_index(x, ema_media[i]))
-            if not na(ema_lenta[i])
-                p_len.push(chart.point.from_index(x, ema_lenta[i]))
-        if p_rap.size() > 1
-            polis_ema.push(polyline.new(p_rap, line_color=ema_rap_col, line_width=1))
-        if p_med.size() > 1
-            polis_ema.push(polyline.new(p_med, line_color=ema_med_col, line_width=1))
-        if p_len.size() > 1
-            polis_ema.push(polyline.new(p_len, line_color=ema_len_col, line_width=2))
+plot(mostrar_emas ? ema_rapida : na, "EMA rápida", color=ema_rap_col, linewidth=1)
+plot(mostrar_emas ? ema_media : na, "EMA media", color=ema_med_col, linewidth=1)
+plot(mostrar_emas ? ema_lenta : na, "EMA lenta", color=ema_len_col, linewidth=2)
 
 // ─────────────────────────────
 // FVG
@@ -831,28 +844,6 @@ if barstate.islast
     dibujar_tf(mostrar_fvg240, 240, fvg240, ifvg240, fvg_alc_240, fvg_baj_240, 80, "H4")
     if not graf_hecho
         dibujar_graf()
-    // EMAs por encima de las zonas: TradingView pinta las cajas por encima de las polilíneas de las
-    // EMAs, así que donde una EMA cruza una zona se repasa con tramos de línea (que sí van encima).
-    // Se usan pocos tramos por zona (la EMA es suave) para no gastar el límite de líneas.
-    for l in ema_tramos
-        l.delete()
-    ema_tramos.clear()
-    if mostrar_emas
-        for o in ocupado
-            xa = math.max(o.x1, bar_index - 1500)
-            xb = math.min(o.x2, bar_index)
-            if xb > xa
-                paso = math.max(1, int(math.ceil((xb - xa) / 25.0)))
-                for k = 0 to 2
-                    col_k = k == 0 ? ema_rap_col : k == 1 ? ema_med_col : ema_len_col
-                    x = xa
-                    while x < xb and ema_tramos.size() < 150
-                        x2 = math.min(x + paso, xb)
-                        v1 = k == 0 ? ema_rapida[bar_index - x] : k == 1 ? ema_media[bar_index - x] : ema_lenta[bar_index - x]
-                        v2 = k == 0 ? ema_rapida[bar_index - x2] : k == 1 ? ema_media[bar_index - x2] : ema_lenta[bar_index - x2]
-                        if not na(v1) and not na(v2) and math.max(v1, v2) >= o.bot and math.min(v1, v2) <= o.top
-                            ema_tramos.push(line.new(x, v1, x2, v2, color=col_k, width=k == 2 ? 2 : 1))
-                        x := x2
     // Colocar los letreros dentro de su zona: a la altura de la zona y pegados a su borde derecho.
     // Si dos coinciden (misma altura aproximada), el segundo se pone a la izquierda del primero, en
     // la misma línea, en vez de subirlo o bajarlo. El ancho de cada letrero se estima en velas
