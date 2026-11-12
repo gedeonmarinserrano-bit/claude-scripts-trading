@@ -960,23 +960,31 @@ plot(mostrar_emas ? ema_media : na, "EMA media", color=ema_med_col, linewidth=1,
 plot(mostrar_emas ? ema_lenta : na, "EMA lenta", color=ema_len_col, linewidth=2, display=display.data_window + display.status_line)
 
 var array<polyline> polis_ema = array.new<polyline>()
-ema_poli(float serie, color col, int ancho) =>
-    pts = array.new<chart.point>()
-    n = math.min(bar_index, 1500)
-    for i = n to 0
-        if not na(serie[i])
-            pts.push(chart.point.from_index(bar_index - i, serie[i]))
-    if pts.size() > 1
-        polis_ema.push(polyline.new(pts, line_color=col, line_width=ancho))
-
 if barstate.islast
     for pl in polis_ema
         pl.delete()
     polis_ema.clear()
     if mostrar_emas
-        ema_poli(ema_rapida, ema_rap_col, 1)
-        ema_poli(ema_media, ema_med_col, 1)
-        ema_poli(ema_lenta, ema_len_col, 2)
+        // Los puntos se toman aquí (no dentro de una función): dentro de una función que solo se llama
+        // en la última vela, el historial de su parámetro está vacío y la EMA no se veía
+        p_rap = array.new<chart.point>()
+        p_med = array.new<chart.point>()
+        p_len = array.new<chart.point>()
+        n = math.min(bar_index, 1500)
+        for i = n to 0
+            x = bar_index - i
+            if not na(ema_rapida[i])
+                p_rap.push(chart.point.from_index(x, ema_rapida[i]))
+            if not na(ema_media[i])
+                p_med.push(chart.point.from_index(x, ema_media[i]))
+            if not na(ema_lenta[i])
+                p_len.push(chart.point.from_index(x, ema_lenta[i]))
+        if p_rap.size() > 1
+            polis_ema.push(polyline.new(p_rap, line_color=ema_rap_col, line_width=1))
+        if p_med.size() > 1
+            polis_ema.push(polyline.new(p_med, line_color=ema_med_col, line_width=1))
+        if p_len.size() > 1
+            polis_ema.push(polyline.new(p_len, line_color=ema_len_col, line_width=2))
 
 // ─────────────────────────────
 // FVG
