@@ -1,0 +1,888 @@
+// Po3 + CHoCH PRO - High Contrast + FVG + Rangos + OB
+//
+// Incluye "Auto Range Detector [QuantAlgo]" © QuantAlgo, licenciado bajo
+// Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
+// https://creativecommons.org/licenses/by-nc-sa/4.0/
+// Incluye una versión mejorada de "SMT Divergences [LuxAlgo]" © LuxAlgo, también CC BY-NC-SA 4.0.
+// Por esa licencia, este script combinado se distribuye bajo la misma licencia (CC BY-NC-SA 4.0).
+
+//@version=6
+indicator("Po3 + CHoCH PRO - High Contrast + FVG + Rangos + OB", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=500, max_bars_back=2000, behind_chart=true)
+
+// Interruptores de FVG por temporalidad (lo primero en Ajustes): solo se ven y se calculan los activados.
+// Cada interruptor muestra los FVG y los IFVG de esa temporalidad, sea más alta o más baja que el gráfico.
+g_fvgtf         = "FVG por temporalidad (solo se ven los activados)"
+mostrar_fvg240  = input.bool(true,  "FVG H4", inline="fvgtf1", group=g_fvgtf)
+mostrar_fvg60   = input.bool(true,  "FVG H1", inline="fvgtf1", group=g_fvgtf)
+mostrar_fvg15   = input.bool(true,  "FVG M15", inline="fvgtf1", group=g_fvgtf)
+mostrar_fvg5    = input.bool(true,  "FVG M5", inline="fvgtf2", group=g_fvgtf)
+mostrar_fvg1    = input.bool(false, "FVG M1", inline="fvgtf2", group=g_fvgtf)
+mostrar_fvg     = input.bool(true, "FVG del gráfico si no es ninguna de las 5 (M3, M30, D…)", group=g_fvgtf)
+// Activado: cada temporalidad solo se ve en su propio gráfico (los FVG de H4 solo en el gráfico de H4,
+// los de M15 solo en el de M15…) y no se mezclan; los interruptores dicen en qué gráficos se ven.
+solo_su_graf    = input.bool(true, "Cada FVG solo en el gráfico de su temporalidad (sin mezclar)", group=g_fvgtf)
+max_htf         = input.int(10, "Máx. FVG por temporalidad (M5, M15, H1, H4)", minval=1, maxval=50, group=g_fvgtf)
+// Las zonas muy lejos del precio no aportan en intradía y son las que más tiempo de cálculo cuestan
+max_dibujadas   = input.int(35, "Máx. zonas dibujadas a la vez (menos = más rápido)", minval=5, maxval=120, group=g_fvgtf)
+dist_max        = input.float(2.0, "Dibujar solo zonas a menos de este % del precio (0 = todas)", minval=0, step=0.5, group=g_fvgtf)
+
+// ─────────────────────────────
+// CONFIGURACIÓN
+// ─────────────────────────────
+periodo      = input.int(4, "Sensibilidad Pivotes", minval=1)
+vol_mult     = input.float(1.1, "Mult. Volumen Base", step=0.1)
+vol_top      = input.float(2.0, "Mult. Alto Volumen (🔥)", step=0.1)
+vol_len      = input.int(20, "Media de Volumen", minval=1)
+offset_x     = input.int(2, "Desplazamiento Texto", minval=0)
+fondo_blanco = input.bool(true, "Fondo blanco")
+mostrar_bos  = input.bool(true, "Mostrar BOS (salvo con tendencia invalidada)")
+borrar_bos_giro = input.bool(true, "Borrar el BOS contrario previo al CHoCH (modifica el pasado)")
+bos_ventana  = input.int(0, "Borrar BOS previo al CHoCH: máx. velas (0 = sin límite)", minval=0)
+filtro_rango = input.bool(true, "Sin CHoCH ni BOS dentro de un rango (hasta el breakout)")
+// TradingView limita el tiempo total de cálculo: las partes pesadas (rangos, Order Blocks, FVG de
+// otras temporalidades) solo se calculan en las últimas N velas del historial
+velas_calc   = input.int(2000, "Velas de historial a calcular (menos = más rápido)", minval=300, maxval=20000)
+en_calc      = bar_index >= last_bar_index - velas_calc
+
+fvg_min_pct     = input.float(0.0, "Tamaño mínimo FVG (% precio)", minval=0, step=0.05, group="FVG")
+max_zonas       = input.int(20, "Máx. zonas vigiladas", minval=1, maxval=250, group="FVG")
+// Parte consumida: el mismo gris para todas las zonas y temporalidades
+color_consumido = input.color(color.new(#B0B0B0, 75), "Parte consumida (todas las zonas)", group="FVG")
+
+// Estrategia apertura de Nueva York (Bias + PO3)
+// Order Blocks: la última vela contraria antes del impulso que rompe estructura (CHoCH o BOS)
+g_ob            = "Order Blocks"
+mostrar_ob      = input.bool(true, "Mostrar Order Blocks", group=g_ob)
+ob_solo_choch   = input.bool(false, "Solo los que originan un CHoCH (no los de BOS)", group=g_ob)
+ob_cuerpo       = input.bool(false, "Usar solo el cuerpo de la vela (sin mechas)", group=g_ob)
+max_ob          = input.int(10, "Máx. Order Blocks vigentes", minval=1, maxval=50, group=g_ob)
+ob_imb_velas    = input.int(1, "El imbalance (FVG) debe empezar en las N velas siguientes al OB", minval=1, maxval=5, group=g_ob)
+col_ob_alc      = input.color(#1565C0, "OB alcista (demanda)", group=g_ob)
+col_ob_baj      = input.color(#EF6C00, "OB bajista (oferta)", group=g_ob)
+
+g_ny            = "Estrategia NY (Bias + PO3)"
+mostrar_horas   = input.bool(true, "Marcar horas de la apertura de Nueva York (hora de Madrid)", group=g_ny)
+modo_horas      = input.string("Automático (según la apertura de Nueva York)", "Horario de las marcas", options=["Verano (15:00 / 15:30 / 15:45 / 16:00)", "Invierno (14:00 / 14:30 / 14:45 / 15:00)", "Automático (según la apertura de Nueva York)"], group=g_ny)
+// Colores de los FVG: verde (alcista) y rojo (bajista), cada vez más oscuros cuanto más alta la temporalidad
+g_cfvg          = "Colores FVG (más oscuro = temporalidad más alta)"
+fvg_alc_0       = input.color(#A5F2B4, "Alcista · gráfico (si no es M1/M5/M15/H1/H4)", group=g_cfvg)
+fvg_alc_1       = input.color(#D4F8DC, "Alcista · M1", group=g_cfvg)
+fvg_alc_5       = input.color(#A5F2B4, "Alcista · M5", group=g_cfvg)
+fvg_alc_15      = input.color(#2ECC40, "Alcista · M15", group=g_cfvg)
+fvg_alc_60      = input.color(#00796B, "Alcista · H1", group=g_cfvg)
+fvg_alc_240     = input.color(#003300, "Alcista · H4", group=g_cfvg)
+fvg_baj_0       = input.color(#FF8080, "Bajista · gráfico (si no es M1/M5/M15/H1/H4)", group=g_cfvg)
+fvg_baj_1       = input.color(#FFBDBD, "Bajista · M1", group=g_cfvg)
+fvg_baj_5       = input.color(#FF8080, "Bajista · M5", group=g_cfvg)
+fvg_baj_15      = input.color(#FF1A1A, "Bajista · M15", group=g_cfvg)
+fvg_baj_60      = input.color(#B30000, "Bajista · H1", group=g_cfvg)
+fvg_baj_240     = input.color(#4D0000, "Bajista · H4", group=g_cfvg)
+mostrar_niv_h4  = input.bool(true, "Niveles clave: altos/bajos relevantes de H4", group=g_ny)
+piv_h4_len      = input.int(3, "Sensibilidad altos/bajos H4", minval=1, maxval=10, group=g_ny)
+max_niv_h4      = input.int(6, "Máx. niveles H4 vigentes", minval=1, maxval=20, group=g_ny)
+mostrar_pd      = input.bool(true, "Niveles clave: alto/bajo del día anterior", group=g_ny)
+col_niveles     = input.color(#424242, "Color niveles clave", group=g_ny)
+col_horas       = input.color(#757575, "Color horas", group=g_ny)
+
+mostrar_emas = input.bool(true, "Mostrar EMAs", group="EMAs")
+ema_rap_len  = input.int(9, "EMA rápida", minval=1, group="EMAs")
+ema_med_len  = input.int(20, "EMA media", minval=1, group="EMAs")
+ema_len_len  = input.int(200, "EMA lenta", minval=1, group="EMAs")
+ema_rap_col  = input.color(#546E7A, "Color EMA rápida", group="EMAs")
+ema_med_col  = input.color(#9E9D24, "Color EMA media", group="EMAs")
+ema_len_col  = input.color(color.black, "Color EMA lenta", group="EMAs")
+
+// CHoCH fallido: la vela siguiente cierra de nuevo al otro lado del nivel roto
+marcar_fallidos = input.bool(true, "Marcar CHoCH fallidos (✗)", group="CHoCH fallido / riesgo")
+anular_fallidos = input.bool(true, "Anular tendencia si el CHoCH falla", group="CHoCH fallido / riesgo")
+// Riesgo de fallo evaluado al cierre de la vela del CHoCH
+marcar_riesgo   = input.bool(true, "Marcar CHoCH de riesgo (⚠)", group="CHoCH fallido / riesgo")
+riesgo_min      = input.int(2, "Puntuación mínima para ⚠", minval=1, maxval=6, group="CHoCH fallido / riesgo")
+atr_len         = input.int(14, "Longitud ATR", minval=1, group="CHoCH fallido / riesgo")
+mecha_pct       = input.float(50, "Mecha de rechazo ≥ (% del rango)", minval=0, maxval=100, group="CHoCH fallido / riesgo")
+dist_atr        = input.float(0.15, "Ruptura corta < (× ATR)", minval=0, step=0.05, group="CHoCH fallido / riesgo")
+climax_atr      = input.float(2.5, "Vela de clímax > (× ATR)", minval=0, step=0.1, group="CHoCH fallido / riesgo")
+cuerpo_pct      = input.float(30, "Cuerpo pequeño < (% del rango)", minval=0, maxval=100, group="CHoCH fallido / riesgo")
+zona_atr        = input.float(1.0, "FVG contrario a < (× ATR)", minval=0, step=0.1, group="CHoCH fallido / riesgo")
+color_fallido   = input.color(color.gray, "Color CHoCH fallido", group="CHoCH fallido / riesgo")
+
+// Paleta: cada tipo de elemento tiene un tono propio y separado de los demás
+g_col           = "Colores"
+color_alcista   = input.color(#00A651, "Estructura y FVG alcista (verde)", group=g_col)
+color_bajista   = input.color(#E4002B, "Estructura y FVG bajista (rojo)", group=g_col)
+pintar_velas    = input.bool(true, "Marcar la vela del OB", group=g_col)
+col_ifvg        = input.color(#FF00C8, "IFVG (magenta)", group=g_col)
+// Zonas a color pleno: el indicador se dibuja detrás de las velas (behind_chart), así no las tapa
+transp_zonas    = input.int(0, "Transparencia de las zonas (0 = color pleno)", minval=0, maxval=95, step=5, group=g_col)
+sin_solape      = input.bool(true, "Zonas sin solaparse (la más concreta encima, la mayor alrededor)", group=g_col)
+
+// Zonas (FVG, IFVG, OB, FVG M15/H1/H4): aquí solo se guardan los datos. Se dibujan al final,
+// recortadas para que ninguna quede por debajo de otra (ver «DIBUJO DE ZONAS SIN SOLAPES»).
+type Zona
+    int   x1          // vela donde empieza la zona
+    float techo
+    float suelo
+    int   dir         // 1 alcista, -1 bajista
+    float borde = na  // límite de la parte aún sin tocar (na = intacta)
+    int   creado = na // vela en la que se creó (esa vela no la consume)
+    bool  avisado = false // IFVG: ya ha saltado la alerta de retesteo
+
+var zonas  = array.new<Zona>()   // FVG del gráfico (el riesgo del CHoCH las consulta)
+var ifvgs  = array.new<Zona>()
+var obs    = array.new<Zona>()
+var fvg1   = array.new<Zona>()
+var fvg5   = array.new<Zona>()
+var fvg15  = array.new<Zona>()
+var fvg60  = array.new<Zona>()
+var fvg240 = array.new<Zona>()
+// IFVG que vienen de FVG de M1, M5, M15, H1 y H4
+var ifvg1   = array.new<Zona>()
+var ifvg5   = array.new<Zona>()
+var ifvg15  = array.new<Zona>()
+var ifvg60  = array.new<Zona>()
+var ifvg240 = array.new<Zona>()
+
+// Rangos ya terminados, para dibujar su sombreado sin solaparse con las zonas
+type Rango
+    int   x1
+    int   x2
+    float techo
+    float suelo
+    color col
+
+var rangos_hist = array.new<Rango>()
+
+// Consumo progresivo con la vela actual: la zona alcista se consume desde el techo hacia abajo y
+// la bajista desde el suelo hacia arriba. Devuelve true cuando la mecha llega al otro extremo.
+consumir(Zona z) =>
+    completa = z.dir == 1 ? low <= z.suelo : high >= z.techo
+    if not completa
+        borde = na(z.borde) ? (z.dir == 1 ? z.techo : z.suelo) : z.borde
+        if z.dir == 1 ? low < borde : high > borde
+            z.borde := z.dir == 1 ? low : high
+    completa
+
+// Etiquetas de estructura dibujadas (CHoCH, ✗ CHoCH, BOS), para poder borrarlas
+// si después se detecta un rango que las contiene
+type Marca
+    label lb
+    line  ln
+    int   bar
+
+var marcas = array.new<Marca>()
+
+registrar_marca(label lb, line ln, int bar) =>
+    marcas.push(Marca.new(lb, ln, bar))
+    if marcas.size() > 500
+        marcas.shift()
+
+ema_rapida = ta.ema(close, ema_rap_len)
+ema_media  = ta.ema(close, ema_med_len)
+ema_lenta  = ta.ema(close, ema_len_len)
+atr_val    = ta.atr(atr_len)
+
+//              ╔════════════════════════════════╗              //
+//              ║  AUTO RANGE DETECTOR [QuantAlgo] ║            //
+//              ║      USER-DEFINED SETTINGS     ║              //
+//              ╚════════════════════════════════╝              //
+
+var string group_detect    = '════════ Detection ════════'
+var string group_structure = '════════ Structure Filters ════════'
+var string group_range     = '════════ Range Behavior ════════'
+var string group_visual    = '════════ Visual Settings ════════'
+
+scan_scaling      = input.string('Base + 2x + 3x', 'Scan Scaling', options = ['Base only', 'Base + 2x', 'Base + 2x + 3x'], group = group_detect)
+base_length       = input.int(20, 'Base Scan Length', minval = 8, maxval = 100, group = group_detect)
+boundary_basis    = input.string('Percentile band', 'Boundary Basis', options = ['Percentile band', 'Absolute extremes', 'Body extremes'], group = group_detect)
+band_percentile   = input.float(90.0, 'Boundary Percentile', minval = 70.0, maxval = 100.0, step = 1.0, group = group_detect)
+signal_timing     = input.string('Bar close', 'Signal Timing', options = ['Bar close', 'Live bar'], group = group_detect)
+atr_length        = input.int(200, 'ATR Length', minval = 14, maxval = 1000, group = group_detect)
+
+compression_pct   = input.float(40.0, 'Compression Percentile', minval = 5.0, maxval = 95.0, step = 5.0, group = group_structure)
+calibration_len   = input.int(500, 'Calibration Lookback', minval = 100, maxval = 2000, group = group_structure)
+min_rotation      = input.float(0.18, 'Min Rotation Rate', minval = 0.05, maxval = 0.60, step = 0.01, group = group_structure)
+touch_basis       = input.string('Wick reaches', 'Touch Definition', options = ['Wick reaches', 'Close reaches'], group = group_structure)
+min_touches       = input.int(2, 'Min Boundary Touches', minval = 1, maxval = 10, group = group_structure)
+touch_tolerance   = input.float(0.10, 'Touch Tolerance (ATR)', minval = 0.02, maxval = 1.0, step = 0.02, group = group_structure)
+max_drift         = input.float(0.45, 'Max Drift', minval = 0.05, maxval = 2.0, step = 0.05, group = group_structure)
+min_containment   = input.float(0.70, 'Min Containment', minval = 0.40, maxval = 1.0, step = 0.05, group = group_structure)
+
+range_anchoring   = input.string('Extend to containment', 'Range Anchoring', options = ['Scan window only', 'Extend to containment'], group = group_range)
+anchor_lookback   = input.int(300, 'Anchor Lookback', minval = 20, maxval = 500, group = group_range)
+min_range_bars    = input.int(10, 'Minimum Range Bars', minval = 2, maxval = 200, group = group_range)
+absorb_overshoot  = input.bool(true, 'Absorb Overshoot', group = group_range)
+overshoot_tol     = input.float(0.25, 'Overshoot Tolerance (ATR)', minval = 0.05, maxval = 1.0, step = 0.05, group = group_range)
+break_confirm     = input.string('Close beyond', 'Break Confirmation', options = ['Close beyond', 'Wick beyond'], group = group_range)
+breakout_buffer   = input.float(0.15, 'Breakout Buffer (ATR)', minval = 0.0, maxval = 2.0, step = 0.05, group = group_range)
+merge_deviations  = input.bool(true, 'Merge Deviations', group = group_range)
+deviation_window  = input.int(10, 'Deviation Window', minval = 1, maxval = 100, group = group_range)
+cooldown_bars     = input.int(3, 'Cooldown Bars', minval = 0, maxval = 100, group = group_range)
+max_range_age     = input.int(0, 'Max Range Age', minval = 0, maxval = 2000, group = group_range)
+
+color_preset      = input.string('Custom', 'Color Preset', options = ['Classic', 'Aqua', 'Cosmic', 'Cyber', 'Neon', 'Custom'], group = group_visual)
+bullish_input     = input.color(#00A651, 'Bullish Color', group = group_visual)
+bearish_input     = input.color(#E4002B, 'Bearish Color', group = group_visual)
+range_input       = input.color(#F9A825, 'Range Color', group = group_visual)
+gradient_steps    = input.int(4, 'Gradient Steps', minval = 1, maxval = 10, group = group_visual)
+fill_transparency = input.int(93, 'Fill Transparency', minval = 50, maxval = 100, group = group_visual)
+show_equilibrium  = input.bool(true, 'Show Equilibrium Line', group = group_visual)
+show_quartiles    = input.bool(true, 'Show Quartile Levels', group = group_visual)
+show_range_label  = input.bool(true, 'Show Range Labels', group = group_visual)
+show_breakouts    = input.bool(true, 'Show Breakout Markers', group = group_visual)
+show_deviations   = input.bool(true, 'Show Deviation Markers', group = group_visual)
+label_text_size   = input.string('Small', 'Label Text Size', options = ['Tiny', 'Small', 'Normal', 'Large'], group = group_visual)
+marcas_sutiles    = input.bool(true, 'Marcas Breakout/Deviation sutiles (solo flecha)', group = group_visual)
+tam_marcas_txt    = input.string('Small', 'Tamaño flechas Breakout/Deviation', options = ['Tiny', 'Small', 'Normal', 'Large'], group = group_visual)
+
+[bullish_color, bearish_color] = switch color_preset
+    'Classic' => [#00ff00, #ff0000]
+    'Aqua'    => [#00d4ff, #ff8c00]
+    'Cosmic'  => [#49ffce, #9932cc]
+    'Cyber'   => [#00cccc, #ff6600]
+    'Neon'    => [#ffff00, #ff00ff]
+    =>           [bullish_input, bearish_input]
+
+var color transparent_fill = color.new(color.black, 100)
+var float contrast_line    = 3.0
+var float contrast_fill    = 1.6
+
+//              ╔════════════════════════════════╗              //
+//              ║       UTILITY FUNCTIONS        ║              //
+//              ╚════════════════════════════════╝              //
+
+resolveSize(string choice) =>
+    switch choice
+        'Tiny'   => size.tiny
+        'Normal' => size.normal
+        'Large'  => size.large
+        =>          size.small
+
+luminanceOf(color source) =>
+    channel_r = color.r(source) / 255.0
+    channel_g = color.g(source) / 255.0
+    channel_b = color.b(source) / 255.0
+    linear_r  = channel_r <= 0.03928 ? channel_r / 12.92 : math.pow((channel_r + 0.055) / 1.055, 2.4)
+    linear_g  = channel_g <= 0.03928 ? channel_g / 12.92 : math.pow((channel_g + 0.055) / 1.055, 2.4)
+    linear_b  = channel_b <= 0.03928 ? channel_b / 12.92 : math.pow((channel_b + 0.055) / 1.055, 2.4)
+    0.2126 * linear_r + 0.7152 * linear_g + 0.0722 * linear_b
+
+contrastRatio(color first_color, color second_color) =>
+    first_lum  = luminanceOf(first_color)
+    second_lum = luminanceOf(second_color)
+    (math.max(first_lum, second_lum) + 0.05) / (math.min(first_lum, second_lum) + 0.05)
+
+contrastText(color backdrop) =>
+    luminanceOf(backdrop) > 0.179 ? #000000 : #ffffff
+
+blendToward(color source, color target, float weight) =>
+    color.rgb(color.r(source) + (color.r(target) - color.r(source)) * weight, color.g(source) + (color.g(target) - color.g(source)) * weight, color.b(source) + (color.b(target) - color.b(source)) * weight)
+
+readableOn(color source, color backdrop, float floor_ratio) =>
+    target   = contrastText(backdrop)
+    adjusted = source
+    for step = 1 to 10
+        if contrastRatio(adjusted, backdrop) >= floor_ratio
+            break
+        adjusted := blendToward(source, target, step / 10.0)
+    adjusted
+
+percentText(float value) =>
+    str.tostring(value, '#.##') + '%'
+
+buildShade(array<box> shade, int left_bar, float top_price, float bottom_price) =>
+    array.clear(shade)
+    // Sin solapes, el sombreado del rango lo dibuja el bloque de zonas (aquí no se crea)
+    if not sin_solape
+        for i = 0 to gradient_steps - 1
+            array.push(shade, box.new(left_bar, top_price, bar_index, bottom_price, border_color = na, border_width = 0, bgcolor = na, xloc = xloc.bar_index))
+
+paintShade(array<box> shade, float top_price, float bottom_price, int left_bar, int right_bar, color shade_color) =>
+    slices = array.size(shade)
+    if slices > 0 and top_price > bottom_price
+        slice_height = (top_price - bottom_price) / slices
+        for i = 0 to slices - 1
+            slice_box   = array.get(shade, i)
+            center_dist = math.abs((i + 0.5) / slices - 0.5) * 2.0
+            slice_trans = int(math.min(99, math.max(0, fill_transparency + (1.0 - center_dist) * 10)))
+            box.set_lefttop(slice_box, left_bar, top_price - slice_height * i)
+            box.set_rightbottom(slice_box, right_bar, top_price - slice_height * (i + 1))
+            box.set_bgcolor(slice_box, color.new(shade_color, slice_trans))
+
+deleteShade(array<box> shade) =>
+    if array.size(shade) > 0
+        for i = 0 to array.size(shade) - 1
+            box.delete(array.get(shade, i))
+    array.clear(shade)
+
+anchorSpan(int window, float top_price, float bottom_price, float tolerance) =>
+    span = window
+    if range_anchoring == 'Extend to containment'
+        limit   = math.min(anchor_lookback, bar_index)
+        allowed = math.max(2, math.round((1.0 - min_containment) * window))
+        outside = 0
+        offset  = 0
+        while offset < limit and outside <= allowed
+            closed_in = close[offset] <= top_price and close[offset] >= bottom_price
+            fully_in  = closed_in and high[offset] <= top_price + tolerance and low[offset] >= bottom_price - tolerance
+            if closed_in
+                outside := math.max(0, outside - 1)
+                if fully_in and offset + 1 >= window
+                    span := offset + 1
+            else
+                outside += 1
+            offset += 1
+    span
+
+//              ╔════════════════════════════════╗              //
+//              ║        CORE CALCULATION        ║              //
+//              ╚════════════════════════════════╝              //
+
+atr_value   = ta.atr(atr_length)
+context_ok  = not na(atr_value) and atr_value > 0
+wick_break  = break_confirm == 'Wick beyond'
+wick_touch  = touch_basis == 'Wick reaches'
+live_timing = signal_timing == 'Live bar'
+bar_ready   = live_timing or barstate.isconfirmed
+label_size  = resolveSize(label_text_size)
+tam_marcas  = resolveSize(tam_marcas_txt)
+
+chart_backdrop     = chart.bg_color
+range_line_color   = readableOn(range_input, chart_backdrop, contrast_line)
+bullish_line_color = readableOn(bullish_color, chart_backdrop, contrast_line)
+bearish_line_color = readableOn(bearish_color, chart_backdrop, contrast_line)
+range_fill_color   = readableOn(range_input, chart_backdrop, contrast_fill)
+bullish_fill_color = readableOn(bullish_color, chart_backdrop, contrast_fill)
+bearish_fill_color = readableOn(bearish_color, chart_backdrop, contrast_fill)
+
+scanWindow(simple int len) =>
+    pct_top     = ta.percentile_linear_interpolation(high, len, band_percentile)
+    pct_bottom  = ta.percentile_linear_interpolation(low, len, 100.0 - band_percentile)
+    ext_top     = ta.highest(high, len)
+    ext_bottom  = ta.lowest(low, len)
+    body_top    = ta.highest(math.max(open, close), len)
+    body_bottom = ta.lowest(math.min(open, close), len)
+    top         = boundary_basis == 'Absolute extremes' ? ext_top : boundary_basis == 'Body extremes' ? body_top : pct_top
+    bottom      = boundary_basis == 'Absolute extremes' ? ext_bottom : boundary_basis == 'Body extremes' ? body_bottom : pct_bottom
+    band_height = top - bottom
+    compression = context_ok and band_height > 0 ? band_height / (atr_value * math.sqrt(len)) : 99.0
+    span_cap    = bar_index < 1 ? calibration_len : int(math.max(1, math.min(calibration_len, bar_index - atr_length)))
+    rank        = ta.percentrank(compression, span_cap)
+    slope       = ta.linreg(close, len, 0) - ta.linreg(close, len, 1)
+    drift       = band_height > 0 ? math.abs(slope) * len / band_height : 99.0
+    midpoint    = math.avg(top, bottom)
+    tolerance   = touch_tolerance * nz(atr_value)
+    crossings   = 0
+    hits_top    = 0
+    hits_bottom = 0
+    contained   = 0
+    for i = 0 to len - 1
+        if (close[i] > midpoint) != (close[i + 1] > midpoint)
+            crossings += 1
+        touched_top    = wick_touch ? high[i] >= top - tolerance : close[i] >= top - tolerance
+        touched_bottom = wick_touch ? low[i] <= bottom + tolerance : close[i] <= bottom + tolerance
+        if touched_top
+            hits_top += 1
+        if touched_bottom
+            hits_bottom += 1
+        if close[i] <= top and close[i] >= bottom
+            contained += 1
+    containment = contained / float(len)
+    qualified   = context_ok and not na(rank) and bar_index > len + 5 and rank <= compression_pct and crossings >= math.max(3, math.round(min_rotation * len)) and hits_top >= min_touches and hits_bottom >= min_touches and drift <= max_drift and containment >= min_containment
+    [qualified, top, bottom]
+
+// Solo dentro de las velas a calcular (es la parte que más tiempo cuesta)
+bool  qualified_a = false
+bool  qualified_b = false
+bool  qualified_c = false
+float top_a = na
+float top_b = na
+float top_c = na
+float bottom_a = na
+float bottom_b = na
+float bottom_c = na
+if en_calc
+    [qa, ta_, ba] = scanWindow(base_length)
+    qualified_a := qa
+    top_a       := ta_
+    bottom_a    := ba
+    if scan_scaling != 'Base only'
+        [qb, tb, bb] = scanWindow(base_length * 2)
+        qualified_b := qb
+        top_b       := tb
+        bottom_b    := bb
+    if scan_scaling == 'Base + 2x + 3x'
+        [qc, tc, bc] = scanWindow(base_length * 3)
+        qualified_c := qc
+        top_c       := tc
+        bottom_c    := bc
+
+use_double = scan_scaling != 'Base only' and qualified_b
+use_triple = scan_scaling == 'Base + 2x + 3x' and qualified_c
+qualified  = qualified_a or use_double or use_triple
+
+scan_length = use_triple ? base_length * 3 : use_double ? base_length * 2 : base_length
+scan_top    = use_triple ? top_c : use_double ? top_b : top_a
+scan_bottom = use_triple ? bottom_c : use_double ? bottom_b : bottom_a
+
+//              ╔════════════════════════════════╗              //
+//              ║          RANGE ENGINE          ║              //
+//              ╚════════════════════════════════╝              //
+
+var array<box> shade_boxes = array.new<box>()
+var box   range_box        = na
+var line  equilibrium_line = na
+var line  lower_quartile   = na
+var line  upper_quartile   = na
+var label range_tag        = na
+var label break_marker     = na
+var float range_top        = na
+var float range_bottom     = na
+var int   range_left       = na
+var int   range_opened     = na
+var bool  range_active     = false
+var bool  range_confirmed  = false
+var bool  range_dormant    = false
+var int   dormant_since    = na
+var int   dormant_dir      = 0
+var float deviation_price  = na
+var int   deviation_bar    = na
+var int   cooldown_left    = 0
+
+signal_new_range  = false
+signal_break_up   = false
+signal_break_down = false
+signal_deviation  = false
+
+if bar_ready and cooldown_left > 0
+    cooldown_left -= 1
+
+if bar_ready and not range_active and not range_dormant and cooldown_left <= 0 and qualified
+    anchor_bars      = anchorSpan(scan_length, scan_top, scan_bottom, touch_tolerance * atr_value)
+    range_left      := bar_index - anchor_bars + 1
+    range_opened    := bar_index
+    range_top       := scan_top
+    range_bottom    := scan_bottom
+    range_active    := true
+    range_confirmed := false
+    midpoint         = math.avg(range_top, range_bottom)
+    quartile_low     = range_bottom + (range_top - range_bottom) * 0.25
+    quartile_high    = range_bottom + (range_top - range_bottom) * 0.75
+    range_box       := box.new(range_left, range_top, bar_index, range_bottom, border_color = color.new(range_line_color, 55), border_width = 2, border_style = line.style_dotted, bgcolor = na, xloc = xloc.bar_index)
+    buildShade(shade_boxes, range_left, range_top, range_bottom)
+    if show_equilibrium
+        equilibrium_line := line.new(range_left, midpoint, bar_index, midpoint, xloc.bar_index, extend.none, color.new(color.gray, 45), line.style_dotted, 1)
+    if show_quartiles
+        lower_quartile := line.new(range_left, quartile_low, bar_index, quartile_low, xloc.bar_index, extend.none, color.new(color.gray, 70), line.style_dotted, 1)
+        upper_quartile := line.new(range_left, quartile_high, bar_index, quartile_high, xloc.bar_index, extend.none, color.new(color.gray, 70), line.style_dotted, 1)
+    if show_range_label
+        range_tag := label.new(range_left, range_top, '', xloc = xloc.bar_index, yloc = yloc.price, color = transparent_fill, style = label.style_label_down, textcolor = color.new(range_line_color, 10), size = label_size)
+    signal_new_range := true
+
+if range_active and bar_ready
+    break_offset  = breakout_buffer * atr_value
+    absorb_offset = overshoot_tol * atr_value
+    if absorb_overshoot and not wick_break and close <= range_top and close >= range_bottom
+        if high > range_top and high <= range_top + absorb_offset
+            range_top := high
+        if low < range_bottom and low >= range_bottom - absorb_offset
+            range_bottom := low
+    break_up   = wick_break ? high > range_top + break_offset : close > range_top + break_offset
+    break_down = wick_break ? low < range_bottom - break_offset : close < range_bottom - break_offset
+    range_aged = max_range_age > 0 and bar_index - range_opened + 1 >= max_range_age
+    if break_up or break_down or range_aged
+        break_direction = break_up ? 1 : break_down ? -1 : 0
+        held_bars       = break_direction != 0 ? bar_index - range_left : bar_index - range_left + 1
+        range_height    = range_bottom != 0 ? (range_top - range_bottom) / range_bottom * 100.0 : 0.0
+        hold_for_merge  = merge_deviations and break_direction != 0 and range_confirmed
+        if range_confirmed
+            retire_line = break_direction == 1 ? bullish_line_color : break_direction == -1 ? bearish_line_color : range_line_color
+            retire_fill = break_direction == 1 ? bullish_fill_color : break_direction == -1 ? bearish_fill_color : range_fill_color
+            retire_base = break_direction == 1 ? bullish_color : break_direction == -1 ? bearish_color : range_input
+            box.set_lefttop(range_box, range_left, range_top)
+            box.set_rightbottom(range_box, bar_index, range_bottom)
+            // Rango terminado: sin fondo; el marco y el letrero toman el color de la ruptura
+            box.set_border_color(range_box, color.new(retire_line, 30))
+            box.set_border_style(range_box, line.style_dotted)
+            paintShade(shade_boxes, range_top, range_bottom, range_left, bar_index, na)
+            rangos_hist.push(Rango.new(range_left, bar_index, range_top, range_bottom, retire_fill))
+            if rangos_hist.size() > 8
+                rangos_hist.shift()
+            if not na(equilibrium_line)
+                line.set_x2(equilibrium_line, bar_index)
+            if not na(lower_quartile)
+                line.set_x2(lower_quartile, bar_index)
+                line.set_x2(upper_quartile, bar_index)
+            if not na(range_tag)
+                label.set_xy(range_tag, int(math.avg(range_left, bar_index)), range_top)
+                label.set_text(range_tag, 'RANGE   ' + str.tostring(held_bars) + ' BARS   ' + percentText(range_height))
+                label.set_textcolor(range_tag, color.new(retire_line, 10))
+            if show_breakouts and break_direction != 0
+                marker_text  = (break_direction == 1 ? '▲  ' : '▼  ') + 'Breakout'
+                if marcas_sutiles
+                    // Solo una flecha pequeña del color de la ruptura, sin fondo; el texto va en el tooltip
+                    break_marker := label.new(bar_index, break_direction == 1 ? low : high, break_direction == 1 ? '▲' : '▼', xloc = xloc.bar_index, yloc = yloc.price, color = transparent_fill, style = break_direction == 1 ? label.style_label_up : label.style_label_down, textcolor = color.new(retire_line, 20), size = tam_marcas, tooltip = 'Breakout del rango')
+                else
+                    break_marker := label.new(bar_index, break_direction == 1 ? low : high, marker_text, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(retire_base, 10), style = break_direction == 1 ? label.style_label_up : label.style_label_down, textcolor = contrastText(retire_base), size = label_size)
+            if break_direction == 1
+                signal_break_up := true
+            else if break_direction == -1
+                signal_break_down := true
+        else
+            box.delete(range_box)
+            deleteShade(shade_boxes)
+            line.delete(equilibrium_line)
+            line.delete(lower_quartile)
+            line.delete(upper_quartile)
+            label.delete(range_tag)
+        if hold_for_merge
+            range_dormant   := true
+            dormant_since   := bar_index
+            dormant_dir     := break_direction
+            deviation_price := break_direction == 1 ? high : low
+            deviation_bar   := bar_index
+        else
+            array.clear(shade_boxes)
+            range_box        := na
+            equilibrium_line := na
+            lower_quartile   := na
+            upper_quartile   := na
+            range_tag        := na
+            break_marker     := na
+        range_active    := false
+        range_confirmed := false
+        cooldown_left   := cooldown_bars
+    else
+        range_confirmed := bar_index - range_left + 1 >= min_range_bars
+
+if range_dormant and bar_ready
+    if dormant_dir == 1 and high > deviation_price
+        deviation_price := high
+        deviation_bar   := bar_index
+    if dormant_dir == -1 and low < deviation_price
+        deviation_price := low
+        deviation_bar   := bar_index
+    reentered = dormant_dir == 1 ? close <= range_top : close >= range_bottom
+    expired   = bar_index - dormant_since >= deviation_window
+    if reentered and bar_index > dormant_since
+        deviation_base = dormant_dir == 1 ? bearish_color : bullish_color
+        deviation_text = (dormant_dir == 1 ? '⤵  ' : '⤴  ') + 'Deviation'
+        if show_deviations
+            if marcas_sutiles
+                deviation_line = readableOn(deviation_base, chart_backdrop, contrast_line)
+                label.new(deviation_bar, deviation_price, dormant_dir == 1 ? '⤵' : '⤴', xloc = xloc.bar_index, yloc = yloc.price, color = transparent_fill, style = dormant_dir == 1 ? label.style_label_down : label.style_label_up, textcolor = color.new(deviation_line, 20), size = tam_marcas, tooltip = 'Deviation: ruptura fallida, el precio volvió al rango')
+            else
+                label.new(deviation_bar, deviation_price, deviation_text, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(deviation_base, 10), style = dormant_dir == 1 ? label.style_label_down : label.style_label_up, textcolor = contrastText(deviation_base), size = label_size)
+        label.delete(break_marker)
+        break_marker := na
+        if not na(range_box)
+            box.set_border_color(range_box, color.new(range_line_color, 30))
+            paintShade(shade_boxes, range_top, range_bottom, range_left, bar_index, na)
+        if not na(range_tag)
+            label.set_textcolor(range_tag, color.new(range_line_color, 10))
+        range_active     := true
+        range_confirmed  := true
+        range_dormant    := false
+        dormant_dir      := 0
+        cooldown_left    := 0
+        signal_deviation := true
+        // El rango vuelve a estar activo: deja de contar como rango terminado
+        if rangos_hist.size() > 0 and rangos_hist.last().x1 == range_left
+            rangos_hist.pop()
+    else if expired
+        array.clear(shade_boxes)
+        range_dormant    := false
+        dormant_dir      := 0
+        range_box        := na
+        equilibrium_line := na
+        lower_quartile   := na
+        upper_quartile   := na
+        range_tag        := na
+        break_marker     := na
+
+if range_active
+    live_height   = range_bottom != 0 ? (range_top - range_bottom) / range_bottom * 100.0 : 0.0
+    midpoint      = math.avg(range_top, range_bottom)
+    quartile_low  = range_bottom + (range_top - range_bottom) * 0.25
+    quartile_high = range_bottom + (range_top - range_bottom) * 0.75
+    box.set_lefttop(range_box, range_left, range_top)
+    box.set_rightbottom(range_box, bar_index, range_bottom)
+    box.set_border_color(range_box, color.new(range_line_color, range_confirmed ? 30 : 55))
+    box.set_border_style(range_box, line.style_dotted)
+    // Sin fondo: el rango se distingue por su marco y su letrero, del color de su estado
+    paintShade(shade_boxes, range_top, range_bottom, range_left, bar_index, na)
+    if not na(equilibrium_line)
+        line.set_xy1(equilibrium_line, range_left, midpoint)
+        line.set_xy2(equilibrium_line, bar_index, midpoint)
+    if not na(lower_quartile)
+        line.set_xy1(lower_quartile, range_left, quartile_low)
+        line.set_xy2(lower_quartile, bar_index, quartile_low)
+        line.set_xy1(upper_quartile, range_left, quartile_high)
+        line.set_xy2(upper_quartile, bar_index, quartile_high)
+    if not na(range_tag)
+        label.set_xy(range_tag, int(math.avg(range_left, bar_index)), range_top)
+        label.set_text(range_tag, (range_confirmed ? 'RANGE   ' : 'FORMING   ') + str.tostring(bar_index - range_left + 1) + ' BARS   ' + percentText(live_height))
+
+signal_any_break = signal_break_up or signal_break_down
+
+// Mientras hay un rango activo (en formación o confirmado) no se marcan CHoCH ni BOS.
+// Al salir del rango (breakout) se evalúa la estructura en esa misma vela.
+en_rango     = filtro_rango and range_active
+salida_rango = filtro_rango and range_active[1] and not range_active
+
+// ─────────────────────────────
+// DETECCIÓN DE PIVOTES
+// ─────────────────────────────
+pico  = ta.pivothigh(high, periodo, periodo)
+valle = ta.pivotlow(low, periodo, periodo)
+
+var float ultimo_pico  = na
+var int bar_pico       = na
+var float ultimo_valle = na
+var int bar_valle      = na
+var int tendencia      = 0 
+
+if not na(pico)
+    ultimo_pico := pico
+    bar_pico    := bar_index[periodo]
+if not na(valle)
+    ultimo_valle := valle
+    bar_valle    := bar_index[periodo]
+
+// ─────────────────────────────
+// LÓGICA DE VOLUMEN
+// ─────────────────────────────
+avg_vol = ta.sma(volume, vol_len)
+vol_ok  = volume > (avg_vol * vol_mult)
+vol_top_confirm = volume > (avg_vol * vol_top)
+
+// ─────────────────────────────
+// RIESGO DE CHoCH FALSO (evaluado al cierre de la vela del CHoCH)
+// ─────────────────────────────
+riesgo_choch(int dir, float nivel) =>
+    rango  = math.max(high - low, syminfo.mintick)
+    cuerpo = math.abs(close - open)
+    mecha  = dir == 1 ? high - math.max(open, close) : math.min(open, close) - low
+    int puntos = 0
+    string motivos = ""
+    if mecha / rango >= mecha_pct / 100
+        puntos += 1
+        motivos += "• Mecha de rechazo\n"
+    if math.abs(close - nivel) < dist_atr * atr_val
+        puntos += 1
+        motivos += "• Ruptura corta\n"
+    if rango > climax_atr * atr_val
+        puntos += 1
+        motivos += "• Vela de clímax\n"
+    if (dir == 1 and close < ema_lenta) or (dir == -1 and close > ema_lenta)
+        puntos += 1
+        motivos += "• Contra la EMA lenta\n"
+    if cuerpo / rango < cuerpo_pct / 100
+        puntos += 1
+        motivos += "• Cuerpo pequeño\n"
+    zona_delante = false
+    for z in zonas
+        if dir == 1 and z.dir == -1 and z.suelo >= close and z.suelo - close <= zona_atr * atr_val
+            zona_delante := true
+        if dir == -1 and z.dir == 1 and z.techo <= close and close - z.techo <= zona_atr * atr_val
+            zona_delante := true
+    if zona_delante
+        puntos += 1
+        motivos += "• FVG contrario delante\n"
+    [puntos, motivos]
+
+// ─────────────────────────────
+// SIN REPINTADO
+// Todo se decide al CIERRE de la vela (barstate.isconfirmed) y cada etiqueta de CHoCH se
+// dibuja una sola vez, ya con su estado definitivo, y no se modifica después:
+//  - El CHoCH se dibuja al cierre de la vela siguiente a la ruptura, si se mantiene.
+//  - Si falla, se dibuja como «✗ CHoCH» (gris).
+//  - Si luego el precio recupera ese nivel, ESA MISMA etiqueta pasa a CHoCH válido
+//    (nunca hay un «✗ CHoCH» y un «CHoCH» del mismo nivel a la vez).
+// ─────────────────────────────
+cerrada = barstate.isconfirmed
+
+// CHoCH pendiente de confirmar en la vela siguiente
+var int    choch_bar     = na
+var int    choch_dir     = 0
+var float  choch_nivel   = na
+var int    choch_bar_piv = na
+var string choch_texto   = ""
+var string choch_tip     = ""
+var int    tend_previa   = 0
+// true desde que un CHoCH falla hasta que hay un CHoCH nuevo o la tendencia se reactiva:
+// mientras tanto no se dibujan BOS
+var bool   tendencia_invalidada = false
+var int    dir_invalidada       = 0
+var float  nivel_invalidado     = na
+var int    bar_piv_invalidado   = na
+var string texto_invalidado     = ""
+var label  lbl_invalidado       = na
+var line   ln_invalidado        = na
+var int    bar_invalidado       = na
+
+// Último BOS dibujado: cuando un CHoCH contrario se confirma, ese BOS era el que marcó
+// el giro y se borra (en el cambio de tendencia solo queda el CHoCH)
+var label ultimo_bos_lbl = na
+var int   ultimo_bos_bar = na
+var int   ultimo_bos_dir = 0
+
+borrar_bos_contrario(int dir_choch, int bar_choch) =>
+    if borrar_bos_giro and not na(ultimo_bos_bar) and ultimo_bos_dir == -dir_choch and (bos_ventana == 0 or bar_choch - ultimo_bos_bar <= bos_ventana)
+        ultimo_bos_lbl.delete()
+
+dibujar_choch(int dir, int bar_piv, float nivel, int bar_rotura, string texto, string tip, color col, bool fallido) =>
+    ln = line.new(bar_piv, nivel, bar_rotura, nivel, color=col, width=1, style=fallido ? line.style_dashed : line.style_solid)
+    lb = label.new(bar_rotura - offset_x, nivel, texto, style=dir == 1 ? label.style_label_down : label.style_label_up, color=color.new(color.white, 100), textcolor=col, size=size.small, tooltip=tip)
+    [ln, lb]
+
+// Al detectarse un rango (o volver a él tras una Deviation) se borran los CHoCH/BOS que
+// quedaron dentro de la caja: el rango se detecta cuando ya lleva varias velas formado.
+// Tendencia que había justo antes de la primera vela del rango
+tend_antes_rango = na(range_left) ? tendencia : nz(tendencia[math.max(0, bar_index - range_left + 1)], 0)
+if filtro_rango and (signal_new_range or signal_deviation) and not na(range_left)
+    // Las rupturas que hubo dentro de la caja no cuentan: se vuelve a la tendencia previa al rango
+    tendencia := tend_antes_rango
+    if marcas.size() > 0
+        for i = marcas.size() - 1 to 0
+            m = marcas.get(i)
+            if m.bar >= range_left
+                m.lb.delete()
+                m.ln.delete()
+                marcas.remove(i)
+    if not na(choch_bar) and choch_bar >= range_left
+        choch_bar := na
+    if tendencia_invalidada and bar_invalidado >= range_left
+        tendencia_invalidada := false
+        lbl_invalidado       := na
+        ln_invalidado        := na
+
+choch_fallido_alc = false
+choch_fallido_baj = false
+// Dentro de un rango el CHoCH pendiente se descarta (no se dibuja ni como válido ni como ✗)
+if cerrada and en_rango and not na(choch_bar)
+    choch_bar := na
+    tendencia := tend_previa
+if cerrada and not na(choch_bar) and bar_index == choch_bar + 1
+    fallido = choch_dir == 1 ? close < choch_nivel : close > choch_nivel
+    col_dir = choch_dir == 1 ? color_alcista : color_bajista
+    if fallido
+        tendencia_invalidada := true
+        dir_invalidada       := choch_dir
+        nivel_invalidado     := choch_nivel
+        bar_piv_invalidado   := choch_bar_piv
+        texto_invalidado     := choch_texto
+        bar_invalidado       := choch_bar
+        lbl_invalidado       := na
+        ln_invalidado        := na
+        if choch_dir == 1
+            choch_fallido_alc := true
+        else
+            choch_fallido_baj := true
+        if marcar_fallidos
+            [ln_f, lb_f] = dibujar_choch(choch_dir, choch_bar_piv, choch_nivel, choch_bar, "✗ " + choch_texto, "CHoCH fallido: la vela siguiente cerró de nuevo al otro lado del nivel\n" + choch_tip, color_fallido, true)
+            lbl_invalidado := lb_f
+            ln_invalidado  := ln_f
+            registrar_marca(lb_f, ln_f, choch_bar)
+        if anular_fallidos
+            tendencia := tend_previa
+            // Se restaura el nivel roto si no se ha formado un pivote nuevo
+            if choch_dir == 1 and na(ultimo_pico)
+                ultimo_pico := choch_nivel
+                bar_pico    := choch_bar_piv
+            if choch_dir == -1 and na(ultimo_valle)
+                ultimo_valle := choch_nivel
+                bar_valle    := choch_bar_piv
+    else
+        // CHoCH confirmado: se dibuja (sin ⚠) y se borra el BOS contrario previo
+        [ln_c, lb_c] = dibujar_choch(choch_dir, choch_bar_piv, choch_nivel, choch_bar, choch_texto, choch_tip, col_dir, false)
+        registrar_marca(lb_c, ln_c, choch_bar)
+        borrar_bos_contrario(choch_dir, choch_bar)
+    choch_bar := na
+
+// --- REACTIVACIÓN ---
+// La tendencia del CHoCH fallido vuelve a estar activa si el precio cierra de nuevo
+// más allá del nivel que rompió.
+// La etiqueta «✗ CHoCH» de ese nivel se convierte en CHoCH válido (no se dibuja otra).
+// Va antes de las señales para que la nueva ruptura del mismo nivel no cree otro CHoCH.
+reactivada_alc = false
+reactivada_baj = false
+if cerrada and tendencia_invalidada and not en_rango
+    if dir_invalidada == 1 and close > nivel_invalidado
+        reactivada_alc := true
+        tendencia := 1
+        if ultimo_pico == nivel_invalidado
+            ultimo_pico := na
+    else if dir_invalidada == -1 and close < nivel_invalidado
+        reactivada_baj := true
+        tendencia := -1
+        if ultimo_valle == nivel_invalidado
+            ultimo_valle := na
+    if reactivada_alc or reactivada_baj
+        tendencia_invalidada := false
+        col_ok = dir_invalidada == 1 ? color_alcista : color_bajista
+        if na(lbl_invalidado)
+            [ln_r, lb_r] = dibujar_choch(dir_invalidada, bar_piv_invalidado, nivel_invalidado, bar_index, texto_invalidado, "CHoCH confirmado al recuperar el nivel", col_ok, false)
+            registrar_marca(lb_r, ln_r, bar_index)
+        else
+            lbl_invalidado.set_text(texto_invalidado)
+            lbl_invalidado.set_textcolor(col_ok)
+            lbl_invalidado.set_tooltip("CHoCH confirmado al recuperar el nivel")
+            ln_invalidado.set_color(col_ok)
+            ln_invalidado.set_style(line.style_solid)
+        borrar_bos_contrario(dir_invalidada, bar_index)
+
+// ─────────────────────────────
+// SEÑALES
+// ─────────────────────────────
+// Cruce del nivel en esta vela, o nivel ya superado dentro del rango y la vela es el breakout
+cruce_arriba = cerrada and not en_rango and vol_ok and not na(ultimo_pico) and close > ultimo_pico and (close[1] <= ultimo_pico or salida_rango)
+cruce_abajo  = cerrada and not en_rango and vol_ok and not na(ultimo_valle) and close < ultimo_valle and (close[1] >= ultimo_valle or salida_rango)
+choch_alcista = cruce_arriba and not na(ultimo_pico) and tendencia <= 0
+choch_bajista = cruce_abajo and not na(ultimo_valle) and tendencia >= 0
+choch_riesgo_alc = false
+choch_riesgo_baj = false
+
+// ─────────────────────────────
+// ORDER BLOCKS
+// Al romper estructura se busca, entre el swing roto y la vela de ruptura:
+//  - OB alcista: la vela BAJISTA con el mínimo más bajo (origen del impulso alcista).
+//  - OB bajista: la vela ALCISTA con el máximo más alto (origen del impulso bajista).
+// Si no hay ninguna vela de ese color, se usa la del extremo.
+// ─────────────────────────────
+crear_caja_ob(int dir, int idx) =>
+    techo = ob_cuerpo ? math.max(open[idx], close[idx]) : high[idx]
+    suelo = ob_cuerpo ? math.min(open[idx], close[idx]) : low[idx]
+    col = dir == 1 ? col_ob_alc : col_ob_baj
+    if pintar_velas
+        // La vela del OB queda pintada con su color (no se puede recolorear una vela pasada con barcolor)
+        line.new(bar_index - idx, high[idx], bar_index - idx, low[idx], color=color.new(col, 10), width=5)
+    obs.push(Zona.new(bar_index - idx, techo, suelo, dir, na, bar_index))
+    if obs.size() > max_ob
+        obs.shift()
+
+crear_ob(int dir, int bar_desde) =>
+    n = math.min(math.max(bar_index - bar_desde, 1), 150)
+    int idx = na
+    float ext = na
+    for i = 0 to n
+        contraria = dir == 1 ? close[i] < open[i] : close[i] > open[i]
+        valor = dir == 1 ? low[i] : high[i]
+        if contraria and (na(ext) or (dir == 1 ? valor < ext : valor > ext))
+            ext := valor
+            idx := i
+    if na(idx)
+        for i = 0 to n
+            valor = dir == 1 ? low[i] : high[i]
+            if na(ext) or (dir == 1 ? valor < ext : valor > ext)
+                ext := valor
+                idx := i
+    // Solo es OB si deja un imbalance (FVG) a continuación en la dirección del impulso.
+    // El FVG empieza en la vela del OB (j = idx) o en una de las siguientes, hasta ob_imb_velas.
+    hay_imbalance = false
+    if idx >= 2
+        for j = idx to math.max(idx - ob_imb_velas + 1, 2)
+            if dir == 1 ? low[j - 2] > high[j] : high[j - 2] < low[j]
+                hay_imbalance := true
+    if hay_imbalance
+        crear_caja_ob(dir, idx)
+

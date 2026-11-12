@@ -1,0 +1,911 @@
+// --- ALCISTA (BUY) ---
+if cruce_arriba and not na(ultimo_pico)
+    if tendencia <= 0
+        // El CHoCH queda pendiente: se dibuja al cierre de la vela siguiente
+        [riesgo, motivos] = riesgo_choch(1, ultimo_pico)
+        choch_riesgo_alc := marcar_riesgo and riesgo >= riesgo_min
+        choch_bar     := bar_index
+        choch_dir     := 1
+        choch_nivel   := ultimo_pico
+        choch_bar_piv := bar_pico
+        choch_texto   := vol_top_confirm ? "🔥 CHoCH" : "CHoCH"
+        choch_tip     := "Riesgo de fallo al romper: " + str.tostring(riesgo) + "/6\n" + motivos
+        tend_previa   := tendencia
+        tendencia_invalidada := false
+    else if mostrar_bos and not tendencia_invalidada
+        ultimo_bos_lbl := label.new(bar_index, high, "BOS", yloc=yloc.abovebar, style=label.style_none, textcolor=color_alcista, size=size.small)
+        ultimo_bos_bar := bar_index
+        ultimo_bos_dir := 1
+        registrar_marca(ultimo_bos_lbl, na, bar_index)
+    if mostrar_ob and (tendencia <= 0 or not ob_solo_choch)
+        if en_calc
+            crear_ob(1, bar_pico)
+    tendencia := 1
+    ultimo_pico := na 
+
+// --- BAJISTA (SELL) ---
+if cruce_abajo and not na(ultimo_valle)
+    if tendencia >= 0
+        // El CHoCH queda pendiente: se dibuja al cierre de la vela siguiente
+        [riesgo, motivos] = riesgo_choch(-1, ultimo_valle)
+        choch_riesgo_baj := marcar_riesgo and riesgo >= riesgo_min
+        choch_bar     := bar_index
+        choch_dir     := -1
+        choch_nivel   := ultimo_valle
+        choch_bar_piv := bar_valle
+        choch_texto   := vol_top_confirm ? "🔥 CHoCH" : "CHoCH"
+        choch_tip     := "Riesgo de fallo al romper: " + str.tostring(riesgo) + "/6\n" + motivos
+        tend_previa   := tendencia
+        tendencia_invalidada := false
+    else if mostrar_bos and not tendencia_invalidada
+        ultimo_bos_lbl := label.new(bar_index, low, "BOS", yloc=yloc.belowbar, style=label.style_none, textcolor=color_bajista, size=size.small)
+        ultimo_bos_bar := bar_index
+        ultimo_bos_dir := -1
+        registrar_marca(ultimo_bos_lbl, na, bar_index)
+    if mostrar_ob and (tendencia >= 0 or not ob_solo_choch)
+        if en_calc
+            crear_ob(-1, bar_valle)
+    tendencia := -1
+    ultimo_valle := na 
+
+// Order Blocks vigentes: se consumen a medida que el precio los toca, igual que los FVG.
+//  - OB alcista (demanda): se consume desde su máximo hacia abajo.
+//  - OB bajista (oferta): se consume desde su mínimo hacia arriba.
+// La parte tocada queda en gris translúcido y, cuando la mecha llega al otro extremo, desaparece.
+if cerrada and obs.size() > 0
+    for i = obs.size() - 1 to 0
+        ob = obs.get(i)
+        if ob.creado != bar_index and consumir(ob)
+            obs.remove(i)
+
+// FONDO BLANCO (sin colorear por tendencia)
+bgcolor(fondo_blanco ? color.white : na)
+
+// ─────────────────────────────
+// EMAs
+// ─────────────────────────────
+// Las EMAs se dibujan como polilíneas y no como plot: TradingView pinta siempre las cajas por encima
+// de los plot, y así las EMAs quedan por encima de las zonas de color (y todo detrás de las velas).
+// Los plot se mantienen solo para la ventana de datos y la línea de estado.
+plot(mostrar_emas ? ema_rapida : na, "EMA rápida", color=ema_rap_col, linewidth=1, display=display.data_window + display.status_line)
+plot(mostrar_emas ? ema_media : na, "EMA media", color=ema_med_col, linewidth=1, display=display.data_window + display.status_line)
+plot(mostrar_emas ? ema_lenta : na, "EMA lenta", color=ema_len_col, linewidth=2, display=display.data_window + display.status_line)
+
+var array<polyline> polis_ema = array.new<polyline>()
+var array<line> ema_tramos = array.new<line>()
+if barstate.islast
+    for pl in polis_ema
+        pl.delete()
+    polis_ema.clear()
+    if mostrar_emas
+        // Los puntos se toman aquí (no dentro de una función): dentro de una función que solo se llama
+        // en la última vela, el historial de su parámetro está vacío y la EMA no se veía
+        p_rap = array.new<chart.point>()
+        p_med = array.new<chart.point>()
+        p_len = array.new<chart.point>()
+        n = math.min(bar_index, 1500)
+        for i = n to 0
+            x = bar_index - i
+            if not na(ema_rapida[i])
+                p_rap.push(chart.point.from_index(x, ema_rapida[i]))
+            if not na(ema_media[i])
+                p_med.push(chart.point.from_index(x, ema_media[i]))
+            if not na(ema_lenta[i])
+                p_len.push(chart.point.from_index(x, ema_lenta[i]))
+        if p_rap.size() > 1
+            polis_ema.push(polyline.new(p_rap, line_color=ema_rap_col, line_width=1))
+        if p_med.size() > 1
+            polis_ema.push(polyline.new(p_med, line_color=ema_med_col, line_width=1))
+        if p_len.size() > 1
+            polis_ema.push(polyline.new(p_len, line_color=ema_len_col, line_width=2))
+
+// ─────────────────────────────
+// FVG
+// FVG: patrón de 3 velas (low > high[2] alcista, high < low[2] bajista).
+// ─────────────────────────────
+
+// Actualizar zonas existentes antes de añadir las de esta vela.
+// Consumo progresivo: la parte del hueco que el precio ya ha tocado se pinta en gris
+// translúcido y la caja de color se encoge hasta lo que queda sin tocar.
+//  - FVG alcista (soporte): se consume desde el techo hacia abajo.
+//  - FVG bajista (resistencia): se consume desde el suelo hacia arriba.
+// Cuando se consume del todo (la mecha llega al otro extremo) desaparece.
+// IFVG: una sola vela atraviesa un FVG intacto entero (abre a un lado y cierra al otro).
+// El FVG pasa a ser un IFVG del mismo tamaño y dirección contraria, que sigue vigente y se consume
+// por partes hasta que el precio lo cubre entero en dirección contraria.
+nuevo_ifvg_alc = false
+nuevo_ifvg_baj = false
+// Temporalidad del gráfico en el mismo formato que los letreros de M15, H1 y H4 (M5, M15, H1, D…)
+tf_nombre() =>
+    string r = timeframe.period
+    if timeframe.isseconds
+        r := "S" + str.tostring(timeframe.multiplier)
+    else if timeframe.isminutes
+        r := timeframe.multiplier % 60 == 0 ? "H" + str.tostring(int(timeframe.multiplier / 60)) : "M" + str.tostring(timeframe.multiplier)
+    else if timeframe.isdaily
+        r := timeframe.multiplier == 1 ? "D" : str.tostring(timeframe.multiplier) + "D"
+    else if timeframe.isweekly
+        r := timeframe.multiplier == 1 ? "W" : str.tostring(timeframe.multiplier) + "W"
+    else if timeframe.ismonthly
+        r := timeframe.multiplier == 1 ? "MN" : str.tostring(timeframe.multiplier) + "MN"
+    r
+tf_graf = tf_nombre()
+seg_graf = timeframe.in_seconds()
+// El FVG del propio gráfico usa el interruptor y el color de su temporalidad si es una de las 5
+ver_graf = seg_graf == 60 ? mostrar_fvg1 : seg_graf == 300 ? mostrar_fvg5 : seg_graf == 900 ? mostrar_fvg15 : seg_graf == 3600 ? mostrar_fvg60 : seg_graf == 14400 ? mostrar_fvg240 : mostrar_fvg
+graf_alc = seg_graf == 60 ? fvg_alc_1 : seg_graf == 300 ? fvg_alc_5 : seg_graf == 900 ? fvg_alc_15 : seg_graf == 3600 ? fvg_alc_60 : seg_graf == 14400 ? fvg_alc_240 : fvg_alc_0
+graf_baj = seg_graf == 60 ? fvg_baj_1 : seg_graf == 300 ? fvg_baj_5 : seg_graf == 900 ? fvg_baj_15 : seg_graf == 3600 ? fvg_baj_60 : seg_graf == 14400 ? fvg_baj_240 : fvg_baj_0
+
+// ─────────────────────────────
+// RETESTEO DE IFVG EN LA VELA SIGUIENTE
+// Avisa cuando, en alguna de las velas_retest velas posteriores a la que crea un IFVG (de cualquier
+// temporalidad), el precio vuelve a tocarlo. Una sola vez por IFVG. Se comprueba en tiempo real.
+// ─────────────────────────────
+velas_retest = input.int(4, "Alerta de retesteo de IFVG: velas posteriores a vigilar", minval=1, maxval=20, group=g_ny)
+
+retesteo(array<Zona> arr) =>
+    toca = false
+    for z in arr
+        n = bar_index - z.creado
+        if not z.avisado and n >= 1 and n <= velas_retest and high >= z.suelo and low <= z.techo
+            z.avisado := true
+            toca := true
+    toca
+
+retest_ifvg_graf = retesteo(ifvgs)
+
+// --- FVG/IFVG de temporalidades MÁS BAJAS que el gráfico (p. ej. M5 y M1 en un gráfico de M15) ---
+// Solo si su interruptor está activado. Se recorren las velas de esa temporalidad dentro de cada vela
+// del gráfico con las mismas reglas (FVG de 3 velas, consumo por partes, IFVG cuando una sola vela
+// atraviesa entero un FVG intacto) y se avisa si el precio toca un IFVG en las velas siguientes a su
+// creación. Solo se usan velas ya cerradas, así que no repintan. El M1 también se calcula sin
+// dibujarlo cuando solo está activada su alerta de retesteo.
+alerta_m1 = input.bool(true, "Alerta de retesteo también para IFVG de M1 (aunque no se dibujen)", group=g_ny)
+
+type EstadoLTF
+    float h2
+    float l2
+    float h1
+    float l1
+    int   n = 0   // número de vela de esa temporalidad (para saber cuál es la siguiente a la del IFVG)
+
+consumir_ltf(Zona z, float hi, float lo) =>
+    completa = z.dir == 1 ? lo <= z.suelo : hi >= z.techo
+    if not completa
+        borde = na(z.borde) ? (z.dir == 1 ? z.techo : z.suelo) : z.borde
+        if z.dir == 1 ? lo < borde : hi > borde
+            z.borde := z.dir == 1 ? lo : hi
+    completa
+
+procesar_ltf(array<Zona> fvg, array<Zona> ifvg, EstadoLTF s, array<float> ao, array<float> ah, array<float> al, array<float> ac, int tope) =>
+    retest = false
+    if ah.size() > 0
+        // En tiempo real la última vela de esa temporalidad aún no ha cerrado: solo sirve para el toque
+        ultima_cerrada = barstate.isconfirmed ? ah.size() - 1 : ah.size() - 2
+        for k = 0 to ah.size() - 1
+            o1 = ao.get(k)
+            h1 = ah.get(k)
+            l1 = al.get(k)
+            c1 = ac.get(k)
+            for z in ifvg
+                n = s.n - z.creado
+                if not z.avisado and n >= 1 and n <= velas_retest and h1 >= z.suelo and l1 <= z.techo
+                    if k <= ultima_cerrada
+                        z.avisado := true
+                    retest := true
+            if k <= ultima_cerrada
+                if ifvg.size() > 0
+                    for i = ifvg.size() - 1 to 0
+                        if consumir_ltf(ifvg.get(i), h1, l1)
+                            ifvg.remove(i)
+                if fvg.size() > 0
+                    for i = fvg.size() - 1 to 0
+                        z = fvg.get(i)
+                        inv = na(z.borde) and (z.dir == 1 ? (o1 >= z.techo and c1 < z.suelo) : (o1 <= z.suelo and c1 > z.techo))
+                        if inv
+                            fvg.remove(i)
+                            ifvg.push(Zona.new(z.x1, z.techo, z.suelo, -z.dir, na, s.n))
+                            if ifvg.size() > tope
+                                ifvg.shift()
+                        else if consumir_ltf(z, h1, l1)
+                            fvg.remove(i)
+                if not na(s.h2)
+                    if l1 > s.h2
+                        fvg.push(Zona.new(bar_index, l1, s.h2, 1))
+                    else if h1 < s.l2
+                        fvg.push(Zona.new(bar_index, s.l2, h1, -1))
+                    if fvg.size() > tope
+                        fvg.shift()
+                s.h2 := s.h1
+                s.l2 := s.l1
+                s.h1 := h1
+                s.l1 := l1
+                s.n  := s.n + 1
+    retest
+
+var est1   = EstadoLTF.new()
+var est5   = EstadoLTF.new()
+var est15  = EstadoLTF.new()
+var est60  = EstadoLTF.new()
+var est240 = EstadoLTF.new()
+// Solo se piden las velas de una temporalidad más baja si hace falta (si no, se pide la del gráfico)
+usa1   = timeframe.isintraday and ((mostrar_fvg1 and not solo_su_graf) or alerta_m1) and seg_graf > 60
+usa5   = timeframe.isintraday and mostrar_fvg5 and not solo_su_graf and seg_graf > 300
+usa15  = timeframe.isintraday and mostrar_fvg15 and not solo_su_graf and seg_graf > 900
+usa60  = timeframe.isintraday and mostrar_fvg60 and not solo_su_graf and seg_graf > 3600
+usa240 = mostrar_fvg240 and not solo_su_graf and seg_graf > 14400
+
+// Retesteo de IFVG: los de temporalidades más altas se vigilan con las velas del gráfico y los de
+// temporalidades más bajas, vela a vela de su temporalidad dentro de procesar_ltf. Las velas de una
+// temporalidad más baja solo se piden si su interruptor está activado y dentro de las velas a calcular.
+// TradingView revisa todas las peticiones aunque no se ejecuten: si la temporalidad no es más baja que
+// la del gráfico se pide la del propio gráfico (nunca se usa) para que no dé error.
+retest_ifvg_m1 = false
+if usa1 and en_calc
+    [o_, h_, l_, c_] = request.security_lower_tf(syminfo.tickerid, usa1 ? "1" : timeframe.period, [open, high, low, close])
+    retest_ifvg_m1 := procesar_ltf(fvg1, ifvg1, est1, o_, h_, l_, c_, 30)
+retest_ifvg_m5 = false
+if seg_graf < 300
+    retest_ifvg_m5 := retesteo(ifvg5)
+else if usa5 and en_calc
+    [o_, h_, l_, c_] = request.security_lower_tf(syminfo.tickerid, usa5 ? "5" : timeframe.period, [open, high, low, close])
+    retest_ifvg_m5 := procesar_ltf(fvg5, ifvg5, est5, o_, h_, l_, c_, max_htf)
+retest_ifvg_m15 = false
+if seg_graf < 900
+    retest_ifvg_m15 := retesteo(ifvg15)
+else if usa15 and en_calc
+    [o_, h_, l_, c_] = request.security_lower_tf(syminfo.tickerid, usa15 ? "15" : timeframe.period, [open, high, low, close])
+    retest_ifvg_m15 := procesar_ltf(fvg15, ifvg15, est15, o_, h_, l_, c_, max_htf)
+retest_ifvg_h1 = false
+if seg_graf < 3600
+    retest_ifvg_h1 := retesteo(ifvg60)
+else if usa60 and en_calc
+    [o_, h_, l_, c_] = request.security_lower_tf(syminfo.tickerid, usa60 ? "60" : timeframe.period, [open, high, low, close])
+    retest_ifvg_h1 := procesar_ltf(fvg60, ifvg60, est60, o_, h_, l_, c_, max_htf)
+retest_ifvg_h4 = false
+if seg_graf < 14400
+    retest_ifvg_h4 := retesteo(ifvg240)
+else if usa240 and en_calc
+    [o_, h_, l_, c_] = request.security_lower_tf(syminfo.tickerid, usa240 ? "240" : timeframe.period, [open, high, low, close])
+    retest_ifvg_h4 := procesar_ltf(fvg240, ifvg240, est240, o_, h_, l_, c_, max_htf)
+
+retest_ifvg      = retest_ifvg_graf or retest_ifvg_m1 or retest_ifvg_m5 or retest_ifvg_m15 or retest_ifvg_h1 or retest_ifvg_h4
+if retest_ifvg
+    tfs = (retest_ifvg_m1 ? " M1" : "") + (retest_ifvg_m5 ? " M5" : "") + (retest_ifvg_graf ? " " + tf_graf : "") + (retest_ifvg_m15 ? " M15" : "") + (retest_ifvg_h1 ? " H1" : "") + (retest_ifvg_h4 ? " H4" : "")
+    alert("Retesteo de IFVG (" + str.trim(tfs) + ") en " + syminfo.ticker + " a " + str.tostring(close), alert.freq_once_per_bar)
+
+if cerrada and ifvgs.size() > 0
+    for i = ifvgs.size() - 1 to 0
+        if consumir(ifvgs.get(i))
+            ifvgs.remove(i)
+
+if cerrada and zonas.size() > 0
+    for i = zonas.size() - 1 to 0
+        z = zonas.get(i)
+        // Solo FVG intactos: si ya se había mitigado en parte, no puede pasar a IFVG
+        invertida = na(z.borde) and (z.dir == 1 ? (open >= z.techo and close < z.suelo) : (open <= z.suelo and close > z.techo))
+        if invertida
+            zonas.remove(i)
+            if z.dir == 1
+                nuevo_ifvg_baj := true
+            else
+                nuevo_ifvg_alc := true
+            ifvgs.push(Zona.new(z.x1, z.techo, z.suelo, -z.dir, na, bar_index))
+            if ifvgs.size() > max_zonas
+                ifvgs.shift()
+        else if consumir(z)
+            zonas.remove(i)
+
+fvg_alcista = cerrada and low > high[2] and (low - high[2]) / close * 100 > fvg_min_pct
+fvg_bajista = cerrada and high < low[2] and (low[2] - high) / close * 100 > fvg_min_pct
+
+agregar_fvg(float techo, float suelo, int dir) =>
+    zonas.push(Zona.new(bar_index - 2, techo, suelo, dir))
+    if zonas.size() > max_zonas
+        zonas.shift()
+
+if fvg_alcista
+    agregar_fvg(low, high[2], 1)
+else if fvg_bajista
+    agregar_fvg(low[2], high, -1)
+
+// ─────────────────────────────
+// ESTRATEGIA NY (Bias + PO3)
+//  Paso 1 (Bias): niveles clave = altos/bajos relevantes (H4 y día anterior).
+//  Paso 2 (PO3): horas de Madrid 15:00, 15:30, 15:45 y 16:00 y FVG de M15 y H1
+//                con su 50%, que es donde se espera la manipulación.
+//  SL: debajo del FVG en compras, encima del FVG en ventas.
+// ─────────────────────────────
+seg_tf = timeframe.in_seconds()
+
+// --- Horas de Madrid ---
+// Verano: 15:00 / 15:30 / 15:45 / 16:00. Invierno: una hora antes (14:00 / 14:30 / 14:45 / 15:00).
+// Automático: se sigue la apertura de Nueva York (9:00 / 9:30 / 9:45 / 10:00 en Nueva York) y la
+// marca muestra la hora de Madrid que corresponda, así también acierta en las semanas en que
+// Europa y Estados Unidos cambian de hora en fechas distintas.
+es_auto     = str.startswith(modo_horas, "Automático")
+es_invierno = str.startswith(modo_horas, "Invierno")
+zona_marcas = es_auto ? "America/New_York" : "Europe/Madrid"
+base_marcas = es_auto ? 9 * 60 : es_invierno ? 14 * 60 : 15 * 60   // primera marca, en minutos
+mins_mad = hour(time, zona_marcas) * 60 + minute(time, zona_marcas)
+prev_mad = nz(mins_mad[1], mins_mad)
+cruza_hora(int objetivo) =>
+    mins_mad >= objetivo and (prev_mad < objetivo or prev_mad > mins_mad)
+
+// Texto de la marca: la hora de Madrid del momento marcado (p. ej. «14:30» en invierno)
+texto_hora(int objetivo) =>
+    es_auto ? str.format_time(time - (mins_mad - objetivo) * 60000, "HH:mm", "Europe/Madrid") : str.format("{0,number,00}:{1,number,00}", int(objetivo / 60), objetivo % 60)
+
+marcar_hora(string txt, bool fuerte) =>
+    line.new(bar_index, low, bar_index, high, extend=extend.both, color=color.new(col_horas, fuerte ? 30 : 60), style=fuerte ? line.style_dashed : line.style_dotted, width=1)
+    label.new(bar_index, high, txt, yloc=yloc.abovebar, style=label.style_none, textcolor=color.new(col_horas, 10), size=size.tiny)
+
+if mostrar_horas and timeframe.isintraday and seg_tf <= 900
+    if cruza_hora(base_marcas)
+        marcar_hora(texto_hora(base_marcas), false)
+    if cruza_hora(base_marcas + 30)
+        marcar_hora(texto_hora(base_marcas + 30), false)
+    if cruza_hora(base_marcas + 45)
+        marcar_hora(texto_hora(base_marcas + 45), false)
+    if cruza_hora(base_marcas + 60)
+        marcar_hora(texto_hora(base_marcas + 60), true)
+
+// --- FVG de M15, H1 y H4 (sin repintado: se evalúa la última vela cerrada de esa temporalidad) ---
+// La petición se hace solo cuando hace falta (al cambiar de vela de esa temporalidad, con su
+// interruptor activado y dentro de las velas a calcular): así no cuesta tiempo el resto del historial.
+fvg_htf() =>
+    [low[1] > high[3], high[1] < low[3], low[1], high[3], high[1], low[3], time[3]]
+
+
+// Vela (bar_index) en la que empieza una zona de otra temporalidad, a partir de su hora
+vela_de(int t) =>
+    int k = 0
+    while k < 1500 and time[k] > t
+        k += 1
+    bar_index - k
+
+nueva_htf(array<Zona> arr, float techo, float suelo, int dir, int t_izq) =>
+    z = Zona.new(vela_de(t_izq), techo, suelo, dir)
+    // El FVG de M15/H1/H4 se conoce al cerrar su vela, pero se crea en la primera vela del gráfico
+    // de la siguiente: esa vela también puede haber entrado ya en el hueco, así que se consume ya
+    // con ella (antes se la saltaba y el FVG quedaba sin consumir aunque el precio hubiera pasado)
+    if not consumir(z)
+        arr.push(z)
+        if arr.size() > max_htf
+            arr.shift()
+
+// Consumo progresivo igual que el resto de zonas. Devuelve si el precio tocó el 50% de alguna.
+// Misma regla de IFVG que en el gráfico: una sola vela atraviesa entero un FVG intacto (abre a un
+// lado y cierra al otro) y lo convierte en IFVG de su misma temporalidad, que se consume por partes.
+actualizar_htf(array<Zona> arr, array<Zona> arr_ifvg) =>
+    toque = false
+    if arr_ifvg.size() > 0
+        for i = arr_ifvg.size() - 1 to 0
+            if consumir(arr_ifvg.get(i))
+                arr_ifvg.remove(i)
+    if arr.size() > 0
+        for i = arr.size() - 1 to 0
+            z = arr.get(i)
+            mitad = (z.techo + z.suelo) / 2
+            if low <= mitad and high >= mitad
+                toque := true
+            invertida = na(z.borde) and (z.dir == 1 ? (open >= z.techo and close < z.suelo) : (open <= z.suelo and close > z.techo))
+            if invertida
+                arr.remove(i)
+                arr_ifvg.push(Zona.new(z.x1, z.techo, z.suelo, -z.dir, na, bar_index))
+                if arr_ifvg.size() > max_htf
+                    arr_ifvg.shift()
+            else if consumir(z)
+                arr.remove(i)
+    toque
+
+cambio5   = timeframe.change("5")
+cambio15  = timeframe.change("15")
+cambio60  = timeframe.change("60")
+cambio240 = timeframe.change("240")
+toque50_m5  = false
+toque50_m15 = false
+toque50_h1  = false
+toque50_h4  = false
+if cerrada and timeframe.isintraday and en_calc
+    if mostrar_fvg5 and not solo_su_graf and seg_tf < 300
+        toque50_m5 := actualizar_htf(fvg5, ifvg5)
+        if cambio5
+            [a5, b5, a5_top, a5_bot, b5_bot, b5_top, t5] = request.security(syminfo.tickerid, "5", fvg_htf(), lookahead = barmerge.lookahead_on)
+            if a5
+                nueva_htf(fvg5, a5_top, a5_bot, 1, t5)
+            else if b5
+                nueva_htf(fvg5, b5_top, b5_bot, -1, t5)
+    if mostrar_fvg15 and not solo_su_graf and seg_tf < 900
+        toque50_m15 := actualizar_htf(fvg15, ifvg15)
+        if cambio15
+            [a15, b15, a15_top, a15_bot, b15_bot, b15_top, t15] = request.security(syminfo.tickerid, "15", fvg_htf(), lookahead = barmerge.lookahead_on)
+            if a15
+                nueva_htf(fvg15, a15_top, a15_bot, 1, t15)
+            else if b15
+                nueva_htf(fvg15, b15_top, b15_bot, -1, t15)
+    if mostrar_fvg60 and not solo_su_graf and seg_tf < 3600
+        toque50_h1 := actualizar_htf(fvg60, ifvg60)
+        if cambio60
+            [a60, b60, a60_top, a60_bot, b60_bot, b60_top, t60] = request.security(syminfo.tickerid, "60", fvg_htf(), lookahead = barmerge.lookahead_on)
+            if a60
+                nueva_htf(fvg60, a60_top, a60_bot, 1, t60)
+            else if b60
+                nueva_htf(fvg60, b60_top, b60_bot, -1, t60)
+    if mostrar_fvg240 and not solo_su_graf and seg_tf < 14400
+        toque50_h4 := actualizar_htf(fvg240, ifvg240)
+        if cambio240
+            [a240, b240, a240_top, a240_bot, b240_bot, b240_top, t240] = request.security(syminfo.tickerid, "240", fvg_htf(), lookahead = barmerge.lookahead_on)
+            if a240
+                nueva_htf(fvg240, a240_top, a240_bot, 1, t240)
+            else if b240
+                nueva_htf(fvg240, b240_top, b240_bot, -1, t240)
+
+// --- Niveles clave: altos y bajos relevantes de H4 (vigentes hasta que un cierre los rompe) ---
+type Nivel
+    line  ln
+    label lb
+    float precio
+    int   dir    // 1 = alto relevante, -1 = bajo relevante
+
+var niveles_h4 = array.new<Nivel>()
+
+piv_h4() =>
+    [ta.pivothigh(high, piv_h4_len, piv_h4_len)[1], ta.pivotlow(low, piv_h4_len, piv_h4_len)[1], time[1 + piv_h4_len]]
+
+[ph4, pl4, tp4] = request.security(syminfo.tickerid, "240", piv_h4(), lookahead = barmerge.lookahead_on)
+
+nuevo_nivel(float precio, int dir, int t_izq) =>
+    ln = line.new(t_izq, precio, time, precio, xloc=xloc.bar_time, color=color.new(col_niveles, 20), width=1)
+    lb = label.new(time, precio, dir == 1 ? "Alto H4" : "Bajo H4", xloc=xloc.bar_time, style=label.style_label_left, color=color.new(color.white, 100), textcolor=color.new(col_niveles, 10), size=size.tiny)
+    niveles_h4.push(Nivel.new(ln, lb, precio, dir))
+    if niveles_h4.size() > max_niv_h4
+        n = niveles_h4.shift()
+        n.ln.delete()
+        n.lb.delete()
+
+if cerrada and mostrar_niv_h4 and timeframe.isintraday and seg_tf < 14400
+    if niveles_h4.size() > 0
+        for i = niveles_h4.size() - 1 to 0
+            n = niveles_h4.get(i)
+            if (n.dir == 1 and close > n.precio) or (n.dir == -1 and close < n.precio)
+                // Nivel roto por cierre: deja de ser vigente y se borra
+                n.ln.delete()
+                n.lb.delete()
+                niveles_h4.remove(i)
+            else
+                n.ln.set_x2(time)
+                n.lb.set_x(time)
+    if cambio240
+        if not na(ph4)
+            nuevo_nivel(ph4, 1, tp4)
+        if not na(pl4)
+            nuevo_nivel(pl4, -1, tp4)
+
+// --- Niveles clave: alto y bajo del día anterior ---
+[pdh, pdl] = request.security(syminfo.tickerid, "D", [high[1], low[1]], lookahead = barmerge.lookahead_on)
+ver_pd = mostrar_pd and timeframe.isintraday and not timeframe.change("D")
+plot(ver_pd ? pdh : na, "Alto día anterior", color=color.new(col_niveles, 30), style=plot.style_linebr, linewidth=1)
+plot(ver_pd ? pdl : na, "Bajo día anterior", color=color.new(col_niveles, 30), style=plot.style_linebr, linewidth=1)
+
+// ─────────────────────────────
+// SMT: DIVERGENCIAS ENTRE ÍNDICES (basado en "SMT Divergences [LuxAlgo]" © LuxAlgo, CC BY-NC-SA 4.0)
+// Mejoras sobre el original:
+//  - El original solo detectaba SMT si el otro índice marcaba su pivote EXACTAMENTE en la misma vela;
+//    aquí se toma el máximo/mínimo del otro índice en la misma ventana del pivote (± N velas), así no
+//    se pierden las SMT con un desfase de 1-2 velas.
+//  - El original perdía la referencia tras un pivote sin pareja; aquí siempre se compara con el pivote
+//    anterior del gráfico, y solo si está cerca (máx. velas configurable), para evitar SMT sin sentido.
+//  - Cuenta también los dobles techos/suelos (igualar el alto sin superarlo es "no confirmar").
+//  - Solo se marca al cierre de la vela (sin repintado) y el número de marcas está limitado.
+//  - Una sola etiqueta por SMT con el estilo del original (caja de color y texto blanco) y el ticker
+//    de los activos que divergen. Alertas incluidas. Se ignora el activo si es el mismo del gráfico.
+// ─────────────────────────────
+g_smt        = "SMT (divergencias entre índices)"
+mostrar_smt  = input.bool(false, "Mostrar SMT (pide datos de ES/YM: hace el indicador más lento)", group=g_smt)
+smt_etiquetas = input.bool(true, "Mostrar etiquetas de la SMT", group=g_smt)
+smt_linea    = input.bool(true, "Mostrar línea de la SMT", group=g_smt)
+smt_usa1     = input.bool(true, "Comparar con", inline="smt1", group=g_smt)
+smt_sym1     = input.symbol("CME_MINI:ES1!", "", inline="smt1", group=g_smt)
+smt_usa2     = input.bool(true, "Comparar con", inline="smt2", group=g_smt)
+smt_sym2     = input.symbol("CBOT_MINI:YM1!", "", inline="smt2", group=g_smt)
+smt_len      = input.int(5, "Sensibilidad pivotes SMT (velas a cada lado)", minval=2, maxval=20, group=g_smt)
+smt_dist     = input.int(60, "Máx. velas entre los dos altos/bajos comparados", minval=5, maxval=400, group=g_smt)
+smt_max      = input.int(20, "Máx. SMT en el gráfico", minval=1, maxval=60, group=g_smt)
+smt_col_baj  = input.color(#ff1100, "SMT bajista (en altos)", group=g_smt)
+smt_col_alc  = input.color(#2157f3, "SMT alcista (en bajos)", group=g_smt)
+
+// Ticker de un símbolo: "CME_MINI:ES1!" -> "ES1!" (el que se muestra en la etiqueta)
+smt_ticker(string s) =>
+    partes = str.split(s, ":")
+    partes.size() > 0 ? partes.last() : s
+
+smt_t1  = smt_ticker(smt_sym1)
+smt_t2  = smt_ticker(smt_sym2)
+smt_n1  = str.replace(smt_t1, "1!", "")
+smt_n2  = str.replace(smt_t2, "1!", "")
+smt_yo  = str.replace(syminfo.ticker, "1!", "")
+smt_ok1 = mostrar_smt and smt_usa1 and smt_n1 != smt_yo
+smt_ok2 = mostrar_smt and smt_usa2 and smt_n2 != smt_yo
+
+// Extremo del otro índice en la ventana del pivote (las 2N+1 velas centradas en él) y cuántas velas
+// atrás lo hizo, para poder marcar la vela exacta
+smt_ext() =>
+    w = 2 * smt_len + 1
+    [ta.highest(high, w), ta.lowest(low, w), ta.highestbars(high, w), ta.lowestbars(low, w)]
+float smt_h1  = na
+float smt_l1  = na
+int   smt_hb1 = na
+int   smt_lb1 = na
+float smt_h2  = na
+float smt_l2  = na
+int   smt_hb2 = na
+int   smt_lb2 = na
+// Los datos de ES/YM solo se piden si la SMT está activada y dentro de las velas a calcular
+if smt_ok1 and en_calc
+    [h_, l_, hb_, lb_] = request.security(smt_sym1, timeframe.period, smt_ext(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+    smt_h1  := h_
+    smt_l1  := l_
+    smt_hb1 := hb_
+    smt_lb1 := lb_
+if smt_ok2 and en_calc
+    [h_, l_, hb_, lb_] = request.security(smt_sym2, timeframe.period, smt_ext(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+    smt_h2  := h_
+    smt_l2  := l_
+    smt_hb2 := hb_
+    smt_lb2 := lb_
+
+smt_ph = ta.pivothigh(high, smt_len, smt_len)
+smt_pl = ta.pivotlow(low, smt_len, smt_len)
+smt_x  = bar_index - smt_len
+
+// Pivote anterior del gráfico y valor de cada índice en ese pivote
+var int   smt_ph_x  = na
+var float smt_ph_y  = na
+var float smt_ph_c1 = na
+var float smt_ph_c2 = na
+var int   smt_pl_x  = na
+var float smt_pl_y  = na
+var float smt_pl_c1 = na
+var float smt_pl_c2 = na
+var array<line>  smt_lineas = array.new<line>()
+var array<label> smt_textos = array.new<label>()
+
+// true si uno hace un alto más alto (bajo más bajo) y el otro no lo confirma
+smt_diverge(float y, float y_ant, float c, float c_ant, bool altos) =>
+    nuevo_y = altos ? y > y_ant : y < y_ant
+    nuevo_c = altos ? c > c_ant : c < c_ant
+    not na(y_ant) and not na(c_ant) and not na(c) and nuevo_y != nuevo_c
+
+// Ticker + flecha: dónde quedó el otro índice respecto a su alto/bajo anterior
+//   ↑ = más alto que antes, ↓ = más bajo que antes, = = igual
+smt_texto(string t, float c, float c_ant) =>
+    t + (c > c_ant ? " ↑" : c < c_ant ? " ↓" : " =")
+
+smt_marcar(int x1, float y1, int xv, string txt, color col, bool altos) =>
+    // xv = vela exacta de la divergencia: el alto/bajo de MNQ si fue él quien barrió, o la vela en la
+    // que el otro índice hizo su alto/bajo si fue el otro el que barrió y MNQ no le acompañó
+    yv = altos ? high[bar_index - xv] : low[bar_index - xv]
+    if smt_linea
+        smt_lineas.push(line.new(x1, y1, xv, yv, color=col))
+    if smt_etiquetas
+        smt_textos.push(label.new(xv, yv, txt, style=altos ? label.style_label_down : label.style_label_up, color=col, textcolor=color.white, size=size.tiny, tooltip="SMT " + (altos ? "bajista" : "alcista") + ". Flecha = dónde quedó ese índice respecto a su " + (altos ? "alto" : "bajo") + " anterior: ↑ más alto, ↓ más bajo, = igual"))
+    if smt_lineas.size() > smt_max
+        smt_lineas.shift().delete()
+    if smt_textos.size() > smt_max
+        smt_textos.shift().delete()
+
+smt_bajista = false
+smt_alcista = false
+if barstate.isconfirmed
+    if not na(smt_ph)
+        cerca = not na(smt_ph_x) and smt_x - smt_ph_x <= smt_dist
+        d1 = cerca and smt_ok1 and smt_diverge(smt_ph, smt_ph_y, smt_h1, smt_ph_c1, true)
+        d2 = cerca and smt_ok2 and smt_diverge(smt_ph, smt_ph_y, smt_h2, smt_ph_c2, true)
+        if d1 or d2
+            smt_bajista := true
+            mnq_barre = smt_ph > smt_ph_y
+            xv = mnq_barre ? smt_x : bar_index + int(d1 ? smt_hb1 : smt_hb2)
+            t1 = smt_texto(smt_t1, smt_h1, smt_ph_c1)
+            t2 = smt_texto(smt_t2, smt_h2, smt_ph_c2)
+            smt_marcar(smt_ph_x, smt_ph_y, xv, d1 and d2 ? t1 + " | " + t2 : d1 ? t1 : t2, smt_col_baj, true)
+        smt_ph_x  := smt_x
+        smt_ph_y  := smt_ph
+        smt_ph_c1 := smt_h1
+        smt_ph_c2 := smt_h2
+    if not na(smt_pl)
+        cerca = not na(smt_pl_x) and smt_x - smt_pl_x <= smt_dist
+        d1 = cerca and smt_ok1 and smt_diverge(smt_pl, smt_pl_y, smt_l1, smt_pl_c1, false)
+        d2 = cerca and smt_ok2 and smt_diverge(smt_pl, smt_pl_y, smt_l2, smt_pl_c2, false)
+        if d1 or d2
+            smt_alcista := true
+            mnq_barre = smt_pl < smt_pl_y
+            xv = mnq_barre ? smt_x : bar_index + int(d1 ? smt_lb1 : smt_lb2)
+            t1 = smt_texto(smt_t1, smt_l1, smt_pl_c1)
+            t2 = smt_texto(smt_t2, smt_l2, smt_pl_c2)
+            smt_marcar(smt_pl_x, smt_pl_y, xv, d1 and d2 ? t1 + " | " + t2 : d1 ? t1 : t2, smt_col_alc, false)
+        smt_pl_x  := smt_x
+        smt_pl_y  := smt_pl
+        smt_pl_c1 := smt_l1
+        smt_pl_c2 := smt_l2
+
+// ─────────────────────────────
+// DIBUJO DE ZONAS SIN SOLAPES
+// Cada zona se dibuja solo donde no la tapa otra de más prioridad, así nunca se mezclan colores:
+//   IFVG > FVG del gráfico > OB > IFVG/FVG M15 > IFVG/FVG H1 > IFVG/FVG H4 > rangos
+// Dentro del mismo tipo, la más reciente va encima. Ejemplo: un FVG M15 dentro de un FVG H4 se ve
+// con su color, y el H4 solo se ve por encima y por debajo de él.
+// La parte ya consumida de cada zona se ve en gris y también ocupa su sitio.
+// ─────────────────────────────
+type Pieza
+    int   x1
+    int   x2
+    float top
+    float bot
+    int   dir = 0   // en las zonas ya dibujadas: 1 alcista, -1 bajista (para separar las contrarias)
+
+var array<box>   dib_cajas  = array.new<box>()
+var array<line>  dib_lineas = array.new<line>()
+var array<label> dib_letreros = array.new<label>()
+// Las cajas, líneas y letreros se reutilizan de un dibujo al siguiente (solo se mueven y se cambia su
+// color) en vez de borrarlos y crearlos de nuevo: crear cientos de objetos en cada actualización es
+// lo que más tiempo cuesta. uso = cuántos de cada tipo lleva usados el dibujo actual.
+var array<int> uso = array.from(0, 0, 0)
+
+poner_caja(int x1, float top, int x2, float bot, color col) =>
+    i = uso.get(0)
+    if i < dib_cajas.size()
+        b = dib_cajas.get(i)
+        b.set_lefttop(x1, top)
+        b.set_rightbottom(x2, bot)
+        b.set_bgcolor(col)
+    else
+        dib_cajas.push(box.new(x1, top, x2, bot, border_color=na, bgcolor=col))
+    uso.set(0, i + 1)
+
+poner_linea(int x1, int x2, float y, color col) =>
+    i = uso.get(1)
+    if i < dib_lineas.size()
+        l = dib_lineas.get(i)
+        l.set_xy1(x1, y)
+        l.set_xy2(x2, y)
+        l.set_color(col)
+    else
+        dib_lineas.push(line.new(x1, y, x2, y, color=col, style=line.style_dashed, width=1))
+    uso.set(1, i + 1)
+
+poner_letrero(int x, float y, string txt, color col) =>
+    i = uso.get(2)
+    if i < dib_letreros.size()
+        e = dib_letreros.get(i)
+        e.set_xy(x, y)
+        e.set_text(txt)
+        e.set_textcolor(col)
+    else
+        dib_letreros.push(label.new(x, y, txt, style=label.style_label_right, color=color.new(color.white, 100), textcolor=col, size=size.tiny))
+    uso.set(2, i + 1)
+
+// Letreros pendientes de colocar (se colocan todos juntos al final para que no se monten)
+type Letrero
+    int    x
+    float  y
+    string txt
+    color  col
+    bool   derecha   // true = letrero del final (termina en x); false = del principio (empieza en x)
+    bool   fondo     // true = letrero blanco sobre el color de la zona (FVG)
+
+var array<Letrero> letreros = array.new<Letrero>()
+// Separación vertical mínima entre letreros cercanos, en precio
+sep_letrero = nz(ta.atr(50)) * 0.5
+// Hueco entre una zona alcista y una bajista que se tocan, para que no parezcan una sola
+sep_pct     = input.float(8.0, "Separación entre zonas alcistas y bajistas que se tocan (% del ATR, 0 = sin hueco)", minval=0, maxval=50, step=1, group=g_col)
+sep_zonas   = nz(ta.atr(50)) * sep_pct / 100
+
+var array<Pieza> ocupado    = array.new<Pieza>()
+
+// Rectángulo p menos el rectángulo o: hasta 4 trozos (izquierda, derecha, arriba y abajo)
+restar(Pieza p, Pieza o) =>
+    out = array.new<Pieza>()
+    if o.x2 <= p.x1 or o.x1 >= p.x2 or o.bot >= p.top or o.top <= p.bot
+        out.push(p)
+    else
+        if o.x1 > p.x1
+            out.push(Pieza.new(p.x1, o.x1, p.top, p.bot))
+        if o.x2 < p.x2
+            out.push(Pieza.new(o.x2, p.x2, p.top, p.bot))
+        cx1 = math.max(p.x1, o.x1)
+        cx2 = math.min(p.x2, o.x2)
+        if o.top < p.top
+            out.push(Pieza.new(cx1, cx2, p.top, o.top))
+        if o.bot > p.bot
+            out.push(Pieza.new(cx1, cx2, o.bot, p.bot))
+    out
+
+// Trozos de p que no tapa ninguna zona ya dibujada
+recortar(Pieza p) =>
+    res = array.from(p)
+    if sin_solape and ocupado.size() > 0
+        for o in ocupado
+            // Solo cuentan las zonas que de verdad se cruzan con esta (ahorra cálculo)
+            if not (o.x2 <= p.x1 or o.x1 >= p.x2 or o.bot >= p.top or o.top <= p.bot)
+                nuevo = array.new<Pieza>()
+                for q in res
+                    for r in restar(q, o)
+                        nuevo.push(r)
+                res := nuevo
+                // Tapada del todo, o demasiados trozos: no hace falta seguir recortando
+                if res.size() == 0 or res.size() > 10
+                    break
+    res
+
+pintar_parte(Pieza p, color col, int dir) =>
+    for q in recortar(p)
+        top = q.top
+        bot = q.bot
+        // Si toca una zona de dirección contraria ya dibujada, se deja un pequeño hueco en ese borde
+        if sep_zonas > 0 and dir != 0
+            for o in ocupado
+                if o.dir == -dir and not (o.x2 <= q.x1 or o.x1 >= q.x2)
+                    if math.abs(top - o.bot) <= sep_zonas
+                        top := math.min(top, o.bot - sep_zonas)
+                    if math.abs(bot - o.top) <= sep_zonas
+                        bot := math.max(bot, o.top + sep_zonas)
+        // Tope de cajas para no superar el límite de TradingView (500): se dibujan antes las de más prioridad
+        if q.x2 > q.x1 and top > bot and uso.get(0) < 200
+            poner_caja(q.x1, top, q.x2, bot, col)
+
+dibujar_zona(int x1_zona, int x2, float techo, float suelo, int dir, float borde, color col, string txt, color coltxt, color colmitad, color colgris, bool fondo) =>
+    // TradingView no deja dibujar con bar_index demasiado lejos hacia atrás: las zonas muy antiguas
+    // que siguen vigentes se dibujan como mucho desde 1000 velas atrás (margen de seguridad amplio)
+    x1 = math.max(x1_zona, bar_index - 1000)
+    // Parte aún sin tocar (con su color) y parte consumida (gris)
+    ctop = na(borde) ? techo : (dir == 1 ? borde : techo)
+    cbot = na(borde) ? suelo : (dir == 1 ? suelo : borde)
+    pintar_parte(Pieza.new(x1, x2, ctop, cbot), col, dir)
+    if not na(borde)
+        pintar_parte(Pieza.new(x1, x2, dir == 1 ? techo : borde, dir == 1 ? borde : suelo), colgris, dir)
+    // Letrero solo al final de la zona (junto a la vela actual), a la altura de la parte sin tocar
+    if txt != "" and letreros.size() < 30
+        letreros.push(Letrero.new(x2, (ctop + cbot) / 2, txt, coltxt, true, fondo))
+    // Línea del 50% (FVG de M15, H1 y H4), también recortada
+    if not na(colmitad)
+        m = (techo + suelo) / 2
+        for q in recortar(Pieza.new(x1, x2, m, m))
+            if q.x2 > q.x1
+                poner_linea(q.x1, q.x2, m, colmitad)
+    ocupado.push(Pieza.new(x1, x2, techo, suelo, dir))
+
+dibujar_lista(array<Zona> arr, color c_alc, color c_baj, int transp, string txt, bool flecha, bool mitad, color colgris, bool fondo) =>
+    if arr.size() > 0
+        for i = arr.size() - 1 to 0
+            z = arr.get(i)
+            c = z.dir == 1 ? c_alc : c_baj
+            // Letrero solo con el nombre (sin flecha de dirección)
+            t = txt
+            dist = z.suelo > close ? z.suelo - close : close > z.techo ? close - z.techo : 0.0
+            // Si ya no caben más cajas o la zona está demasiado lejos del precio, no se calcula
+            if uso.get(0) < 200 and ocupado.size() < max_dibujadas and (dist_max == 0 or dist / close * 100 <= dist_max)
+                dibujar_zona(z.x1, bar_index + 1, z.techo, z.suelo, z.dir, z.borde, color.new(c, transp_zonas), t, c, mitad ? color.new(color.white, 30) : na, colgris, fondo)
+
+// FVG/IFVG y OB del propio gráfico
+dibujar_graf() =>
+    if ver_graf
+        dibujar_lista(ifvgs, col_ifvg, col_ifvg, 88, "IFVG " + tf_graf, true, false, color_consumido, false)
+        dibujar_lista(zonas, graf_alc, graf_baj, 80, "FVG " + tf_graf, true, false, color_consumido, true)
+    dibujar_lista(obs, col_ob_alc, col_ob_baj, 90, "OB " + tf_graf, true, false, color_consumido, false)
+
+// FVG/IFVG de otra temporalidad (más alta o más baja que el gráfico). Los de M15 o más llevan su 50%.
+dibujar_tf(bool ver, int mins, array<Zona> f, array<Zona> fi, color ca, color cb, int transp, string nom) =>
+    if ver and not solo_su_graf and seg_graf != mins * 60
+        dibujar_lista(fi, col_ifvg, col_ifvg, 88, "IFVG " + nom, true, false, color_consumido, false)
+        dibujar_lista(f, ca, cb, transp, "FVG " + nom, true, mins >= 15, color_consumido, true)
+
+if barstate.islast
+    uso.set(0, 0)
+    uso.set(1, 0)
+    uso.set(2, 0)
+    letreros.clear()
+    ocupado.clear()
+    // Cada temporalidad se dibuja solo si su interruptor está activado, de la más baja (encima) a la
+    // más alta (alrededor). El FVG del propio gráfico ocupa el sitio de su temporalidad.
+    graf_hecho = false
+    if seg_graf <= 60
+        dibujar_graf()
+        graf_hecho := true
+    dibujar_tf(mostrar_fvg1, 1, fvg1, ifvg1, fvg_alc_1, fvg_baj_1, 84, "M1")
+    if not graf_hecho and seg_graf <= 300
+        dibujar_graf()
+        graf_hecho := true
+    dibujar_tf(mostrar_fvg5, 5, fvg5, ifvg5, fvg_alc_5, fvg_baj_5, 84, "M5")
+    if not graf_hecho and seg_graf <= 900
+        dibujar_graf()
+        graf_hecho := true
+    dibujar_tf(mostrar_fvg15, 15, fvg15, ifvg15, fvg_alc_15, fvg_baj_15, 84, "M15")
+    if not graf_hecho and seg_graf <= 3600
+        dibujar_graf()
+        graf_hecho := true
+    dibujar_tf(mostrar_fvg60, 60, fvg60, ifvg60, fvg_alc_60, fvg_baj_60, 82, "H1")
+    if not graf_hecho and seg_graf <= 14400
+        dibujar_graf()
+        graf_hecho := true
+    dibujar_tf(mostrar_fvg240, 240, fvg240, ifvg240, fvg_alc_240, fvg_baj_240, 80, "H4")
+    if not graf_hecho
+        dibujar_graf()
+    // EMAs por encima de las zonas: TradingView pinta las cajas por encima de las polilíneas de las
+    // EMAs, así que donde una EMA cruza una zona se repasa con tramos de línea (que sí van encima).
+    // Se usan pocos tramos por zona (la EMA es suave) para no gastar el límite de líneas.
+    for l in ema_tramos
+        l.delete()
+    ema_tramos.clear()
+    if mostrar_emas
+        for o in ocupado
+            xa = math.max(o.x1, bar_index - 1500)
+            xb = math.min(o.x2, bar_index)
+            if xb > xa
+                paso = math.max(1, int(math.ceil((xb - xa) / 25.0)))
+                for k = 0 to 2
+                    col_k = k == 0 ? ema_rap_col : k == 1 ? ema_med_col : ema_len_col
+                    x = xa
+                    while x < xb and ema_tramos.size() < 150
+                        x2 = math.min(x + paso, xb)
+                        v1 = k == 0 ? ema_rapida[bar_index - x] : k == 1 ? ema_media[bar_index - x] : ema_lenta[bar_index - x]
+                        v2 = k == 0 ? ema_rapida[bar_index - x2] : k == 1 ? ema_media[bar_index - x2] : ema_lenta[bar_index - x2]
+                        if not na(v1) and not na(v2) and math.max(v1, v2) >= o.bot and math.min(v1, v2) <= o.top
+                            ema_tramos.push(line.new(x, v1, x2, v2, color=col_k, width=k == 2 ? 2 : 1))
+                        x := x2
+    // Colocar los letreros dentro de su zona: a la altura de la zona y pegados a su borde derecho.
+    // Si dos coinciden (misma altura aproximada), el segundo se pone a la izquierda del primero, en
+    // la misma línea, en vez de subirlo o bajarlo. El ancho de cada letrero se estima en velas
+    // (~1 vela por letra), así que con mucho zoom puede quedar algo de hueco entre ellos.
+    if letreros.size() > 0
+        colocados = array.new<Letrero>()
+        for l in letreros
+            x = l.x
+            ancho = str.length(l.txt) + 2
+            for intento = 0 to 3
+                choca = false
+                for c in colocados
+                    ancho_c = str.length(c.txt) + 2
+                    // Ambos letreros terminan en su x y ocupan [x - ancho, x]
+                    if math.abs(c.y - l.y) < sep_letrero and x > c.x - ancho_c and x - ancho < c.x
+                        x := c.x - ancho_c
+                        choca := true
+                if not choca
+                    break
+            colocados.push(Letrero.new(x, l.y, l.txt, l.col, true, l.fondo))
+            // Solo el nombre, en el color de su zona, sin caja ni fondo
+            poner_letrero(x, l.y, l.txt, color.white)
+    // Los objetos que sobran de un dibujo anterior con más zonas se borran
+    while dib_cajas.size() > uso.get(0)
+        dib_cajas.pop().delete()
+    while dib_lineas.size() > uso.get(1)
+        dib_lineas.pop().delete()
+    while dib_letreros.size() > uso.get(2)
+        dib_letreros.pop().delete()
+
+// ─────────────────────────────
+// ALERTAS
+// ─────────────────────────────
+alertcondition(smt_bajista, "SMT bajista", "SMT bajista (divergencia en altos entre índices) en {{ticker}} ({{interval}})")
+alertcondition(smt_alcista, "SMT alcista", "SMT alcista (divergencia en bajos entre índices) en {{ticker}} ({{interval}})")
+alertcondition(choch_alcista, "CHoCH alcista", "CHoCH alcista en {{ticker}} ({{interval}})")
+alertcondition(choch_bajista, "CHoCH bajista", "CHoCH bajista en {{ticker}} ({{interval}})")
+alertcondition(choch_riesgo_alc, "CHoCH alcista de riesgo (⚠)", "CHoCH alcista con riesgo de fallo en {{ticker}} ({{interval}})")
+alertcondition(choch_riesgo_baj, "CHoCH bajista de riesgo (⚠)", "CHoCH bajista con riesgo de fallo en {{ticker}} ({{interval}})")
+alertcondition(choch_fallido_alc, "CHoCH alcista fallido (✗)", "CHoCH alcista fallido: posible reversión bajista en {{ticker}} ({{interval}})")
+alertcondition(choch_fallido_baj, "CHoCH bajista fallido (✗)", "CHoCH bajista fallido: posible reversión alcista en {{ticker}} ({{interval}})")
+alertcondition(reactivada_alc, "Tendencia alcista reactivada", "Tendencia alcista reactivada tras CHoCH fallido en {{ticker}} ({{interval}})")
+alertcondition(reactivada_baj, "Tendencia bajista reactivada", "Tendencia bajista reactivada tras CHoCH fallido en {{ticker}} ({{interval}})")
+alertcondition(retest_ifvg, "Retesteo de IFVG (velas siguientes)", "El precio toca un IFVG en las velas siguientes a su creación en {{ticker}} ({{interval}})")
+alertcondition(nuevo_ifvg_alc, "IFVG alcista", "Un FVG bajista se ha invertido (IFVG alcista) en {{ticker}} ({{interval}})")
+alertcondition(nuevo_ifvg_baj, "IFVG bajista", "Un FVG alcista se ha invertido (IFVG bajista) en {{ticker}} ({{interval}})")
+alertcondition(fvg_alcista, "FVG alcista", "Nuevo FVG alcista en {{ticker}} ({{interval}})")
+alertcondition(fvg_bajista, "FVG bajista", "Nuevo FVG bajista en {{ticker}} ({{interval}})")
+alertcondition(signal_new_range,  title = 'Range Detected',     message = 'Auto Range Detector: new RANGE detected on {{exchange}}:{{ticker}} - {{interval}}')
+alertcondition(signal_break_up,   title = 'Range Breakout Up',  message = 'Auto Range Detector: range broken to the UPSIDE on {{exchange}}:{{ticker}} - {{interval}}')
+alertcondition(signal_break_down, title = 'Range Breakdown',    message = 'Auto Range Detector: range broken to the DOWNSIDE on {{exchange}}:{{ticker}} - {{interval}}')
+alertcondition(signal_any_break,  title = 'Any Range Break',    message = 'Auto Range Detector: range break on {{exchange}}:{{ticker}} - {{interval}}')
+alertcondition(signal_deviation,  title = 'Range Deviation',    message = 'Auto Range Detector: failed break, price returned INSIDE the range on {{exchange}}:{{ticker}} - {{interval}}')
+alertcondition(toque50_m15, "Precio en el 50% de un FVG M15", "Precio tocando el 50% de un FVG de M15 en {{ticker}} ({{interval}})")
+alertcondition(toque50_h1,  "Precio en el 50% de un FVG H1",  "Precio tocando el 50% de un FVG de H1 en {{ticker}} ({{interval}})")
+alertcondition(toque50_h4,  "Precio en el 50% de un FVG H4",  "Precio tocando el 50% de un FVG de H4 en {{ticker}} ({{interval}})")
