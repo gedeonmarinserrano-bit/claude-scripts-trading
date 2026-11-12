@@ -7,7 +7,7 @@
 // Por esa licencia, este script combinado se distribuye bajo la misma licencia (CC BY-NC-SA 4.0).
 
 //@version=6
-indicator("Po3 + CHoCH PRO - High Contrast + FVG + Rangos + OB", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=500, max_bars_back=2000)
+indicator("Po3 + CHoCH PRO - High Contrast + FVG + Rangos + OB", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=500, max_bars_back=2000, behind_chart=true)
 
 // Interruptores de FVG por temporalidad (lo primero en Ajustes): solo se ven y se calculan los activados.
 // Cada interruptor muestra los FVG y los IFVG de esa temporalidad, sea más alta o más baja que el gráfico.
@@ -112,6 +112,8 @@ color_alcista   = input.color(#00A651, "Estructura y FVG alcista (verde)", group
 color_bajista   = input.color(#E4002B, "Estructura y FVG bajista (rojo)", group=g_col)
 pintar_velas    = input.bool(true, "Marcar la vela del OB", group=g_col)
 col_ifvg        = input.color(#FF00C8, "IFVG (magenta)", group=g_col)
+// Zonas a color pleno: el indicador se dibuja detrás de las velas (behind_chart), así no las tapa
+transp_zonas    = input.int(0, "Transparencia de las zonas (0 = color pleno)", minval=0, maxval=95, step=5, group=g_col)
 sin_solape      = input.bool(true, "Zonas sin solaparse (la más concreta encima, la mayor alrededor)", group=g_col)
 
 // Zonas (FVG, IFVG, OB, FVG M15/H1/H4): aquí solo se guardan los datos. Se dibujan al final,
@@ -1640,7 +1642,7 @@ dibujar_lista(array<Zona> arr, color c_alc, color c_baj, int transp, string txt,
             dist = z.suelo > close ? z.suelo - close : close > z.techo ? close - z.techo : 0.0
             // Si ya no caben más cajas o la zona está demasiado lejos del precio, no se calcula
             if uso.get(0) < 200 and ocupado.size() < max_dibujadas and (dist_max == 0 or dist / close * 100 <= dist_max)
-                dibujar_zona(z.x1, bar_index + 1, z.techo, z.suelo, z.dir, z.borde, color.new(c, transp), t, c, mitad ? color.new(c, 55) : na, colgris, fondo)
+                dibujar_zona(z.x1, bar_index + 1, z.techo, z.suelo, z.dir, z.borde, color.new(c, transp_zonas), t, c, mitad ? color.new(color.white, 30) : na, colgris, fondo)
 
 // FVG/IFVG y OB del propio gráfico
 dibujar_graf() =>
@@ -1707,7 +1709,7 @@ if barstate.islast
                     break
             colocados.push(Letrero.new(x, l.y, l.txt, l.col, true, l.fondo))
             // Solo el nombre, en el color de su zona, sin caja ni fondo
-            poner_letrero(x, l.y, l.txt, color.new(l.col, 20))
+            poner_letrero(x, l.y, l.txt, color.white)
     // Los objetos que sobran de un dibujo anterior con más zonas se borran
     while dib_cajas.size() > uso.get(0)
         dib_cajas.pop().delete()
