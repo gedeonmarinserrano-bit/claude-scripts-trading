@@ -9,7 +9,13 @@
 //@version=6
 indicator("Po3 + CHoCH PRO - High Contrast + FVG + Rangos + OB", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=500, max_bars_back=2000, behind_chart=true)
 
-// Interruptores de FVG por temporalidad (lo primero en Ajustes): solo se ven y se calculan los activados.
+// Panel de información: lo primero en Ajustes, para ponerlo o quitarlo cuando se quiera
+g_panel       = "Panel de información"
+mostrar_panel = input.bool(true, "Mostrar panel", group=g_panel)
+panel_pos     = input.string("Arriba derecha", "Posición", options=["Arriba derecha", "Arriba izquierda", "Abajo derecha", "Abajo izquierda"], group=g_panel)
+panel_tam     = input.string("Pequeño", "Tamaño del texto", options=["Muy pequeño", "Pequeño", "Normal"], group=g_panel)
+
+// Interruptores de FVG por temporalidad (arriba en Ajustes): solo se ven y se calculan los activados.
 // Cada interruptor muestra los FVG y los IFVG de esa temporalidad, sea más alta o más baja que el gráfico.
 g_fvgtf         = "FVG por temporalidad (solo se ven los activados)"
 mostrar_fvg240  = input.bool(true,  "FVG H4", inline="fvgtf1", group=g_fvgtf)
@@ -24,27 +30,32 @@ solo_su_graf    = input.bool(true, "Cada FVG solo en el gráfico de su temporali
 max_htf         = input.int(10, "Máx. FVG por temporalidad (M5, M15, H1, H4)", minval=1, maxval=50, group=g_fvgtf)
 // Las zonas muy lejos del precio no aportan en intradía y son las que más tiempo de cálculo cuestan
 max_dibujadas   = input.int(35, "Máx. zonas dibujadas a la vez (menos = más rápido)", minval=5, maxval=120, group=g_fvgtf)
-dist_max        = input.float(2.0, "Dibujar solo zonas a menos de este % del precio (0 = todas)", minval=0, step=0.5, group=g_fvgtf)
+dist_max        = input.float(1.0, "Dibujar solo zonas a menos de este % del precio (0 = todas)", minval=0, step=0.5, group=g_fvgtf)
 
 // ─────────────────────────────
 // CONFIGURACIÓN
+// Los ajustes avanzados que no hace falta tocar están fijos en el código (sin input) para que los
+// Ajustes del indicador se entiendan de un vistazo.
 // ─────────────────────────────
-periodo      = input.int(4, "Sensibilidad Pivotes", minval=1)
-vol_mult     = input.float(1.1, "Mult. Volumen Base", step=0.1)
-vol_top      = input.float(2.0, "Mult. Alto Volumen (🔥)", step=0.1)
-vol_len      = input.int(20, "Media de Volumen", minval=1)
-offset_x     = input.int(2, "Desplazamiento Texto", minval=0)
-fondo_blanco = input.bool(true, "Fondo blanco")
-mostrar_bos  = input.bool(true, "Mostrar BOS (salvo con tendencia invalidada)")
-borrar_bos_giro = input.bool(true, "Borrar el BOS contrario previo al CHoCH (modifica el pasado)")
-bos_ventana  = input.int(0, "Borrar BOS previo al CHoCH: máx. velas (0 = sin límite)", minval=0)
-filtro_rango = input.bool(true, "Sin CHoCH ni BOS dentro de un rango (hasta el breakout)")
+g_est        = "Estructura (CHoCH / BOS)"
+periodo      = input.int(4, "Sensibilidad de los pivotes (velas a cada lado)", minval=1, group=g_est)
+vol_mult     = 1.1
+vol_top      = 2.0
+vol_len      = 20
+offset_x     = 2
+fondo_blanco = input.bool(true, "Fondo blanco (colores de alto contraste)", group=g_est)
+mostrar_bos  = input.bool(true, "Mostrar BOS (salvo con tendencia invalidada)", group=g_est)
+borrar_bos_giro = input.bool(true, "Borrar el BOS contrario previo al CHoCH (modifica el pasado)", group=g_est)
+bos_ventana  = input.int(0, "Borrar BOS previo al CHoCH: máx. velas (0 = sin límite)", minval=0, group=g_est)
+filtro_rango = input.bool(true, "Sin CHoCH ni BOS dentro de un rango (hasta el breakout)", group=g_est)
 // TradingView limita el tiempo total de cálculo: las partes pesadas (rangos, Order Blocks, FVG de
 // otras temporalidades) solo se calculan en las últimas N velas del historial
-velas_calc   = input.int(2000, "Velas de historial a calcular (menos = más rápido)", minval=300, maxval=20000)
+velas_calc   = input.int(2000, "Velas de historial a calcular (menos = más rápido)", minval=300, maxval=20000, group=g_est)
 en_calc      = bar_index >= last_bar_index - velas_calc
 
-fvg_min_pct     = input.float(0.0, "Tamaño mínimo FVG (% precio)", minval=0, step=0.05, group="FVG")
+// Los FVG más pequeños que esto no se marcan (ruido de 1-2 ticks). Se mide con el ATR para que valga en
+// cualquier temporalidad; en otras temporalidades se escala con la raíz de su duración.
+fvg_min_atr     = input.float(0.15, "Tamaño mínimo FVG (× ATR; 0 = todos)", minval=0, step=0.05, group="FVG")
 max_zonas       = input.int(20, "Máx. zonas vigiladas", minval=1, maxval=250, group="FVG")
 // Parte consumida: el mismo gris para todas las zonas y temporalidades
 color_consumido = input.color(color.new(#B0B0B0, 75), "Parte consumida (todas las zonas)", group="FVG")
@@ -101,12 +112,12 @@ anular_fallidos = input.bool(true, "Anular tendencia si el CHoCH falla", group="
 // Riesgo de fallo evaluado al cierre de la vela del CHoCH
 marcar_riesgo   = input.bool(true, "Marcar CHoCH de riesgo (⚠)", group="CHoCH fallido / riesgo")
 riesgo_min      = input.int(2, "Puntuación mínima para ⚠", minval=1, maxval=6, group="CHoCH fallido / riesgo")
-atr_len         = input.int(14, "Longitud ATR", minval=1, group="CHoCH fallido / riesgo")
-mecha_pct       = input.float(50, "Mecha de rechazo ≥ (% del rango)", minval=0, maxval=100, group="CHoCH fallido / riesgo")
-dist_atr        = input.float(0.15, "Ruptura corta < (× ATR)", minval=0, step=0.05, group="CHoCH fallido / riesgo")
-climax_atr      = input.float(2.5, "Vela de clímax > (× ATR)", minval=0, step=0.1, group="CHoCH fallido / riesgo")
-cuerpo_pct      = input.float(30, "Cuerpo pequeño < (% del rango)", minval=0, maxval=100, group="CHoCH fallido / riesgo")
-zona_atr        = input.float(1.0, "FVG contrario a < (× ATR)", minval=0, step=0.1, group="CHoCH fallido / riesgo")
+atr_len         = 14
+mecha_pct       = 50
+dist_atr        = 0.15
+climax_atr      = 2.5
+cuerpo_pct      = 30
+zona_atr        = 1.0
 color_fallido   = input.color(color.gray, "Color CHoCH fallido", group="CHoCH fallido / riesgo")
 
 // Paleta: cada tipo de elemento tiene un tono propio y separado de los demás
@@ -175,8 +186,15 @@ type Marca
 
 var marcas = array.new<Marca>()
 
+// Último CHoCH/BOS (texto y vela), para el panel
+var array<string> ult_evento_txt = array.from("")
+var array<int>    ult_evento_bar = array.from(0)
+
 registrar_marca(label lb, line ln, int bar) =>
     marcas.push(Marca.new(lb, ln, bar))
+    if not na(lb)
+        ult_evento_txt.set(0, lb.get_text())
+        ult_evento_bar.set(0, bar)
     if marcas.size() > 500
         marcas.shift()
 
@@ -195,48 +213,49 @@ var string group_structure = '════════ Structure Filters ══�
 var string group_range     = '════════ Range Behavior ════════'
 var string group_visual    = '════════ Visual Settings ════════'
 
-scan_scaling      = input.string('Base + 2x + 3x', 'Scan Scaling', options = ['Base only', 'Base + 2x', 'Base + 2x + 3x'], group = group_detect)
-base_length       = input.int(20, 'Base Scan Length', minval = 8, maxval = 100, group = group_detect)
-boundary_basis    = input.string('Percentile band', 'Boundary Basis', options = ['Percentile band', 'Absolute extremes', 'Body extremes'], group = group_detect)
-band_percentile   = input.float(90.0, 'Boundary Percentile', minval = 70.0, maxval = 100.0, step = 1.0, group = group_detect)
-signal_timing     = input.string('Bar close', 'Signal Timing', options = ['Bar close', 'Live bar'], group = group_detect)
-atr_length        = input.int(200, 'ATR Length', minval = 14, maxval = 1000, group = group_detect)
+scan_scaling      = 'Base + 2x + 3x'
+g_rng             = 'Rangos'
+base_length       = input.int(20, 'Velas mínimas para buscar un rango', minval = 8, maxval = 100, group = g_rng)
+boundary_basis    = 'Percentile band'
+band_percentile   = 90.0
+signal_timing     = 'Bar close'
+atr_length        = 200
 
-compression_pct   = input.float(40.0, 'Compression Percentile', minval = 5.0, maxval = 95.0, step = 5.0, group = group_structure)
-calibration_len   = input.int(500, 'Calibration Lookback', minval = 100, maxval = 2000, group = group_structure)
-min_rotation      = input.float(0.18, 'Min Rotation Rate', minval = 0.05, maxval = 0.60, step = 0.01, group = group_structure)
-touch_basis       = input.string('Wick reaches', 'Touch Definition', options = ['Wick reaches', 'Close reaches'], group = group_structure)
-min_touches       = input.int(2, 'Min Boundary Touches', minval = 1, maxval = 10, group = group_structure)
-touch_tolerance   = input.float(0.10, 'Touch Tolerance (ATR)', minval = 0.02, maxval = 1.0, step = 0.02, group = group_structure)
-max_drift         = input.float(0.45, 'Max Drift', minval = 0.05, maxval = 2.0, step = 0.05, group = group_structure)
-min_containment   = input.float(0.70, 'Min Containment', minval = 0.40, maxval = 1.0, step = 0.05, group = group_structure)
+compression_pct   = 40.0
+calibration_len   = 500
+min_rotation      = 0.18
+touch_basis       = 'Wick reaches'
+min_touches       = input.int(2, 'Toques mínimos en cada borde del rango', minval = 1, maxval = 10, group = g_rng)
+touch_tolerance   = 0.10
+max_drift         = 0.45
+min_containment   = 0.70
 
-range_anchoring   = input.string('Extend to containment', 'Range Anchoring', options = ['Scan window only', 'Extend to containment'], group = group_range)
-anchor_lookback   = input.int(300, 'Anchor Lookback', minval = 20, maxval = 500, group = group_range)
-min_range_bars    = input.int(10, 'Minimum Range Bars', minval = 2, maxval = 200, group = group_range)
-absorb_overshoot  = input.bool(true, 'Absorb Overshoot', group = group_range)
-overshoot_tol     = input.float(0.25, 'Overshoot Tolerance (ATR)', minval = 0.05, maxval = 1.0, step = 0.05, group = group_range)
-break_confirm     = input.string('Close beyond', 'Break Confirmation', options = ['Close beyond', 'Wick beyond'], group = group_range)
-breakout_buffer   = input.float(0.15, 'Breakout Buffer (ATR)', minval = 0.0, maxval = 2.0, step = 0.05, group = group_range)
-merge_deviations  = input.bool(true, 'Merge Deviations', group = group_range)
-deviation_window  = input.int(10, 'Deviation Window', minval = 1, maxval = 100, group = group_range)
-cooldown_bars     = input.int(3, 'Cooldown Bars', minval = 0, maxval = 100, group = group_range)
-max_range_age     = input.int(0, 'Max Range Age', minval = 0, maxval = 2000, group = group_range)
+range_anchoring   = 'Extend to containment'
+anchor_lookback   = 300
+min_range_bars    = input.int(10, 'Duración mínima del rango (velas)', minval = 2, maxval = 200, group = g_rng)
+absorb_overshoot  = true
+overshoot_tol     = 0.25
+break_confirm     = 'Close beyond'
+breakout_buffer   = 0.15
+merge_deviations  = true
+deviation_window  = 10
+cooldown_bars     = 3
+max_range_age     = 0
 
-color_preset      = input.string('Custom', 'Color Preset', options = ['Classic', 'Aqua', 'Cosmic', 'Cyber', 'Neon', 'Custom'], group = group_visual)
-bullish_input     = input.color(#00A651, 'Bullish Color', group = group_visual)
-bearish_input     = input.color(#E4002B, 'Bearish Color', group = group_visual)
-range_input       = input.color(#F9A825, 'Range Color', group = group_visual)
-gradient_steps    = input.int(4, 'Gradient Steps', minval = 1, maxval = 10, group = group_visual)
-fill_transparency = input.int(93, 'Fill Transparency', minval = 50, maxval = 100, group = group_visual)
-show_equilibrium  = input.bool(true, 'Show Equilibrium Line', group = group_visual)
-show_quartiles    = input.bool(true, 'Show Quartile Levels', group = group_visual)
-show_range_label  = input.bool(true, 'Show Range Labels', group = group_visual)
-show_breakouts    = input.bool(true, 'Show Breakout Markers', group = group_visual)
-show_deviations   = input.bool(true, 'Show Deviation Markers', group = group_visual)
-label_text_size   = input.string('Small', 'Label Text Size', options = ['Tiny', 'Small', 'Normal', 'Large'], group = group_visual)
-marcas_sutiles    = input.bool(true, 'Marcas Breakout/Deviation sutiles (solo flecha)', group = group_visual)
-tam_marcas_txt    = input.string('Small', 'Tamaño flechas Breakout/Deviation', options = ['Tiny', 'Small', 'Normal', 'Large'], group = group_visual)
+color_preset      = 'Custom'
+bullish_input     = #00A651
+bearish_input     = #E4002B
+range_input       = input.color(#F9A825, 'Color del rango (neutral)', group = g_rng)
+gradient_steps    = 4
+fill_transparency = 93
+show_equilibrium  = true
+show_quartiles    = true
+show_range_label  = input.bool(true, 'Mostrar etiqueta del rango', group = g_rng)
+show_breakouts    = input.bool(true, 'Mostrar flechas de ruptura (breakout)', group = g_rng)
+show_deviations   = input.bool(true, 'Mostrar marcas de ruptura fallida (deviation)', group = g_rng)
+label_text_size   = 'Small'
+marcas_sutiles    = true
+tam_marcas_txt    = 'Small'
 
 [bullish_color, bearish_color] = switch color_preset
     'Classic' => [#00ff00, #ff0000]
@@ -992,6 +1011,10 @@ tf_nombre() =>
     r
 tf_graf = tf_nombre()
 seg_graf = timeframe.in_seconds()
+// Tamaño mínimo de un FVG de otra temporalidad de "mins" minutos
+min_gap(int mins) =>
+    fvg_min_atr * nz(atr_val) * math.sqrt(mins * 60.0 / math.max(seg_graf, 1))
+
 // El FVG del propio gráfico usa el interruptor y el color de su temporalidad si es una de las 5
 ver_graf = seg_graf == 60 ? mostrar_fvg1 : seg_graf == 300 ? mostrar_fvg5 : seg_graf == 900 ? mostrar_fvg15 : seg_graf == 3600 ? mostrar_fvg60 : seg_graf == 14400 ? mostrar_fvg240 : mostrar_fvg
 graf_alc = seg_graf == 60 ? fvg_alc_1 : seg_graf == 300 ? fvg_alc_5 : seg_graf == 900 ? fvg_alc_15 : seg_graf == 3600 ? fvg_alc_60 : seg_graf == 14400 ? fvg_alc_240 : fvg_alc_0
@@ -1038,7 +1061,7 @@ consumir_ltf(Zona z, float hi, float lo) =>
             z.borde := z.dir == 1 ? lo : hi
     completa
 
-procesar_ltf(array<Zona> fvg, array<Zona> ifvg, EstadoLTF s, array<float> ao, array<float> ah, array<float> al, array<float> ac, int tope) =>
+procesar_ltf(array<Zona> fvg, array<Zona> ifvg, EstadoLTF s, array<float> ao, array<float> ah, array<float> al, array<float> ac, int tope, float gap_min) =>
     retest = false
     if ah.size() > 0
         // En tiempo real la última vela de esa temporalidad aún no ha cerrado: solo sirve para el toque
@@ -1071,9 +1094,9 @@ procesar_ltf(array<Zona> fvg, array<Zona> ifvg, EstadoLTF s, array<float> ao, ar
                         else if consumir_ltf(z, h1, l1)
                             fvg.remove(i)
                 if not na(s.h2)
-                    if l1 > s.h2
+                    if l1 > s.h2 and l1 - s.h2 >= gap_min
                         fvg.push(Zona.new(bar_index, l1, s.h2, 1))
-                    else if h1 < s.l2
+                    else if h1 < s.l2 and s.l2 - h1 >= gap_min
                         fvg.push(Zona.new(bar_index, s.l2, h1, -1))
                     if fvg.size() > tope
                         fvg.shift()
@@ -1104,31 +1127,31 @@ usa240 = mostrar_fvg240 and not solo_su_graf and seg_graf > 14400
 retest_ifvg_m1 = false
 if usa1 and en_calc
     [o_, h_, l_, c_] = request.security_lower_tf(syminfo.tickerid, usa1 ? "1" : timeframe.period, [open, high, low, close])
-    retest_ifvg_m1 := procesar_ltf(fvg1, ifvg1, est1, o_, h_, l_, c_, 30)
+    retest_ifvg_m1 := procesar_ltf(fvg1, ifvg1, est1, o_, h_, l_, c_, 30, min_gap(1))
 retest_ifvg_m5 = false
 if seg_graf < 300
     retest_ifvg_m5 := retesteo(ifvg5)
 else if usa5 and en_calc
     [o_, h_, l_, c_] = request.security_lower_tf(syminfo.tickerid, usa5 ? "5" : timeframe.period, [open, high, low, close])
-    retest_ifvg_m5 := procesar_ltf(fvg5, ifvg5, est5, o_, h_, l_, c_, max_htf)
+    retest_ifvg_m5 := procesar_ltf(fvg5, ifvg5, est5, o_, h_, l_, c_, max_htf, min_gap(5))
 retest_ifvg_m15 = false
 if seg_graf < 900
     retest_ifvg_m15 := retesteo(ifvg15)
 else if usa15 and en_calc
     [o_, h_, l_, c_] = request.security_lower_tf(syminfo.tickerid, usa15 ? "15" : timeframe.period, [open, high, low, close])
-    retest_ifvg_m15 := procesar_ltf(fvg15, ifvg15, est15, o_, h_, l_, c_, max_htf)
+    retest_ifvg_m15 := procesar_ltf(fvg15, ifvg15, est15, o_, h_, l_, c_, max_htf, min_gap(15))
 retest_ifvg_h1 = false
 if seg_graf < 3600
     retest_ifvg_h1 := retesteo(ifvg60)
 else if usa60 and en_calc
     [o_, h_, l_, c_] = request.security_lower_tf(syminfo.tickerid, usa60 ? "60" : timeframe.period, [open, high, low, close])
-    retest_ifvg_h1 := procesar_ltf(fvg60, ifvg60, est60, o_, h_, l_, c_, max_htf)
+    retest_ifvg_h1 := procesar_ltf(fvg60, ifvg60, est60, o_, h_, l_, c_, max_htf, min_gap(60))
 retest_ifvg_h4 = false
 if seg_graf < 14400
     retest_ifvg_h4 := retesteo(ifvg240)
 else if usa240 and en_calc
     [o_, h_, l_, c_] = request.security_lower_tf(syminfo.tickerid, usa240 ? "240" : timeframe.period, [open, high, low, close])
-    retest_ifvg_h4 := procesar_ltf(fvg240, ifvg240, est240, o_, h_, l_, c_, max_htf)
+    retest_ifvg_h4 := procesar_ltf(fvg240, ifvg240, est240, o_, h_, l_, c_, max_htf, min_gap(240))
 
 retest_ifvg      = retest_ifvg_graf or retest_ifvg_m1 or retest_ifvg_m5 or retest_ifvg_m15 or retest_ifvg_h1 or retest_ifvg_h4
 if retest_ifvg
@@ -1157,8 +1180,8 @@ if cerrada and zonas.size() > 0
         else if consumir(z)
             zonas.remove(i)
 
-fvg_alcista = cerrada and low > high[2] and (low - high[2]) / close * 100 > fvg_min_pct
-fvg_bajista = cerrada and high < low[2] and (low[2] - high) / close * 100 > fvg_min_pct
+fvg_alcista = cerrada and low > high[2] and (low - high[2]) >= fvg_min_atr * nz(atr_val)
+fvg_bajista = cerrada and high < low[2] and (low[2] - high) >= fvg_min_atr * nz(atr_val)
 
 agregar_fvg(float techo, float suelo, int dir) =>
     zonas.push(Zona.new(bar_index - 2, techo, suelo, dir))
@@ -1225,15 +1248,16 @@ vela_de(int t) =>
         k += 1
     bar_index - k
 
-nueva_htf(array<Zona> arr, float techo, float suelo, int dir, int t_izq) =>
-    z = Zona.new(vela_de(t_izq), techo, suelo, dir)
-    // El FVG de M15/H1/H4 se conoce al cerrar su vela, pero se crea en la primera vela del gráfico
-    // de la siguiente: esa vela también puede haber entrado ya en el hueco, así que se consume ya
-    // con ella (antes se la saltaba y el FVG quedaba sin consumir aunque el precio hubiera pasado)
-    if not consumir(z)
-        arr.push(z)
-        if arr.size() > max_htf
-            arr.shift()
+nueva_htf(array<Zona> arr, float techo, float suelo, int dir, int t_izq, int mins) =>
+    if techo - suelo >= min_gap(mins)
+        z = Zona.new(vela_de(t_izq), techo, suelo, dir)
+        // El FVG de M15/H1/H4 se conoce al cerrar su vela, pero se crea en la primera vela del gráfico
+        // de la siguiente: esa vela también puede haber entrado ya en el hueco, así que se consume ya
+        // con ella (antes se la saltaba y el FVG quedaba sin consumir aunque el precio hubiera pasado)
+        if not consumir(z)
+            arr.push(z)
+            if arr.size() > max_htf
+                arr.shift()
 
 // Consumo progresivo igual que el resto de zonas. Devuelve si el precio tocó el 50% de alguna.
 // Misma regla de IFVG que en el gráfico: una sola vela atraviesa entero un FVG intacto (abre a un
@@ -1274,33 +1298,33 @@ if cerrada and timeframe.isintraday and en_calc
         if cambio5
             [a5, b5, a5_top, a5_bot, b5_bot, b5_top, t5] = request.security(syminfo.tickerid, "5", fvg_htf(), lookahead = barmerge.lookahead_on)
             if a5
-                nueva_htf(fvg5, a5_top, a5_bot, 1, t5)
+                nueva_htf(fvg5, a5_top, a5_bot, 1, t5, 5)
             else if b5
-                nueva_htf(fvg5, b5_top, b5_bot, -1, t5)
+                nueva_htf(fvg5, b5_top, b5_bot, -1, t5, 5)
     if mostrar_fvg15 and not solo_su_graf and seg_tf < 900
         toque50_m15 := actualizar_htf(fvg15, ifvg15)
         if cambio15
             [a15, b15, a15_top, a15_bot, b15_bot, b15_top, t15] = request.security(syminfo.tickerid, "15", fvg_htf(), lookahead = barmerge.lookahead_on)
             if a15
-                nueva_htf(fvg15, a15_top, a15_bot, 1, t15)
+                nueva_htf(fvg15, a15_top, a15_bot, 1, t15, 15)
             else if b15
-                nueva_htf(fvg15, b15_top, b15_bot, -1, t15)
+                nueva_htf(fvg15, b15_top, b15_bot, -1, t15, 15)
     if mostrar_fvg60 and not solo_su_graf and seg_tf < 3600
         toque50_h1 := actualizar_htf(fvg60, ifvg60)
         if cambio60
             [a60, b60, a60_top, a60_bot, b60_bot, b60_top, t60] = request.security(syminfo.tickerid, "60", fvg_htf(), lookahead = barmerge.lookahead_on)
             if a60
-                nueva_htf(fvg60, a60_top, a60_bot, 1, t60)
+                nueva_htf(fvg60, a60_top, a60_bot, 1, t60, 60)
             else if b60
-                nueva_htf(fvg60, b60_top, b60_bot, -1, t60)
+                nueva_htf(fvg60, b60_top, b60_bot, -1, t60, 60)
     if mostrar_fvg240 and not solo_su_graf and seg_tf < 14400
         toque50_h4 := actualizar_htf(fvg240, ifvg240)
         if cambio240
             [a240, b240, a240_top, a240_bot, b240_bot, b240_top, t240] = request.security(syminfo.tickerid, "240", fvg_htf(), lookahead = barmerge.lookahead_on)
             if a240
-                nueva_htf(fvg240, a240_top, a240_bot, 1, t240)
+                nueva_htf(fvg240, a240_top, a240_bot, 1, t240, 240)
             else if b240
-                nueva_htf(fvg240, b240_top, b240_bot, -1, t240)
+                nueva_htf(fvg240, b240_top, b240_bot, -1, t240, 240)
 
 // --- Niveles clave: altos y bajos relevantes de H4 (vigentes hasta que un cierre los rompe) ---
 type Nivel
@@ -1456,6 +1480,8 @@ smt_marcar(int x1, float y1, int xv, string txt, color col, bool altos) =>
     if smt_textos.size() > smt_max
         smt_textos.shift().delete()
 
+var int smt_ult_bar = na
+var int smt_ult_dir = 0
 smt_bajista = false
 smt_alcista = false
 if barstate.isconfirmed
@@ -1465,6 +1491,8 @@ if barstate.isconfirmed
         d2 = cerca and smt_ok2 and smt_diverge(smt_ph, smt_ph_y, smt_h2, smt_ph_c2, true)
         if d1 or d2
             smt_bajista := true
+            smt_ult_bar := bar_index
+            smt_ult_dir := -1
             mnq_barre = smt_ph > smt_ph_y
             xv = mnq_barre ? smt_x : bar_index + int(d1 ? smt_hb1 : smt_hb2)
             t1 = smt_texto(smt_t1, smt_h1, smt_ph_c1)
@@ -1480,6 +1508,8 @@ if barstate.isconfirmed
         d2 = cerca and smt_ok2 and smt_diverge(smt_pl, smt_pl_y, smt_l2, smt_pl_c2, false)
         if d1 or d2
             smt_alcista := true
+            smt_ult_bar := bar_index
+            smt_ult_dir := 1
             mnq_barre = smt_pl < smt_pl_y
             xv = mnq_barre ? smt_x : bar_index + int(d1 ? smt_lb1 : smt_lb2)
             t1 = smt_texto(smt_t1, smt_l1, smt_pl_c1)
@@ -1721,6 +1751,131 @@ if barstate.islast
         dib_lineas.pop().delete()
     while dib_letreros.size() > uso.get(2)
         dib_letreros.pop().delete()
+
+// ─────────────────────────────
+// PANEL DE INFORMACIÓN
+// Resumen para decidir de un vistazo: bias de H4 y H1, estructura del gráfico, sesión de Nueva York,
+// FVG más cercano por arriba y por abajo y última SMT. Solo informa: no da señales.
+// ─────────────────────────────
+
+// Bias de una temporalidad superior: dirección de la última ruptura de estructura (cierre por encima
+// del último alto relevante = alcista; por debajo del último bajo relevante = bajista). Se usa la vela
+// ya cerrada de esa temporalidad, así que no repinta.
+bias_htf() =>
+    var int t = 0
+    var float uh = na
+    var float ul = na
+    ph = ta.pivothigh(high, 3, 3)
+    pl = ta.pivotlow(low, 3, 3)
+    if not na(ph)
+        uh := ph
+    if not na(pl)
+        ul := pl
+    if not na(uh) and close > uh
+        t := 1
+        uh := na
+    else if not na(ul) and close < ul
+        t := -1
+        ul := na
+    t[1]
+
+// FVG más cercano de una lista, por arriba (arriba = true) o por abajo, mirando solo su parte sin tocar.
+// Devuelve [distancia, nombre]; distancia 0 si el precio está dentro.
+fvg_cercano(array<Zona> arr, string nom, bool arriba) =>
+    float mejor = na
+    string txt = ""
+    for z in arr
+        lo = z.dir == 1 or na(z.borde) ? z.suelo : z.borde
+        hi = z.dir == -1 or na(z.borde) ? z.techo : z.borde
+        d = close >= lo and close <= hi ? 0.0 : arriba ? (lo > close ? lo - close : na) : (hi < close ? close - hi : na)
+        if not na(d) and (na(mejor) or d < mejor)
+            mejor := d
+            txt := nom + (z.dir == 1 ? " alcista" : " bajista")
+    [mejor, txt]
+
+fila(table t, int f, string a, string b, color cb, string tam) =>
+    t.cell(0, f, a, text_color=#424242, text_size=tam, text_halign=text.align_left)
+    t.cell(1, f, b, text_color=cb, text_size=tam, text_halign=text.align_left)
+txt_bias(int b) =>
+    b == 1 ? "▲ Alcista" : b == -1 ? "▼ Bajista" : "—"
+col_bias(int b) =>
+    b == 1 ? color_alcista : b == -1 ? color_bajista : #757575
+txt_d(float d, string n) =>
+    na(d) ? "—" : d == 0 ? "Precio dentro de " + n : n + " · a " + str.tostring(d, format.mintick) + " pts"
+col_n(string n) =>
+    str.contains(n, "alcista") ? color_alcista : str.contains(n, "bajista") ? color_bajista : #757575
+
+var table panel = na
+if barstate.islast and mostrar_panel
+    pos = panel_pos == "Arriba izquierda" ? position.top_left : panel_pos == "Abajo derecha" ? position.bottom_right : panel_pos == "Abajo izquierda" ? position.bottom_left : position.top_right
+    tam = panel_tam == "Muy pequeño" ? size.tiny : panel_tam == "Normal" ? size.normal : size.small
+    if na(panel)
+        panel := table.new(pos, 2, 7, bgcolor=color.new(color.white, 8), border_color=color.new(#9E9E9E, 60), border_width=1, frame_color=color.new(#9E9E9E, 30), frame_width=1)
+    panel.clear(0, 0, 1, 6)
+    // Bias H4 y H1 (solo se piden en la última vela)
+    int b240 = 0
+    int b60 = 0
+    if timeframe.isintraday and seg_graf < 14400
+        b240 := request.security(syminfo.tickerid, "240", bias_htf(), lookahead=barmerge.lookahead_on)
+    if timeframe.isintraday and seg_graf < 3600
+        b60 := request.security(syminfo.tickerid, "60", bias_htf(), lookahead=barmerge.lookahead_on)
+    fila(panel, 0, "Bias H4", seg_graf < 14400 ? txt_bias(b240) : "(gráfico ≥ H4)", col_bias(b240), tam)
+    fila(panel, 1, "Bias H1", seg_graf < 3600 ? txt_bias(b60) : "(gráfico ≥ H1)", col_bias(b60), tam)
+    // Estructura del gráfico y último CHoCH/BOS
+    ev = ult_evento_txt.get(0)
+    ev_txt = ev == "" ? "" : " · " + ev + " hace " + str.tostring(bar_index - ult_evento_bar.get(0)) + " velas"
+    fila(panel, 2, "Estructura " + tf_graf, txt_bias(tendencia) + ev_txt, col_bias(tendencia), tam)
+    // Sesión de Nueva York (apertura 9:30 y cierre 16:00 de Nueva York), en hora de Madrid
+    tz = "America/New_York"
+    m_ny = hour(timenow, tz) * 60 + minute(timenow, tz)
+    dsem = dayofweek(timenow, tz)
+    t_ap = timestamp(tz, year(timenow, tz), month(timenow, tz), dayofmonth(timenow, tz), 9, 30)
+    t_ci = timestamp(tz, year(timenow, tz), month(timenow, tz), dayofmonth(timenow, tz), 16, 0)
+    finde = dsem == dayofweek.saturday or dsem == dayofweek.sunday
+    falta = 570 - m_ny
+    ses = finde ? "Cerrada (fin de semana)" : m_ny < 570 ? "Abre a las " + str.format_time(t_ap, "HH:mm", "Europe/Madrid") + " (en " + (falta >= 60 ? str.tostring(int(falta / 60)) + " h " : "") + str.tostring(falta % 60) + " min)" : m_ny < 960 ? "● Abierta (cierra " + str.format_time(t_ci, "HH:mm", "Europe/Madrid") + ")" : "Cerrada (abre mañana " + str.format_time(t_ap, "HH:mm", "Europe/Madrid") + ")"
+    fila(panel, 3, "Sesión NY", ses, not finde and m_ny >= 570 and m_ny < 960 ? color_alcista : #424242, tam)
+    // FVG más cercano por arriba y por abajo (entre los que se ven en el gráfico)
+    float d_ar = na
+    string n_ar = ""
+    float d_ab = na
+    string n_ab = ""
+    if ver_graf
+        [d1, t1] = fvg_cercano(zonas, "FVG " + tf_graf, true)
+        [d2, t2] = fvg_cercano(ifvgs, "IFVG " + tf_graf, true)
+        [d3, t3] = fvg_cercano(zonas, "FVG " + tf_graf, false)
+        [d4, t4] = fvg_cercano(ifvgs, "IFVG " + tf_graf, false)
+        if not na(d1) and (na(d_ar) or d1 < d_ar)
+            d_ar := d1
+            n_ar := t1
+        if not na(d2) and (na(d_ar) or d2 < d_ar)
+            d_ar := d2
+            n_ar := t2
+        if not na(d3) and (na(d_ab) or d3 < d_ab)
+            d_ab := d3
+            n_ab := t3
+        if not na(d4) and (na(d_ab) or d4 < d_ab)
+            d_ab := d4
+            n_ab := t4
+    if not solo_su_graf
+        for k = 0 to 4
+            arr = k == 0 ? fvg1 : k == 1 ? fvg5 : k == 2 ? fvg15 : k == 3 ? fvg60 : fvg240
+            nom = k == 0 ? "FVG M1" : k == 1 ? "FVG M5" : k == 2 ? "FVG M15" : k == 3 ? "FVG H1" : "FVG H4"
+            ver = k == 0 ? mostrar_fvg1 : k == 1 ? mostrar_fvg5 : k == 2 ? mostrar_fvg15 : k == 3 ? mostrar_fvg60 : mostrar_fvg240
+            if ver
+                [da, ta_] = fvg_cercano(arr, nom, true)
+                [db, tb] = fvg_cercano(arr, nom, false)
+                if not na(da) and (na(d_ar) or da < d_ar)
+                    d_ar := da
+                    n_ar := ta_
+                if not na(db) and (na(d_ab) or db < d_ab)
+                    d_ab := db
+                    n_ab := tb
+    fila(panel, 4, "FVG por arriba", txt_d(d_ar, n_ar), col_n(n_ar), tam)
+    fila(panel, 5, "FVG por abajo", txt_d(d_ab, n_ab), col_n(n_ab), tam)
+    // Última SMT (si está activada)
+    smt_txt = not mostrar_smt ? "(apagada)" : na(smt_ult_bar) ? "Ninguna reciente" : (smt_ult_dir == 1 ? "▲ Alcista" : "▼ Bajista") + " hace " + str.tostring(bar_index - smt_ult_bar) + " velas"
+    fila(panel, 6, "SMT", smt_txt, not mostrar_smt or na(smt_ult_bar) ? #757575 : smt_ult_dir == 1 ? smt_col_alc : smt_col_baj, tam)
 
 // ─────────────────────────────
 // ALERTAS
