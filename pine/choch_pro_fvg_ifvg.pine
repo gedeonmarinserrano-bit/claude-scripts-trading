@@ -17,6 +17,18 @@ panel_tam     = input.string("Pequeño", "Tamaño del texto", options=["Muy pequ
 // Movimiento esperado del día = índice de volatilidad / 16 (16 ≈ raíz de 252 sesiones al año)
 mostrar_vix   = input.bool(true, "Movimiento esperado del día (VIX / 16)", group=g_panel)
 vix_sym       = input.symbol("CBOE:VIX", "Índice de volatilidad (para el Nasdaq también vale CBOE:VXN)", group=g_panel)
+info_sesiones = input.bool(true, "Rangos de Asia y Londres (alto, bajo y si se han barrido)", group=g_panel)
+info_atr      = input.bool(true, "Rango de hoy frente al ATR diario", group=g_panel)
+info_apertura = input.bool(true, "Precio frente a la apertura del día (premium / descuento)", group=g_panel)
+info_liquidez = input.bool(true, "Liquidez más cercana por arriba y por abajo", group=g_panel)
+noticias      = input.string("", "Noticias de hoy (texto libre, p. ej. «CPI 14:30»; vacío = no se muestra)", group=g_panel)
+
+// Información extra en el gráfico: cada una se puede quitar y poner
+g_extra       = "Información en el gráfico"
+info_killzone = input.bool(true, "Fondo suave en las sesiones de Asia, Londres y apertura de Nueva York", group=g_extra)
+info_eq       = input.bool(true, "Línea del 50 % del día anterior (por encima premium, por debajo descuento)", group=g_extra)
+info_eqhl     = input.bool(true, "Altos y bajos iguales sin barrer (EQH / EQL)", group=g_extra)
+info_barridos = input.bool(true, "Marcar barridos de niveles (pasa el nivel y cierra de vuelta)", group=g_extra)
 
 // Interruptores de FVG por temporalidad (arriba en Ajustes): solo se ven y se calculan los activados.
 // Cada interruptor muestra los FVG y los IFVG de esa temporalidad, sea más alta o más baja que el gráfico.
@@ -1376,6 +1388,117 @@ ver_pd = mostrar_pd and timeframe.isintraday and not timeframe.change("D")
 plot(ver_pd ? pdh : na, "Alto día anterior", color=color.new(col_niveles, 30), style=plot.style_linebr, linewidth=1)
 plot(ver_pd ? pdl : na, "Bajo día anterior", color=color.new(col_niveles, 30), style=plot.style_linebr, linewidth=1)
 
+// --- Línea del 50 % del día anterior: por encima = premium (caro), por debajo = descuento (barato) ---
+plot(info_eq and timeframe.isintraday and not timeframe.change("D") ? (pdh + pdl) / 2 : na, "50 % día anterior", color=color.new(#7E57C2, 25), style=plot.style_linebr, linewidth=1)
+
+// --- Sesiones (hora de Nueva York): Asia 20:00-00:00, Londres 02:00-05:00, apertura NY 09:30-11:00 ---
+ses_ok  = timeframe.isintraday and seg_graf <= 3600
+en_asia = ses_ok and not na(time(timeframe.period, "2000-0000", "America/New_York"))
+en_lon  = ses_ok and not na(time(timeframe.period, "0200-0500", "America/New_York"))
+en_nyk  = ses_ok and not na(time(timeframe.period, "0930-1100", "America/New_York"))
+bgcolor(info_killzone ? (en_asia ? color.new(#7E57C2, 94) : en_lon ? color.new(#1E88E5, 94) : en_nyk ? color.new(#F9A825, 90) : na) : na, title="Sesiones")
+
+var float asia_h = na
+var float asia_l = na
+var float lon_h  = na
+var float lon_l  = na
+var bool  asia_bh = false   // alto de Asia ya barrido
+var bool  asia_bl = false
+var bool  lon_bh  = false
+var bool  lon_bl  = false
+if en_asia
+    if not en_asia[1]
+        asia_h  := high
+        asia_l  := low
+        asia_bh := false
+        asia_bl := false
+    else
+        asia_h := math.max(asia_h, high)
+        asia_l := math.min(asia_l, low)
+else if not na(asia_h)
+    asia_bh := asia_bh or high > asia_h
+    asia_bl := asia_bl or low < asia_l
+if en_lon
+    if not en_lon[1]
+        lon_h  := high
+        lon_l  := low
+        lon_bh := false
+        lon_bl := false
+    else
+        lon_h := math.max(lon_h, high)
+        lon_l := math.min(lon_l, low)
+else if not na(lon_h)
+    lon_bh := lon_bh or high > lon_h
+    lon_bl := lon_bl or low < lon_l
+
+// --- Barridos: la vela pasa un nivel relevante y cierra de vuelta al otro lado (manipulación) ---
+var array<bool>  barrido_hecho = array.new<bool>(6, false)
+var array<label> barrido_lbls  = array.new<label>()
+if timeframe.change("D")
+    barrido_hecho.fill(false)
+if en_asia and not en_asia[1]
+    barrido_hecho.set(2, false)
+    barrido_hecho.set(3, false)
+if en_lon and not en_lon[1]
+    barrido_hecho.set(4, false)
+    barrido_hecho.set(5, false)
+if info_barridos and cerrada and ses_ok and en_calc
+    for k = 0 to 5
+        // 0-1 día anterior, 2-3 Asia (ya cerrada), 4-5 Londres (ya cerrada); pares = altos, impares = bajos
+        nv = k == 0 ? pdh : k == 1 ? pdl : k == 2 ? asia_h : k == 3 ? asia_l : k == 4 ? lon_h : lon_l
+        vale = k < 2 or (k < 4 ? not en_asia : not en_lon)
+        alto = k % 2 == 0
+        if vale and not na(nv) and not barrido_hecho.get(k) and (alto ? high > nv and close < nv : low < nv and close > nv)
+            barrido_hecho.set(k, true)
+            nom = (k < 2 ? (alto ? "PDH" : "PDL") : k < 4 ? (alto ? "Alto Asia" : "Bajo Asia") : (alto ? "Alto Londres" : "Bajo Londres"))
+            barrido_lbls.push(label.new(bar_index, alto ? high : low, "Barrido " + nom, style=alto ? label.style_label_down : label.style_label_up, color=color.new(color.white, 100), textcolor=#6A1B9A, size=size.tiny))
+            if barrido_lbls.size() > 20
+                barrido_lbls.shift().delete()
+
+// --- Altos y bajos iguales sin barrer (EQH / EQL): dos pivotes casi al mismo precio = liquidez ---
+type Igual
+    line  ln
+    label lb
+    float precio
+    int   dir   // 1 = altos iguales, -1 = bajos iguales
+var array<Igual> iguales = array.new<Igual>()
+var float eq_ph = na
+var int   eq_phx = na
+var float eq_pl = na
+var int   eq_plx = na
+eq_tol = nz(atr_val) * 0.1
+ph_eq = ta.pivothigh(high, periodo, periodo)
+pl_eq = ta.pivotlow(low, periodo, periodo)
+if info_eqhl and en_calc and timeframe.isintraday
+    if not na(ph_eq)
+        x = bar_index - periodo
+        if not na(eq_ph) and math.abs(ph_eq - eq_ph) <= eq_tol and x - eq_phx <= 150
+            nv = math.max(ph_eq, eq_ph)
+            iguales.push(Igual.new(line.new(eq_phx, nv, bar_index, nv, color=color.new(#6A1B9A, 20), style=line.style_dotted, width=1), label.new(eq_phx, nv, "EQH", style=label.style_label_down, color=color.new(color.white, 100), textcolor=#6A1B9A, size=size.tiny), nv, 1))
+        eq_ph  := ph_eq
+        eq_phx := x
+    if not na(pl_eq)
+        x = bar_index - periodo
+        if not na(eq_pl) and math.abs(pl_eq - eq_pl) <= eq_tol and x - eq_plx <= 150
+            nv = math.min(pl_eq, eq_pl)
+            iguales.push(Igual.new(line.new(eq_plx, nv, bar_index, nv, color=color.new(#6A1B9A, 20), style=line.style_dotted, width=1), label.new(eq_plx, nv, "EQL", style=label.style_label_up, color=color.new(color.white, 100), textcolor=#6A1B9A, size=size.tiny), nv, -1))
+        eq_pl  := pl_eq
+        eq_plx := x
+    if iguales.size() > 8
+        q = iguales.shift()
+        q.ln.delete()
+        q.lb.delete()
+    // Se alargan hasta la vela actual y desaparecen cuando el precio las barre
+    if iguales.size() > 0
+        for i = iguales.size() - 1 to 0
+            q = iguales.get(i)
+            if q.dir == 1 ? high > q.precio : low < q.precio
+                q.ln.delete()
+                q.lb.delete()
+                iguales.remove(i)
+            else
+                q.ln.set_x2(bar_index)
+
 // ─────────────────────────────
 // SMT: DIVERGENCIAS ENTRE ÍNDICES (basado en "SMT Divergences [LuxAlgo]" © LuxAlgo, CC BY-NC-SA 4.0)
 // Mejoras sobre el original:
@@ -1808,13 +1931,17 @@ txt_d(float d, string n) =>
 col_n(string n) =>
     str.contains(n, "alcista") ? color_alcista : str.contains(n, "bajista") ? color_bajista : #757575
 
+ses_txt(float h, float l, bool en, bool bh, bool bl) =>
+    na(h) ? "—" : str.tostring(l, format.mintick) + " – " + str.tostring(h, format.mintick) + (en ? " (en curso)" : bh and bl ? " · barridos los dos" : bh ? " · barrido el alto" : bl ? " · barrido el bajo" : " · sin barrer")
+
 var table panel = na
 if barstate.islast and mostrar_panel
     pos = panel_pos == "Arriba izquierda" ? position.top_left : panel_pos == "Abajo derecha" ? position.bottom_right : panel_pos == "Abajo izquierda" ? position.bottom_left : position.top_right
     tam = panel_tam == "Muy pequeño" ? size.tiny : panel_tam == "Normal" ? size.normal : size.small
     if na(panel)
-        panel := table.new(pos, 2, 8, bgcolor=color.new(color.white, 8), border_color=color.new(#9E9E9E, 60), border_width=1, frame_color=color.new(#9E9E9E, 30), frame_width=1)
-    panel.clear(0, 0, 1, 7)
+        panel := table.new(pos, 2, 14, bgcolor=color.new(color.white, 8), border_color=color.new(#9E9E9E, 60), border_width=1, frame_color=color.new(#9E9E9E, 30), frame_width=1)
+    panel.clear(0, 0, 1, 13)
+    int f = 0
     // Bias H4 y H1 (solo se piden en la última vela)
     int b240 = 0
     int b60 = 0
@@ -1822,12 +1949,15 @@ if barstate.islast and mostrar_panel
         b240 := request.security(syminfo.tickerid, "240", bias_htf(), lookahead=barmerge.lookahead_on)
     if timeframe.isintraday and seg_graf < 3600
         b60 := request.security(syminfo.tickerid, "60", bias_htf(), lookahead=barmerge.lookahead_on)
-    fila(panel, 0, "Bias H4", seg_graf < 14400 ? txt_bias(b240) : "(gráfico ≥ H4)", col_bias(b240), tam)
-    fila(panel, 1, "Bias H1", seg_graf < 3600 ? txt_bias(b60) : "(gráfico ≥ H1)", col_bias(b60), tam)
+    fila(panel, f, "Bias H4", seg_graf < 14400 ? txt_bias(b240) : "(gráfico ≥ H4)", col_bias(b240), tam)
+    f += 1
+    fila(panel, f, "Bias H1", seg_graf < 3600 ? txt_bias(b60) : "(gráfico ≥ H1)", col_bias(b60), tam)
+    f += 1
     // Estructura del gráfico y último CHoCH/BOS
     ev = ult_evento_txt.get(0)
     ev_txt = ev == "" ? "" : " · " + ev + " hace " + str.tostring(bar_index - ult_evento_bar.get(0)) + " velas"
-    fila(panel, 2, "Estructura " + tf_graf, txt_bias(tendencia) + ev_txt, col_bias(tendencia), tam)
+    fila(panel, f, "Estructura " + tf_graf, txt_bias(tendencia) + ev_txt, col_bias(tendencia), tam)
+    f += 1
     // Sesión de Nueva York (apertura 9:30 y cierre 16:00 de Nueva York), en hora de Madrid
     tz = "America/New_York"
     m_ny = hour(timenow, tz) * 60 + minute(timenow, tz)
@@ -1837,7 +1967,8 @@ if barstate.islast and mostrar_panel
     finde = dsem == dayofweek.saturday or dsem == dayofweek.sunday
     falta = 570 - m_ny
     ses = finde ? "Cerrada (fin de semana)" : m_ny < 570 ? "Abre a las " + str.format_time(t_ap, "HH:mm", "Europe/Madrid") + " (en " + (falta >= 60 ? str.tostring(int(falta / 60)) + " h " : "") + str.tostring(falta % 60) + " min)" : m_ny < 960 ? "● Abierta (cierra " + str.format_time(t_ci, "HH:mm", "Europe/Madrid") + ")" : "Cerrada (abre mañana " + str.format_time(t_ap, "HH:mm", "Europe/Madrid") + ")"
-    fila(panel, 3, "Sesión NY", ses, not finde and m_ny >= 570 and m_ny < 960 ? color_alcista : #424242, tam)
+    fila(panel, f, "Sesión NY", ses, not finde and m_ny >= 570 and m_ny < 960 ? color_alcista : #424242, tam)
+    f += 1
     // FVG más cercano por arriba y por abajo (entre los que se ven en el gráfico)
     float d_ar = na
     string n_ar = ""
@@ -1874,11 +2005,14 @@ if barstate.islast and mostrar_panel
                 if not na(db) and (na(d_ab) or db < d_ab)
                     d_ab := db
                     n_ab := tb
-    fila(panel, 4, "FVG por arriba", txt_d(d_ar, n_ar), col_n(n_ar), tam)
-    fila(panel, 5, "FVG por abajo", txt_d(d_ab, n_ab), col_n(n_ab), tam)
+    fila(panel, f, "FVG por arriba", txt_d(d_ar, n_ar), col_n(n_ar), tam)
+    f += 1
+    fila(panel, f, "FVG por abajo", txt_d(d_ab, n_ab), col_n(n_ab), tam)
+    f += 1
     // Última SMT (si está activada)
     smt_txt = not mostrar_smt ? "(apagada)" : na(smt_ult_bar) ? "Ninguna reciente" : (smt_ult_dir == 1 ? "▲ Alcista" : "▼ Bajista") + " hace " + str.tostring(bar_index - smt_ult_bar) + " velas"
-    fila(panel, 6, "SMT", smt_txt, not mostrar_smt or na(smt_ult_bar) ? #757575 : smt_ult_dir == 1 ? smt_col_alc : smt_col_baj, tam)
+    fila(panel, f, "SMT", smt_txt, not mostrar_smt or na(smt_ult_bar) ? #757575 : smt_ult_dir == 1 ? smt_col_alc : smt_col_baj, tam)
+    f += 1
     // Movimiento esperado del día: VIX del cierre anterior / 16, en % y en puntos sobre el cierre
     // anterior del gráfico, y cuánto de ese movimiento lleva ya el rango de hoy
     if mostrar_vix
@@ -1888,7 +2022,56 @@ if barstate.islast and mostrar_panel
         pts = c_ant * pct / 100
         usado = pts > 0 ? (h_hoy - l_hoy) / pts * 100 : na
         vix_txt = na(vix_ant) ? "Sin datos del VIX" : "±" + str.tostring(pct, "#.##") + " % · ±" + str.tostring(pts, "#") + " pts (VIX " + str.tostring(vix_ant, "#.#") + ") · hoy " + str.tostring(h_hoy - l_hoy, "#") + " pts = " + str.tostring(usado, "#") + " %"
-        fila(panel, 7, "Mov. esperado", vix_txt, na(usado) ? #757575 : usado >= 100 ? color_bajista : usado >= 75 ? #EF6C00 : #424242, tam)
+        fila(panel, f, "Mov. esperado", vix_txt, na(usado) ? #757575 : usado >= 100 ? color_bajista : usado >= 75 ? #EF6C00 : #424242, tam)
+        f += 1
+
+    // Rangos de Asia y Londres
+    if info_sesiones and ses_ok
+        fila(panel, f, "Asia", ses_txt(asia_h, asia_l, en_asia, asia_bh, asia_bl), #5E35B1, tam)
+        f += 1
+        fila(panel, f, "Londres", ses_txt(lon_h, lon_l, en_lon, lon_bh, lon_bl), #1E88E5, tam)
+        f += 1
+    // Datos diarios para el ATR y la apertura
+    if info_atr or info_apertura
+        [d_open, d_atr, d_h, d_l] = request.security(syminfo.tickerid, "D", [open, ta.atr(14)[1], high, low], lookahead=barmerge.lookahead_on)
+        if info_atr
+            rng = d_h - d_l
+            uso_atr = d_atr > 0 ? rng / d_atr * 100 : na
+            fila(panel, f, "Rango hoy / ATR D", str.tostring(rng, "#") + " de " + str.tostring(d_atr, "#") + " pts (" + str.tostring(uso_atr, "#") + " %)", na(uso_atr) ? #757575 : uso_atr >= 100 ? color_bajista : uso_atr >= 75 ? #EF6C00 : #424242, tam)
+            f += 1
+        if info_apertura
+            dif = close - d_open
+            fila(panel, f, "vs apertura del día", (dif >= 0 ? "Por encima +" : "Por debajo ") + str.tostring(dif, format.mintick) + " pts" + (dif >= 0 ? " · premium" : " · descuento"), dif >= 0 ? color_bajista : color_alcista, tam)
+            f += 1
+    // Liquidez más cercana: altos/bajos del día anterior, de Asia y Londres sin barrer, de H4 y EQH/EQL
+    if info_liquidez
+        float l_ar = na
+        string n_lar = ""
+        float l_ab = na
+        string n_lab = ""
+        cand_p = array.from(pdh, pdl, asia_bh ? na : asia_h, asia_bl ? na : asia_l, lon_bh ? na : lon_h, lon_bl ? na : lon_l)
+        cand_n = array.from("PDH", "PDL", "Alto Asia", "Bajo Asia", "Alto Londres", "Bajo Londres")
+        for nv in niveles_h4
+            cand_p.push(nv.precio)
+            cand_n.push(nv.dir == 1 ? "Alto H4" : "Bajo H4")
+        for q in iguales
+            cand_p.push(q.precio)
+            cand_n.push(q.dir == 1 ? "EQH" : "EQL")
+        for i = 0 to cand_p.size() - 1
+            pv = cand_p.get(i)
+            if not na(pv)
+                if pv > close and (na(l_ar) or pv < l_ar)
+                    l_ar := pv
+                    n_lar := cand_n.get(i)
+                if pv < close and (na(l_ab) or pv > l_ab)
+                    l_ab := pv
+                    n_lab := cand_n.get(i)
+        liq_txt = (na(l_ar) ? "↑ —" : "↑ " + n_lar + " " + str.tostring(l_ar, format.mintick) + " (+" + str.tostring(l_ar - close, format.mintick) + ")") + "  ·  " + (na(l_ab) ? "↓ —" : "↓ " + n_lab + " " + str.tostring(l_ab, format.mintick) + " (−" + str.tostring(close - l_ab, format.mintick) + ")")
+        fila(panel, f, "Liquidez", liq_txt, #424242, tam)
+        f += 1
+    if noticias != ""
+        fila(panel, f, "Noticias hoy", noticias, #EF6C00, tam)
+        f += 1
 
 // ─────────────────────────────
 // ALERTAS
