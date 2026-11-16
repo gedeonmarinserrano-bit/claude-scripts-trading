@@ -42,10 +42,10 @@ mostrar_fvg     = input.bool(true, "FVG del gráfico si no es ninguna de las 5 (
 // Activado: cada temporalidad solo se ve en su propio gráfico (los FVG de H4 solo en el gráfico de H4,
 // los de M15 solo en el de M15…) y no se mezclan; los interruptores dicen en qué gráficos se ven.
 solo_su_graf    = input.bool(true, "Cada FVG solo en el gráfico de su temporalidad (sin mezclar)", group=g_fvgtf)
-max_htf         = input.int(10, "Máx. FVG por temporalidad (M5, M15, H1, H4)", minval=1, maxval=50, group=g_fvgtf)
+max_htf         = input.int(25, "Máx. FVG por temporalidad (M5, M15, H1, H4)", minval=1, maxval=60, group=g_fvgtf)
 // Las zonas muy lejos del precio no aportan en intradía y son las que más tiempo de cálculo cuestan
-max_dibujadas   = input.int(35, "Máx. zonas dibujadas a la vez (menos = más rápido)", minval=5, maxval=120, group=g_fvgtf)
-dist_max        = input.float(1.0, "Dibujar solo zonas a menos de este % del precio (0 = todas)", minval=0, step=0.5, group=g_fvgtf)
+max_dibujadas   = input.int(100, "Máx. zonas dibujadas a la vez (menos = más rápido)", minval=5, maxval=150, group=g_fvgtf)
+dist_max        = input.float(0.0, "Dibujar solo zonas a menos de este % del precio (0 = todas)", minval=0, step=0.5, group=g_fvgtf)
 
 // ─────────────────────────────
 // CONFIGURACIÓN
@@ -71,7 +71,7 @@ en_calc      = bar_index >= last_bar_index - velas_calc
 // Los FVG más pequeños que esto no se marcan (ruido de 1-2 ticks). Se mide con el ATR para que valga en
 // cualquier temporalidad; en otras temporalidades se escala con la raíz de su duración.
 fvg_min_atr     = input.float(0.15, "Tamaño mínimo FVG (× ATR; 0 = todos)", minval=0, step=0.05, group="FVG")
-max_zonas       = input.int(20, "Máx. zonas vigiladas", minval=1, maxval=250, group="FVG")
+max_zonas       = input.int(50, "Máx. zonas vigiladas", minval=1, maxval=250, group="FVG")
 // Parte consumida: el mismo gris para todas las zonas y temporalidades
 color_consumido = input.color(color.new(#B0B0B0, 75), "Parte consumida (todas las zonas)", group="FVG")
 
@@ -81,7 +81,7 @@ g_ob            = "Order Blocks"
 mostrar_ob      = input.bool(true, "Mostrar Order Blocks", group=g_ob)
 ob_solo_choch   = input.bool(false, "Solo los que originan un CHoCH (no los de BOS)", group=g_ob)
 ob_cuerpo       = input.bool(false, "Usar solo el cuerpo de la vela (sin mechas)", group=g_ob)
-max_ob          = input.int(10, "Máx. Order Blocks vigentes", minval=1, maxval=50, group=g_ob)
+max_ob          = input.int(25, "Máx. Order Blocks vigentes", minval=1, maxval=60, group=g_ob)
 ob_imb_velas    = input.int(1, "El imbalance (FVG) debe empezar en las N velas siguientes al OB", minval=1, maxval=5, group=g_ob)
 col_ob_alc      = input.color(#1565C0, "OB alcista (demanda)", group=g_ob)
 col_ob_baj      = input.color(#EF6C00, "OB bajista (oferta)", group=g_ob)
@@ -919,7 +919,8 @@ crear_ob(int dir, int bar_desde) =>
     hay_imbalance = false
     if idx >= 2
         for j = idx to math.max(idx - ob_imb_velas + 1, 2)
-            if dir == 1 ? low[j - 2] > high[j] : high[j - 2] < low[j]
+            // El imbalance tiene que superar el tamaño mínimo de FVG: un hueco de 1-2 ticks no hace relevante el OB
+            if dir == 1 ? low[j - 2] - high[j] >= fvg_min_atr * nz(atr_val) and low[j - 2] > high[j] : low[j] - high[j - 2] >= fvg_min_atr * nz(atr_val) and high[j - 2] < low[j]
                 hay_imbalance := true
     if hay_imbalance
         crear_caja_ob(dir, idx)
@@ -1782,7 +1783,7 @@ dibujar_zona(int x1_zona, int x2, float techo, float suelo, int dir, float borde
     if not na(borde)
         pintar_parte(Pieza.new(x1, x2, dir == 1 ? techo : borde, dir == 1 ? borde : suelo), colgris, dir)
     // Letrero solo al final de la zona (junto a la vela actual), a la altura de la parte sin tocar
-    if txt != "" and letreros.size() < 30
+    if txt != "" and letreros.size() < 60
         letreros.push(Letrero.new(x2, (ctop + cbot) / 2, txt, coltxt, true, fondo))
     // Línea del 50% (FVG de M15, H1 y H4), también recortada
     if not na(colmitad)
