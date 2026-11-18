@@ -1454,8 +1454,9 @@ else if not na(lon_h)
 // --- Máximos y mínimos de cada sesión, con su nombre ---
 // Durante la sesión la línea sigue al máximo/mínimo según se forma. Cuando termina, se alarga hasta la
 // vela actual. Si el precio la supera (manipulada), no se borra: queda en gris con el nombre «Máximo/
-// Mínimo manipulado …» y se traza una línea nueva en el nuevo extremo, que sigue al precio durante 5
-// velas y después queda fija (y puede volver a ser manipulada). Las manipuladas se borran en cuanto
+// Mínimo manipulado …», fija donde estaba. 5 velas después se traza la línea nueva en el extremo que
+// dejó la manipulación (sin seguir al precio mientras tanto); si coincide con otro nivel vigente, no
+// se duplica. Las manipuladas se borran en cuanto
 // empieza otra sesión; las vigentes, cuando empieza la misma sesión al día siguiente.
 en_nys = ses_ok and not na(time(timeframe.period, "0930-1600", "America/New_York"))
 var float ny_h = na
@@ -1468,16 +1469,20 @@ type NivelSes
     line   ln
     label  lb
     float  precio
-    int    desde = na   // vela del barrido: la nueva línea sigue al extremo durante 5 velas
+    int    desde = na   // vela del barrido: el nivel nuevo se busca durante 5 velas sin dibujarse
     int    k = 0        // 0-5: alto/bajo de Asia, Londres y NY
+    int    x_ext = na   // vela del extremo del nivel nuevo
 var array<NivelSes> niv_ses    = array.new<NivelSes>(6)
 var array<NivelSes> niv_viejos = array.new<NivelSes>()
+
+nueva_linea_ses(int x, float v, string nom, color col) =>
+    [line.new(x, v, bar_index, v, color=color.new(col, 15), width=1), label.new(bar_index, v, nom, style=label.style_label_left, color=color.new(color.white, 100), textcolor=col, size=size.tiny)]
 
 nivel_ses(int k, bool en, bool ini, float v, int dir, string ses, color col) =>
     nom_act = (dir == 1 ? "Máximo " : "Mínimo ") + ses
     o = niv_ses.get(k)
     if ini
-        if not na(o)
+        if not na(o) and not na(o.ln)
             o.ln.delete()
             o.lb.delete()
         if niv_viejos.size() > 0
@@ -1487,21 +1492,39 @@ nivel_ses(int k, bool en, bool ini, float v, int dir, string ses, color col) =>
                     niv_viejos.remove(i)
                     q.ln.delete()
                     q.lb.delete()
-        o := NivelSes.new(line.new(bar_index, v, bar_index, v, color=color.new(col, 15), width=1), label.new(bar_index, v, nom_act, style=label.style_label_left, color=color.new(color.white, 100), textcolor=col, size=size.tiny), v, na, k)
-        niv_ses.set(k, o)
+        [ln, lb] = nueva_linea_ses(bar_index, v, nom_act, col)
+        niv_ses.set(k, NivelSes.new(ln, lb, v, na, k, bar_index))
     else if not na(o)
-        if en
+        if en and not na(o.ln)
+            // Durante la sesión la línea sigue al máximo/mínimo según se forma
             o.precio := v
             o.ln.set_y1(v)
             o.ln.set_y2(v)
-        else if not na(o.desde) and bar_index - o.desde <= 5
-            // Línea nueva tras un barrido: sigue al extremo de la manipulación durante 5 velas
-            nv = dir == 1 ? math.max(o.precio, high) : math.min(o.precio, low)
-            o.precio := nv
-            o.ln.set_y1(nv)
-            o.ln.set_y2(nv)
+            o.ln.set_x2(bar_index)
+            o.lb.set_xy(bar_index, v)
+        else if na(o.ln)
+            // Nivel nuevo tras un barrido: se busca el extremo de la manipulación durante 5 velas SIN
+            // dibujarlo (así no arrastra la línea con el precio) y luego se traza fijo desde ese extremo.
+            // Si ya hay otro nivel de sesión vigente casi al mismo precio, no se duplica.
+            if dir == 1 ? high > o.precio : low < o.precio
+                o.precio := dir == 1 ? high : low
+                o.x_ext := bar_index
+            if bar_index - o.desde >= 5
+                dup = false
+                for j = 0 to 5
+                    p = niv_ses.get(j)
+                    if j != k and not na(p) and not na(p.ln) and math.abs(p.precio - o.precio) <= 0.1 * nz(atr_val)
+                        dup := true
+                if dup
+                    niv_ses.set(k, na)
+                else
+                    [ln, lb] = nueva_linea_ses(o.x_ext, o.precio, nom_act, col)
+                    o.ln := ln
+                    o.lb := lb
+                    // (termina en una llamada sin valor, igual que la otra rama)
+                    o.lb.set_xy(bar_index, o.precio)
         else if dir == 1 ? high > o.precio : low < o.precio
-            // Manipulada: se queda en gris con su nombre y se traza la nueva en el nuevo extremo
+            // Manipulado: se queda en gris con su nombre, fijo donde estaba
             o.ln.set_x2(bar_index)
             o.ln.set_color(color.new(#9E9E9E, 20))
             o.ln.set_style(line.style_dashed)
@@ -1513,12 +1536,11 @@ nivel_ses(int k, bool en, bool ini, float v, int dir, string ses, color col) =>
                 q = niv_viejos.shift()
                 q.ln.delete()
                 q.lb.delete()
-            nv = dir == 1 ? high : low
-            o := NivelSes.new(line.new(bar_index, nv, bar_index, nv, color=color.new(col, 15), width=1), label.new(bar_index, nv, nom_act, style=label.style_label_left, color=color.new(color.white, 100), textcolor=col, size=size.tiny), nv, bar_index, k)
-            niv_ses.set(k, o)
-        // La línea vigente se alarga hasta la vela actual, con su nombre al final
-        o.ln.set_x2(bar_index)
-        o.lb.set_xy(bar_index, o.precio)
+            niv_ses.set(k, NivelSes.new(na, na, dir == 1 ? high : low, bar_index, k, bar_index))
+        else
+            // Vigente: se alarga hasta la vela actual, con su nombre al final
+            o.ln.set_x2(bar_index)
+            o.lb.set_xy(bar_index, o.precio)
 
 if info_ses_lin and ses_ok and en_calc
     // Al empezar cualquier sesión se borran las líneas manipuladas (grises)
