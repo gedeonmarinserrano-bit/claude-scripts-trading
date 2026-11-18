@@ -54,7 +54,7 @@ dist_max        = input.float(0.0, "Dibujar solo zonas a menos de este % del pre
 // Ajustes del indicador se entiendan de un vistazo.
 // ─────────────────────────────
 g_est        = "Estructura (CHoCH / BOS)"
-periodo      = input.int(4, "Sensibilidad de los pivotes (velas a cada lado)", minval=1, group=g_est)
+periodo      = input.int(1, "Sensibilidad de los pivotes (velas a cada lado)", minval=1, group=g_est)
 vol_mult     = 1.1
 vol_top      = 2.0
 vol_len      = 20
@@ -63,7 +63,7 @@ fondo_blanco = input.bool(true, "Fondo blanco (colores de alto contraste)", grou
 mostrar_bos  = input.bool(true, "Mostrar BOS (salvo con tendencia invalidada)", group=g_est)
 borrar_bos_giro = input.bool(true, "Borrar el BOS contrario previo al CHoCH (modifica el pasado)", group=g_est)
 bos_ventana  = input.int(0, "Borrar BOS previo al CHoCH: máx. velas (0 = sin límite)", minval=0, group=g_est)
-filtro_rango = input.bool(true, "Sin CHoCH ni BOS dentro de un rango (hasta el breakout)", group=g_est)
+filtro_rango = input.bool(false, "Sin CHoCH ni BOS dentro de un rango (hasta el breakout)", group=g_est)
 // TradingView limita el tiempo total de cálculo: las partes pesadas (rangos, Order Blocks, FVG de
 // otras temporalidades) solo se calculan en las últimas N velas del historial
 velas_calc   = input.int(2000, "Velas de historial a calcular (menos = más rápido)", minval=300, maxval=20000, group=g_est)
