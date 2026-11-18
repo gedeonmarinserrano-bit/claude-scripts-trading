@@ -1379,9 +1379,9 @@ actualizar_niveles(array<Nivel> arr) =>
         for i = arr.size() - 1 to 0
             n = arr.get(i)
             if (n.dir == 1 and close > n.precio) or (n.dir == -1 and close < n.precio)
+                arr.remove(i)
                 n.ln.delete()
                 n.lb.delete()
-                arr.remove(i)
             else
                 n.ln.set_x2(time)
                 n.lb.set_x(time)
@@ -1484,9 +1484,9 @@ nivel_ses(int k, bool en, bool ini, float v, int dir, string ses, color col) =>
             for i = niv_viejos.size() - 1 to 0
                 q = niv_viejos.get(i)
                 if q.k == k
+                    niv_viejos.remove(i)
                     q.ln.delete()
                     q.lb.delete()
-                    niv_viejos.remove(i)
         o := NivelSes.new(line.new(bar_index, v, bar_index, v, color=color.new(col, 15), width=1), label.new(bar_index, v, nom_act, style=label.style_label_left, color=color.new(color.white, 100), textcolor=col, size=size.tiny), v, na, k)
         niv_ses.set(k, o)
     else if not na(o)
@@ -1596,9 +1596,9 @@ if info_eqhl and en_calc and timeframe.isintraday
         for i = iguales.size() - 1 to 0
             q = iguales.get(i)
             if q.dir == 1 ? high > q.precio : low < q.precio
+                iguales.remove(i)
                 q.ln.delete()
                 q.lb.delete()
-                iguales.remove(i)
             else
                 q.ln.set_x2(bar_index)
 
