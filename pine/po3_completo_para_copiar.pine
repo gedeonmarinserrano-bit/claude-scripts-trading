@@ -6,440 +6,440 @@
 //@version=6
 indicator("Po3 + CHoCH PRO - High Contrast + FVG + Rangos + OB",overlay=true,max_labels_count=500,max_lines_count=500,max_boxes_count=500,max_bars_back=2000,behind_chart=true)
 _cx="Panel de información"
-_lv=input.bool(true,"Mostrar panel",group=_cx)
-_ib=input.string("Arriba derecha","Posición",options=["Arriba derecha","Arriba izquierda","Abajo derecha","Abajo izquierda"],group=_cx)
-_nn=input.string("Pequeño","Tamaño del texto",options=["Muy pequeño","Pequeño","Normal"],group=_cx)
-_oz=input.bool(true,"Movimiento esperado del día (VIX / 16)",group=_cx)
-_uy=input.symbol("CBOE:VIX","Índice de volatilidad (para el Nasdaq también vale CBOE:VXN)",group=_cx)
-_lf=input.bool(true,"Rangos de Asia y Londres (alto, bajo y si se han barrido)",group=_cx)
-_px=input.bool(true,"Rango de hoy frente al ATR diario",group=_cx)
-_fo=input.bool(true,"Precio frente a la apertura del día (premium / descuento)",group=_cx)
-_ls=input.bool(true,"Liquidez más cercana por arriba y por abajo",group=_cx)
-_pw=input.string("","Noticias de hoy (texto libre, p. ej. «CPI 14:30»; vacío = no se muestra)",group=_cx)
-_jh="Información en el gráfico"
-_lw=input.bool(true,"Fondo suave en las sesiones de Asia, Londres y apertura de Nueva York",group=_jh)
-_vc=input.bool(true,"Línea del 50 % del día anterior (por encima premium, por debajo descuento)",group=_jh)
-_re=input.bool(true,"Altos y bajos iguales sin barrer (EQH / EQL)",group=_jh)
-_lu=input.bool(true,"Marcar barridos de niveles (pasa el nivel y cierra de vuelta)",group=_jh)
-_no=input.bool(true,"Máximos y mínimos de Asia, Londres y Nueva York (los manipulados quedan en gris)",group=_jh)
-_cy="FVG por temporalidad (solo se ven los activados)"
-_ar=input.bool(true,"FVG H4",inline="fvgtf1",group=_cy)
-_bh=input.bool(true,"FVG H1",inline="fvgtf1",group=_cy)
-_bb=input.bool(true,"FVG M15",inline="fvgtf1",group=_cy)
-_bv=input.bool(true,"FVG M5",inline="fvgtf2",group=_cy)
-_cs=input.bool(false,"FVG M1",inline="fvgtf2",group=_cy)
-_ob=input.bool(true,"FVG del gráfico si no es ninguna de las 5 (M3, M30, D…)",group=_cy)
-_m=input.bool(true,"Cada FVG solo en el gráfico de su temporalidad (sin mezclar)",group=_cy)
-_gg=input.int(25,"Máx. FVG por temporalidad (M5, M15, H1, H4)",minval=1,maxval=60,group=_cy)
-_mf=input.int(100,"Máx. zonas dibujadas a la vez (menos = más rápido)",minval=5,maxval=150,group=_cy)
-_pn=input.float(0.0,"Dibujar solo zonas a menos de este % del precio (0 = todas)",minval=0,step=0.5,group=_cy)
-_oh="Estructura (CHoCH / BOS)"
-_ca=input.int(4,"Sensibilidad de los pivotes (velas a cada lado)",minval=1,group=_oh)
-_td=1.1
-_uj=2.0
-_ul=20
-_st=2
-_mx=input.bool(true,"Fondo blanco (colores de alto contraste)",group=_oh)
-_ig=input.bool(true,"Mostrar BOS (salvo con tendencia invalidada)",group=_oh)
-_hu=input.bool(true,"Borrar el BOS contrario previo al CHoCH (modifica el pasado)",group=_oh)
-_jj=input.int(0,"Borrar BOS previo al CHoCH: máx. velas (0 = sin límite)",minval=0,group=_oh)
-_eq=input.bool(true,"Sin CHoCH ni BOS dentro de un rango (hasta el breakout)",group=_oh)
-_ra=input.int(2000,"Velas de historial a calcular (menos = más rápido)",minval=300,maxval=20000,group=_oh)
-_bg=bar_index >=last_bar_index-_ra
-_cq=input.float(0.15,"Tamaño mínimo FVG (× ATR; 0 = todos)",minval=0,step=0.05,group="FVG")
-_ng=input.int(50,"Máx. zonas vigiladas",minval=1,maxval=250,group="FVG")
+_ls=input.bool(true,"Mostrar panel",group=_cx)
+_jf=input.string("Arriba derecha","Posición",options=["Arriba derecha","Arriba izquierda","Abajo derecha","Abajo izquierda"],group=_cx)
+_mo=input.string("Pequeño","Tamaño del texto",options=["Muy pequeño","Pequeño","Normal"],group=_cx)
+_nx=input.bool(true,"Movimiento esperado del día (VIX / 16)",group=_cx)
+_vg=input.symbol("CBOE:VIX","Índice de volatilidad (para el Nasdaq también vale CBOE:VXN)",group=_cx)
+_lq=input.bool(true,"Rangos de Asia y Londres (alto, bajo y si se han barrido)",group=_cx)
+_qc=input.bool(true,"Rango de hoy frente al ATR diario",group=_cx)
+_ge=input.bool(true,"Precio frente a la apertura del día (premium / descuento)",group=_cx)
+_lj=input.bool(true,"Liquidez más cercana por arriba y por abajo",group=_cx)
+_po=input.string("","Noticias de hoy (texto libre, p. ej. «CPI 14:30»; vacío = no se muestra)",group=_cx)
+_ii="Información en el gráfico"
+_lx=input.bool(true,"Fondo suave en las sesiones de Asia, Londres y apertura de Nueva York",group=_ii)
+_vf=input.bool(true,"Línea del 50 % del día anterior (por encima premium, por debajo descuento)",group=_ii)
+_rc=input.bool(true,"Altos y bajos iguales sin barrer (EQH / EQL)",group=_ii)
+_mh=input.bool(true,"Marcar barridos de niveles (pasa el nivel y cierra de vuelta)",group=_ii)
+_nm=input.bool(true,"Máximos y mínimos de Asia, Londres y Nueva York (los manipulados quedan en gris)",group=_ii)
+_cz="FVG por temporalidad (solo se ven los activados)"
+_aq=input.bool(true,"FVG H4",inline="fvgtf1",group=_cz)
+_aw=input.bool(true,"FVG H1",inline="fvgtf1",group=_cz)
+_bf=input.bool(true,"FVG M15",inline="fvgtf1",group=_cz)
+_bx=input.bool(true,"FVG M5",inline="fvgtf2",group=_cz)
+_cs=input.bool(true,"FVG M1",inline="fvgtf2",group=_cz)
+_nt=input.bool(true,"FVG del gráfico si no es ninguna de las 5 (M3, M30, D…)",group=_cz)
+_l=input.bool(true,"Cada FVG solo en el gráfico de su temporalidad (sin mezclar)",group=_cz)
+_gl=input.int(25,"Máx. FVG por temporalidad (M5, M15, H1, H4)",minval=1,maxval=60,group=_cz)
+_ll=input.int(100,"Máx. zonas dibujadas a la vez (menos = más rápido)",minval=5,maxval=150,group=_cz)
+_pp=input.float(0.0,"Dibujar solo zonas a menos de este % del precio (0 = todas)",minval=0,step=0.5,group=_cz)
+_oe="Estructura (CHoCH / BOS)"
+_ca=input.int(4,"Sensibilidad de los pivotes (velas a cada lado)",minval=1,group=_oe)
+_tb=1.1
+_vk=2.0
+_uw=20
+_sw=2
+_mp=input.bool(true,"Fondo blanco (colores de alto contraste)",group=_oe)
+_iz=input.bool(true,"Mostrar BOS (salvo con tendencia invalidada)",group=_oe)
+_hu=input.bool(true,"Borrar el BOS contrario previo al CHoCH (modifica el pasado)",group=_oe)
+_im=input.int(0,"Borrar BOS previo al CHoCH: máx. velas (0 = sin límite)",minval=0,group=_oe)
+_ed=input.bool(true,"Sin CHoCH ni BOS dentro de un rango (hasta el breakout)",group=_oe)
+_qv=input.int(2000,"Velas de historial a calcular (menos = más rápido)",minval=300,maxval=20000,group=_oe)
+_bc=bar_index >=last_bar_index-_qv
+_cj=input.float(0.15,"Tamaño mínimo FVG (× ATR; 0 = todos)",minval=0,step=0.05,group="FVG")
+_nb=input.int(50,"Máx. zonas vigiladas",minval=1,maxval=250,group="FVG")
 _al=input.color(color.new(#B0B0B0,75),"Parte consumida (todas las zonas)",group="FVG")
-_um="Order Blocks"
-_ko=input.bool(true,"Mostrar Order Blocks",group=_um)
-_fk=input.bool(false,"Solo los que originan un CHoCH (no los de BOS)",group=_um)
-_mw=input.bool(false,"Usar solo el cuerpo de la vela (sin mechas)",group=_um)
-_wo=input.int(25,"Máx. Order Blocks vigentes",minval=1,maxval=60,group=_um)
-_mu=input.int(1,"El imbalance (FVG) debe empezar en las N velas siguientes al OB",minval=1,maxval=5,group=_um)
-_kt=input.color(#1565C0,"OB alcista (demanda)",group=_um)
-_kl=input.color(#EF6C00,"OB bajista (oferta)",group=_um)
-_qb="Estrategia NY (Bias + PO3)"
-_ma=input.bool(true,"Marcar horas de la apertura de Nueva York (hora de Madrid)",group=_qb)
-_ku=input.string("Automático (según la apertura de Nueva York)","Horario de las marcas",options=["Verano (15:00 / 15:30 / 15:45 / 16:00)","Invierno (14:00 / 14:30 / 14:45 / 15:00)","Automático (según la apertura de Nueva York)"],group=_qb)
-_ue="Colores FVG"
-_ao=input.color(#00A651,"FVG alcista (todas las temporalidades)",group=_ue)
-_ap=input.color(#E4002B,"FVG bajista (todas las temporalidades)",group=_ue)
+_ve="Order Blocks"
+_kl=input.bool(true,"Mostrar Order Blocks",group=_ve)
+_gb=input.bool(false,"Solo los que originan un CHoCH (no los de BOS)",group=_ve)
+_nr=input.bool(false,"Usar solo el cuerpo de la vela (sin mechas)",group=_ve)
+_wr=input.int(25,"Máx. Order Blocks vigentes",minval=1,maxval=60,group=_ve)
+_no=input.int(1,"El imbalance (FVG) debe empezar en las N velas siguientes al OB",minval=1,maxval=5,group=_ve)
+_kw=input.color(#1565C0,"OB alcista (demanda)",group=_ve)
+_km=input.color(#EF6C00,"OB bajista (oferta)",group=_ve)
+_pk="Estrategia NY (Bias + PO3)"
+_mg=input.bool(true,"Marcar horas de la apertura de Nueva York (hora de Madrid)",group=_pk)
+_kk=input.string("Automático (según la apertura de Nueva York)","Horario de las marcas",options=["Verano (15:00 / 15:30 / 15:45 / 16:00)","Invierno (14:00 / 14:30 / 14:45 / 15:00)","Automático (según la apertura de Nueva York)"],group=_pk)
+_tx="Colores FVG"
+_ap=input.color(#00A651,"FVG alcista (todas las temporalidades)",group=_tx)
+_ao=input.color(#E4002B,"FVG bajista (todas las temporalidades)",group=_tx)
+_sb=_ap
+_ni=_ap
+_mu=_ap
+_ks=_ap
+_lb=_ap
+_ig=_ap
 _sf=_ao
-_nr=_ao
-_mv=_ao
-_kp=_ao
-_kh=_ao
-_iz=_ao
-_rq=_ap
-_mm=_ap
-_na=_ap
-_ky=_ap
-_lc=_ap
-_in=_ap
-_ka=input.bool(true,"Niveles clave: altos/bajos relevantes de H4",group=_qb)
-_qr=input.int(3,"Sensibilidad altos/bajos H4",minval=1,maxval=10,group=_qb)
-_kg=input.int(6,"Máx. niveles H4 vigentes",minval=1,maxval=20,group=_qb)
-_jt=input.bool(true,"Niveles clave: altos/bajos relevantes de H1",group=_qb)
-_qp=input.int(3,"Sensibilidad altos/bajos H1",minval=1,maxval=10,group=_qb)
-_kk=input.int(6,"Máx. niveles H1 vigentes",minval=1,maxval=20,group=_qb)
-_kj=input.color(#8D6E63,"Color niveles H1",group=_qb)
-_qo=input.bool(true,"Niveles clave: alto/bajo del día anterior",group=_qb)
-_dr=input.color(#424242,"Color niveles clave",group=_qb)
-_nh=input.color(#757575,"Color horas",group=_qb)
-_ee=input.bool(true,"Mostrar EMAs",group="EMAs")
-_ou=input.int(9,"EMA rápida",minval=1,group="EMAs")
-_og=input.int(20,"EMA media",minval=1,group="EMAs")
-_ny=input.int(200,"EMA lenta",minval=1,group="EMAs")
-_ot=input.color(#546E7A,"Color EMA rápida",group="EMAs")
-_ns=input.color(#9E9D24,"Color EMA media",group="EMAs")
-_pd=input.color(color.black,"Color EMA lenta",group="EMAs")
-_ip=input.bool(true,"Marcar CHoCH fallidos (✗)",group="CHoCH fallido / riesgo")
-_hs=input.bool(true,"Anular tendencia si el CHoCH falla",group="CHoCH fallido / riesgo")
-_fu=input.bool(true,"Marcar CHoCH de riesgo (⚠)",group="CHoCH fallido / riesgo")
-_kn=input.int(2,"Puntuación mínima para ⚠",minval=1,maxval=6,group="CHoCH fallido / riesgo")
-_uz=14
-_sb=50
-_sy=0.15
-_qv=2.5
-_qs=30
-_pg=1.0
-_lx=input.color(color.gray,"Color CHoCH fallido",group="CHoCH fallido / riesgo")
-_pf="Colores"
-_ae=input.color(#00A651,"Estructura y FVG alcista (verde)",group=_pf)
-_v=input.color(#E4002B,"Estructura y FVG bajista (rojo)",group=_pf)
-_mz=input.bool(true,"Marcar la vela del OB",group=_pf)
-_hn=input.color(#FF00C8,"IFVG (magenta)",group=_pf)
-_nc=input.int(40,"Transparencia de las zonas (0 = color pleno, tapa las EMAs)",minval=0,maxval=95,step=5,group=_pf)
-_le=input.bool(true,"Zonas sin solaparse (la más concreta encima, la mayor alrededor)",group=_pf)
+_nh=_ao
+_ml=_ao
+_le=_ao
+_kz=_ao
+_jj=_ao
+_jv=input.bool(true,"Niveles clave: altos/bajos relevantes de H4",group=_pk)
+_qn=input.int(3,"Sensibilidad altos/bajos H4",minval=1,maxval=10,group=_pk)
+_kg=input.int(6,"Máx. niveles H4 vigentes",minval=1,maxval=20,group=_pk)
+_ju=input.bool(true,"Niveles clave: altos/bajos relevantes de H1",group=_pk)
+_qq=input.int(3,"Sensibilidad altos/bajos H1",minval=1,maxval=10,group=_pk)
+_ld=input.int(6,"Máx. niveles H1 vigentes",minval=1,maxval=20,group=_pk)
+_ki=input.color(#8D6E63,"Color niveles H1",group=_pk)
+_qu=input.bool(true,"Niveles clave: alto/bajo del día anterior",group=_pk)
+_du=input.color(#424242,"Color niveles clave",group=_pk)
+_mr=input.color(#757575,"Color horas",group=_pk)
+_eq=input.bool(true,"Mostrar EMAs",group="EMAs")
+_pe=input.int(9,"EMA rápida",minval=1,group="EMAs")
+_on=input.int(20,"EMA media",minval=1,group="EMAs")
+_od=input.int(200,"EMA lenta",minval=1,group="EMAs")
+_ov=input.color(#546E7A,"Color EMA rápida",group="EMAs")
+_om=input.color(#9E9D24,"Color EMA media",group="EMAs")
+_oq=input.color(color.black,"Color EMA lenta",group="EMAs")
+_ir=input.bool(true,"Marcar CHoCH fallidos (✗)",group="CHoCH fallido / riesgo")
+_ht=input.bool(true,"Anular tendencia si el CHoCH falla",group="CHoCH fallido / riesgo")
+_fw=input.bool(true,"Marcar CHoCH de riesgo (⚠)",group="CHoCH fallido / riesgo")
+_kq=input.int(2,"Puntuación mínima para ⚠",minval=1,maxval=6,group="CHoCH fallido / riesgo")
+_ut=14
+_sg=50
+_tm=0.15
+_rb=2.5
+_qp=30
+_qa=1.0
+_lk=input.color(color.gray,"Color CHoCH fallido",group="CHoCH fallido / riesgo")
+_oz="Colores"
+_ac=input.color(#00A651,"Estructura y FVG alcista (verde)",group=_oz)
+_u=input.color(#E4002B,"Estructura y FVG bajista (rojo)",group=_oz)
+_na=input.bool(true,"Marcar la vela del OB",group=_oz)
+_hm=input.color(#FF00C8,"IFVG (magenta)",group=_oz)
+_ne=input.int(40,"Transparencia de las zonas (0 = color pleno, tapa las EMAs)",minval=0,maxval=95,step=5,group=_oz)
+_kf=input.bool(true,"Zonas sin solaparse (la más concreta encima, la mayor alrededor)",group=_oz)
 type Zona
 	int x1
-	float _ah
 	float _ai
+	float _ah
 	int dir
 	float _bi=na
-	int _sn=na
-	bool _lg=false
-var _hd=array.new<Zona>()
-var _jq=array.new<Zona>()
+	int _rk=na
+	bool _ma=false
+var _hj=array.new<Zona>()
+var _hs=array.new<Zona>()
 var obs=array.new<Zona>()
-var _xt=array.new<Zona>()
+var _xk=array.new<Zona>()
 var _vs=array.new<Zona>()
-var _qy=array.new<Zona>()
-var _qt=array.new<Zona>()
-var _ki=array.new<Zona>()
-var _xe=array.new<Zona>()
-var _tm=array.new<Zona>()
-var _po=array.new<Zona>()
-var _pu=array.new<Zona>()
-var _lr=array.new<Zona>()
+var _qx=array.new<Zona>()
+var _qs=array.new<Zona>()
+var _la=array.new<Zona>()
+var _wk=array.new<Zona>()
+var _tc=array.new<Zona>()
+var _pt=array.new<Zona>()
+var _qb=array.new<Zona>()
+var _me=array.new<Zona>()
 type Rango
 	int x1
 	int x2
-	float _ah
 	float _ai
+	float _ah
 	color col
 var _bj=array.new<Rango>()
 _ey(Zona z)=>
-	_fx=z.dir==1?low <=z._ai:high >=z._ah
-	if not _fx
-		_bi=na(z._bi)?(z.dir==1?z._ah:z._ai):z._bi
+	_fo=z.dir==1?low <=z._ah:high >=z._ai
+	if not _fo
+		_bi=na(z._bi)?(z.dir==1?z._ai:z._ah):z._bi
 		if z.dir==1?low < _bi:high > _bi
 			z._bi:=z.dir==1?low:high
-	_fx
+	_fo
 type Marca
 	label lb
 	line ln
 	int bar
-var _hx=array.new<Marca>()
-var array<string> _fb=array.from("")
-var array<int> _fe=array.from(0)
-_an(label lb,line ln,int bar)=>
-	_hx.push(Marca.new(lb,ln,bar))
+var _in=array.new<Marca>()
+var array<string> _fa=array.from("")
+var array<int> _fd=array.from(0)
+_aj(label lb,line ln,int bar)=>
+	_in.push(Marca.new(lb,ln,bar))
 	if not na(lb)
-		_fb.set(0,lb.get_text())
-		_fe.set(0,bar)
-	if _hx.size()> 500
-		_hx.shift()
-_qm=ta.ema(close,_ou)
-_sh=ta.ema(close,_og)
-_ie=ta.ema(close,_ny)
-_cj=ta.atr(_uz)
-var string _tz='════════ Detection ════════'
-var string _rv='════════ Structure Filters ════════'
-var string _va='════════ Range Behavior ════════'
-var string _ug='════════ Visual Settings ════════'
-_ct='Base + 2x + 3x'
-_pa='Rangos'
-_bm=input.int(20,'Velas mínimas para buscar un rango',minval=8,maxval=100,group=_pa)
-_bt='Percentile band'
-_eh=90.0
-_lt='Bar close'
-_km=200
-_hq=40.0
-_ed=500
-_ms=0.18
-_on='Wick reaches'
-_jk=input.int(2,'Toques mínimos en cada borde del rango',minval=1,maxval=10,group=_pa)
-_er=0.10
-_rz=0.45
-_ef=0.70
-_iw='Extend to containment'
-_il=300
-_ju=input.int(10,'Duración mínima del rango (velas)',minval=2,maxval=200,group=_pa)
-_hj=true
-_lk=0.25
-_mc='Close beyond'
-_iu=0.15
-_hh=true
-_hf=10
-_ly=3
-_fj=0
+		_fa.set(0,lb.get_text())
+		_fd.set(0,bar)
+	if _in.size()> 500
+		_in.shift()
+_qr=ta.ema(close,_pe)
+_rh=ta.ema(close,_on)
+_iw=ta.ema(close,_od)
+_ci=ta.atr(_ut)
+var string _tw='════════ Detection ════════'
+var string _sn='════════ Structure Filters ════════'
+var string _vo='════════ Range Behavior ════════'
+var string _uc='════════ Visual Settings ════════'
+_cv='Base + 2x + 3x'
+_ok='Rangos'
+_bm=input.int(20,'Velas mínimas para buscar un rango',minval=8,maxval=100,group=_ok)
+_bo='Percentile band'
+_er=90.0
+_lm='Bar close'
+_kv=200
+_jg=40.0
+_ep=500
+_np=0.18
+_nz='Wick reaches'
+_ic=input.int(2,'Toques mínimos en cada borde del rango',minval=1,maxval=10,group=_ok)
+_eo=0.10
+_sj=0.45
+_ej=0.70
+_jb='Extend to containment'
+_iq=300
+_jw=input.int(10,'Duración mínima del rango (velas)',minval=2,maxval=200,group=_ok)
+_hc=true
+_lv=0.25
+_lr='Close beyond'
+_id=0.15
+_ha=true
+_he=10
+_mf=3
+_fu=0
 _nf='Custom'
-_lo=#00A651
-_lm=#E4002B
-_fi=input.color(#F9A825,'Color del rango (neutral)',group=_pa)
-_jx=4
-_gp=93
-_he=true
+_lw=#00A651
+_mi=#E4002B
+_fi=input.color(#F9A825,'Color del rango (neutral)',group=_ok)
+_kc=4
+_gj=93
+_hb=true
 _kb=true
-_ha=input.bool(true,'Mostrar etiqueta del rango',group=_pa)
-_jy=input.bool(true,'Mostrar flechas de ruptura (breakout)',group=_pa)
-_ij=input.bool(true,'Mostrar marcas de ruptura fallida (deviation)',group=_pa)
-_js='Small'
-_fa=true
-_kc='Small'
+_hh=input.bool(true,'Mostrar etiqueta del rango',group=_ok)
+_ka=input.bool(true,'Mostrar flechas de ruptura (breakout)',group=_ok)
+_ik=input.bool(true,'Mostrar marcas de ruptura fallida (deviation)',group=_ok)
+_is='Small'
+_fc=true
+_jy='Small'
 [_cf,_ch]=switch _nf
 	'Classic'=> [#00ff00,#ff0000]
 	'Aqua'=> [#00d4ff,#ff8c00]
 	'Cosmic'=> [#49ffce,#9932cc]
 	'Cyber'=> [#00cccc,#ff6600]
 	'Neon'=> [#ffff00,#ff00ff]
-	=> [_lo,_lm]
+	=> [_lw,_mi]
 var color _cb=color.new(color.black,100)
 var float _cg=3.0
-var float _do=1.6
-_hy(string _wz)=>
-	switch _wz
+var float _dv=1.6
+_hv(string _wi)=>
+	switch _wi
 		'Tiny'=> size.tiny
 		'Normal'=> size.normal
 		'Large'=> size.large
 		=> size.small
-_fg(color _df)=>
-	_id=color.r(_df)/255.0
-	_ht=color.g(_df)/255.0
-	_hw=color.b(_df)/255.0
-	_tq=_id <=0.03928?_id/12.92:math.pow((_id+0.055)/1.055,2.4)
-	_ts=_ht <=0.03928?_ht/12.92:math.pow((_ht+0.055)/1.055,2.4)
-	_su=_hw <=0.03928?_hw/12.92:math.pow((_hw+0.055)/1.055,2.4)
-	0.2126*_tq+0.7152*_ts+0.0722*_su
-_mi(color _od,color _mk)=>
-	_mo=_fg(_od)
-	_kf=_fg(_mk)
-	(math.max(_mo,_kf)+0.05)/(math.min(_mo,_kf)+0.05)
-_eo(color _hm)=>
-	_fg(_hm)> 0.179?#000000:#ffffff
-_nt(color _df,color _mr,float _rw)=>
-	color.rgb(color.r(_df)+(color.r(_mr)-color.r(_df))*_rw,color.g(_df)+(color.g(_mr)-color.g(_df))*_rw,color.b(_df)+(color.b(_mr)-color.b(_df))*_rw)
-_bn(color _df,color _hm,float _pb)=>
-	_mr=_eo(_hm)
-	_lq=_df
+_fh(color _dg)=>
+	_jc=color.r(_dg)/255.0
+	_js=color.g(_dg)/255.0
+	_jr=color.b(_dg)/255.0
+	_sx=_jc <=0.03928?_jc/12.92:math.pow((_jc+0.055)/1.055,2.4)
+	_td=_js <=0.03928?_js/12.92:math.pow((_js+0.055)/1.055,2.4)
+	_tr=_jr <=0.03928?_jr/12.92:math.pow((_jr+0.055)/1.055,2.4)
+	0.2126*_sx+0.7152*_td+0.0722*_tr
+_lt(color _oy,color _mw)=>
+	_mn=_fh(_oy)
+	_ku=_fh(_mw)
+	(math.max(_mn,_ku)+0.05)/(math.min(_mn,_ku)+0.05)
+_en(color _hn)=>
+	_fh(_hn)> 0.179?#000000:#ffffff
+_ow(color _dg,color _my,float _rj)=>
+	color.rgb(color.r(_dg)+(color.r(_my)-color.r(_dg))*_rj,color.g(_dg)+(color.g(_my)-color.g(_dg))*_rj,color.b(_dg)+(color.b(_my)-color.b(_dg))*_rj)
+_bn(color _dg,color _hn,float _nv)=>
+	_my=_en(_hn)
+	_lz=_dg
 	for step=1 to 10
-		if _mi(_lq,_hm)>=_pb
+		if _lt(_lz,_hn)>=_nv
 			break
-		_lq:=_nt(_df,_mr,step/10.0)
-	_lq
-_ia(float _xs)=>
-	str.tostring(_xs,'#.##')+'%'
-_ql(array<box> _jv,int _li,float _ax,float _aj)=>
-	array.clear(_jv)
-	if not _le
-		for i=0 to _jx-1
-			array.push(_jv,box.new(_li,_ax,bar_index,_aj,border_color=na,border_width=0,bgcolor=na,xloc=xloc.bar_index))
-_gi(array<box> _jv,float _ax,float _aj,int _li,int _sj,color _nw)=>
-	_qh=array.size(_jv)
-	if _qh > 0 and _ax > _aj
-		_gs=(_ax-_aj)/_qh
-		for i=0 to _qh-1
-			_jo=array.get(_jv,i)
-			_nv=math.abs((i+0.5)/_qh-0.5)*2.0
-			_ov=int(math.min(99,math.max(0,_gp+(1.0-_nv)*10)))
-			box.set_lefttop(_jo,_li,_ax-_gs*i)
-			box.set_rightbottom(_jo,_sj,_ax-_gs*(i+1))
-			box.set_bgcolor(_jo,color.new(_nw,_ov))
-_os(array<box> _jv)=>
-	if array.size(_jv)> 0
-		for i=0 to array.size(_jv)-1
-			box.delete(array.get(_jv,i))
-	array.clear(_jv)
-_qu(int _rd,float _ax,float _aj,float _co)=>
-	_yf=_rd
-	if _iw=='Extend to containment'
-		_xx=math.min(_il,bar_index)
-		_vg=math.max(2,math.round((1.0-_ef)*_rd))
-		_mb=0
-		_gv=0
-		while _gv < _xx and _mb <=_vg
-			_mn=close[_gv]<=_ax and close[_gv]>=_aj
-			_tf=_mn and high[_gv]<=_ax+_co and low[_gv]>=_aj-_co
-			if _mn
-				_mb:=math.max(0,_mb-1)
-				if _tf and _gv+1 >=_rd
-					_yf:=_gv+1
+		_lz:=_ow(_dg,_my,step/10.0)
+	_lz
+_ib(float _xq)=>
+	str.tostring(_xq,'#.##')+'%'
+_qy(array<box> _kd,int _lg,float _bg,float _an)=>
+	array.clear(_kd)
+	if not _kf
+		for i=0 to _kc-1
+			array.push(_kd,box.new(_lg,_bg,bar_index,_an,border_color=na,border_width=0,bgcolor=na,xloc=xloc.bar_index))
+_go(array<box> _kd,float _bg,float _an,int _lg,int _sl,color _og)=>
+	_pl=array.size(_kd)
+	if _pl > 0 and _bg > _an
+		_gz=(_bg-_an)/_pl
+		for i=0 to _pl-1
+			_ix=array.get(_kd,i)
+			_ob=math.abs((i+0.5)/_pl-0.5)*2.0
+			_oa=int(math.min(99,math.max(0,_gj+(1.0-_ob)*10)))
+			box.set_lefttop(_ix,_lg,_bg-_gz*i)
+			box.set_rightbottom(_ix,_sl,_bg-_gz*(i+1))
+			box.set_bgcolor(_ix,color.new(_og,_oa))
+_op(array<box> _kd)=>
+	if array.size(_kd)> 0
+		for i=0 to array.size(_kd)-1
+			box.delete(array.get(_kd,i))
+	array.clear(_kd)
+_qz(int _rs,float _bg,float _an,float _cp)=>
+	_ye=_rs
+	if _jb=='Extend to containment'
+		_xs=math.min(_iq,bar_index)
+		_uy=math.max(2,math.round((1.0-_ej)*_rs))
+		_md=0
+		_gs=0
+		while _gs < _xs and _md <=_uy
+			_mk=close[_gs]<=_bg and close[_gs]>=_an
+			_tl=_mk and high[_gs]<=_bg+_cp and low[_gs]>=_an-_cp
+			if _mk
+				_md:=math.max(0,_md-1)
+				if _tl and _gs+1 >=_rs
+					_ye:=_gs+1
 			else
-				_mb+=1
-			_gv+=1
-	_yf
-_cl=ta.atr(_km)
-_kq=not na(_cl)and _cl > 0
-_gk=_mc=='Wick beyond'
-_ks=_on=='Wick reaches'
-_oa=_lt=='Live bar'
-_fv=_oa or barstate.isconfirmed
-_gl=_hy(_js)
-_kr=_hy(_kc)
+				_md+=1
+			_gs+=1
+	_ye
+_cq=ta.atr(_kv)
+_kr=not na(_cq)and _cq > 0
+_gg=_lr=='Wick beyond'
+_ky=_nz=='Wick reaches'
+_oc=_lm=='Live bar'
+_fj=_oc or barstate.isconfirmed
+_gm=_hv(_is)
+_kt=_hv(_jy)
 _x=chart.bg_color
-_r=_bn(_fi,_x,_cg)
-_fm=_bn(_cf,_x,_cg)
-_gb=_bn(_ch,_x,_cg)
-_hi=_bn(_fi,_x,_do)
-_fz=_bn(_cf,_x,_do)
-_fp=_bn(_ch,_x,_do)
-_go(simple int len)=>
-	_vk=ta.percentile_linear_interpolation(high,len,_eh)
-	_qn=ta.percentile_linear_interpolation(low,len,100.0-_eh)
-	_ve=ta.highest(high,len)
-	_qq=ta.lowest(low,len)
-	_tr=ta.highest(math.max(open,close),len)
-	_oy=ta.lowest(math.min(open,close),len)
-	top=_bt=='Absolute extremes'?_ve:_bt=='Body extremes'?_tr:_vk
-	_lb=_bt=='Absolute extremes'?_qq:_bt=='Body extremes'?_oy:_qn
-	_dp=top-_lb
-	_ox=_kq and _dp > 0?_dp/(_cl*math.sqrt(len)):99.0
-	_sv=bar_index < 1?_ed:int(math.max(1,math.min(_ed,bar_index-_km)))
-	_ya=ta.percentrank(_ox,_sv)
+_s=_bn(_fi,_x,_cg)
+_fn=_bn(_cf,_x,_cg)
+_fl=_bn(_ch,_x,_cg)
+_hd=_bn(_fi,_x,_dv)
+_fk=_bn(_cf,_x,_dv)
+_gd=_bn(_ch,_x,_dv)
+_gh(simple int len)=>
+	_ul=ta.percentile_linear_interpolation(high,len,_er)
+	_ql=ta.percentile_linear_interpolation(low,len,100.0-_er)
+	_uk=ta.highest(high,len)
+	_qw=ta.lowest(low,len)
+	_tf=ta.highest(math.max(open,close),len)
+	_oi=ta.lowest(math.min(open,close),len)
+	top=_bo=='Absolute extremes'?_uk:_bo=='Body extremes'?_tf:_ul
+	_kn=_bo=='Absolute extremes'?_qw:_bo=='Body extremes'?_oi:_ql
+	_dw=top-_kn
+	_pc=_kr and _dw > 0?_dw/(_cq*math.sqrt(len)):99.0
+	_tj=bar_index < 1?_ep:int(math.max(1,math.min(_ep,bar_index-_kv)))
+	_xz=ta.percentrank(_pc,_tj)
 	_xl=ta.linreg(close,len,0)-ta.linreg(close,len,1)
-	_xj=_dp > 0?math.abs(_xl)*len/_dp:99.0
-	_cw=math.avg(top,_lb)
-	_co=_er*nz(_cl)
-	_mp=0
-	_qj=0
-	_iv=0
-	_my=0
+	_xw=_dw > 0?math.abs(_xl)*len/_dw:99.0
+	_cu=math.avg(top,_kn)
+	_cp=_eo*nz(_cq)
+	_nn=0
+	_qe=0
+	_ji=0
+	_mq=0
 	for i=0 to len-1
-		if(close[i]> _cw)!=(close[i+1]> _cw)
-			_mp+=1
-		_om=_ks?high[i]>=top-_co:close[i]>=top-_co
-		_kd=_ks?low[i]<=_lb+_co:close[i]<=_lb+_co
-		if _om
-			_qj+=1
-		if _kd
-			_iv+=1
-		if close[i]<=top and close[i]>=_lb
-			_my+=1
-	_nz=_my/float(len)
-	_is=_kq and not na(_ya)and bar_index > len+5 and _ya <=_hq and _mp >=math.max(3,math.round(_ms*len))and _qj >=_jk and _iv >=_jk and _xj <=_rz and _nz >=_ef
-	[_is,top,_lb]
-bool _ic=false
-bool _jd=false
-bool _it=false
-float _xd=na
-float _we=na
-float _xb=na
+		if(close[i]> _cu)!=(close[i+1]> _cu)
+			_nn+=1
+		_ny=_ky?high[i]>=top-_cp:close[i]>=top-_cp
+		_jx=_ky?low[i]<=_kn+_cp:close[i]<=_kn+_cp
+		if _ny
+			_qe+=1
+		if _jx
+			_ji+=1
+		if close[i]<=top and close[i]>=_kn
+			_mq+=1
+	_pf=_mq/float(len)
+	_ie=_kr and not na(_xz)and bar_index > len+5 and _xz <=_jg and _nn >=math.max(3,math.round(_np*len))and _qe >=_ic and _ji >=_ic and _xw <=_sj and _pf >=_ej
+	[_ie,top,_kn]
+bool _jh=false
+bool _ij=false
+bool _jo=false
+float _wz=na
+float _wo=na
+float _xf=na
+float _qd=na
 float _pr=na
-float _pv=na
-float _pi=na
-if _bg
-	[qa,ta_,ba]=_go(_bm)
-	_ic:=qa
-	_xd:=ta_
-	_pr:=ba
-	if _ct !='Base only'
-		[qb,tb,bb]=_go(_bm*2)
-		_jd:=qb
-		_we:=tb
-		_pv:=bb
-	if _ct=='Base + 2x + 3x'
-		[qc,tc,bc]=_go(_bm*3)
-		_it:=qc
-		_xb:=tc
-		_pi:=bc
-_et=_ct !='Base only' and _jd
-_ev=_ct=='Base + 2x + 3x' and _it
-_is=_ic or _et or _ev
-_pc=_ev?_bm*3:_et?_bm*2:_bm
-_pl=_ev?_xb:_et?_we:_xd
-_jb=_ev?_pi:_et?_pv:_pr
+float _pu=na
+if _bc
+	[qa,ta_,ba]=_gh(_bm)
+	_jh:=qa
+	_wz:=ta_
+	_qd:=ba
+	if _cv !='Base only'
+		[qb,tb,bb]=_gh(_bm*2)
+		_ij:=qb
+		_wo:=tb
+		_pr:=bb
+	if _cv=='Base + 2x + 3x'
+		[qc,tc,bc]=_gh(_bm*3)
+		_jo:=qc
+		_xf:=tc
+		_pu:=bc
+_eu=_cv !='Base only' and _ij
+_ev=_cv=='Base + 2x + 3x' and _jo
+_ie=_jh or _eu or _ev
+_oj=_ev?_bm*3:_eu?_bm*2:_bm
+_qj=_ev?_xf:_eu?_wo:_wz
+_hq=_ev?_pu:_eu?_pr:_qd
 var array<box> _at=array.new<box>()
 var box _t=na
 var line _g=na
 var line _k=na
 var line _w=na
 var label _z=na
-var label _au=na
+var label _av=na
 var float _f=na
 var float _a=na
 var int _c=na
-var int _gt=na
-var bool _u=false
-var bool _l=false
-var bool _ba=false
-var int _dy=na
+var int _gy=na
+var bool _v=false
+var bool _m=false
+var bool _bb=false
+var int _dq=na
 var int _p=0
 var float _o=na
-var int _bf=na
-var int _az=0
+var int _bh=na
+var int _bd=0
 _cc=false
-_cp=false
+_cl=false
 _bk=false
 _bz=false
-if _fv and _az > 0
-	_az-=1
-if _fv and not _u and not _ba and _az <=0 and _is
-	_oj=_qu(_pc,_pl,_jb,_er*_cl)
-	_c:=bar_index-_oj+1
-	_gt:=bar_index
-	_f:=_pl
-	_a:=_jb
-	_u:=true
-	_l:=false
-	_cw=math.avg(_f,_a)
-	_by=_a+(_f-_a)*0.25
-	_bc=_a+(_f-_a)*0.75
-	_t:=box.new(_c,_f,bar_index,_a,border_color=color.new(_r,55),border_width=2,border_style=line.style_dotted,bgcolor=na,xloc=xloc.bar_index)
-	_ql(_at,_c,_f,_a)
-	if _he
-		_g:=line.new(_c,_cw,bar_index,_cw,xloc.bar_index,extend.none,color.new(color.gray,45),line.style_dotted,1)
+if _fj and _bd > 0
+	_bd-=1
+if _fj and not _v and not _bb and _bd <=0 and _ie
+	_os=_qz(_oj,_qj,_hq,_eo*_cq)
+	_c:=bar_index-_os+1
+	_gy:=bar_index
+	_f:=_qj
+	_a:=_hq
+	_v:=true
+	_m:=false
+	_cu=math.avg(_f,_a)
+	_bu=_a+(_f-_a)*0.25
+	_ba=_a+(_f-_a)*0.75
+	_t:=box.new(_c,_f,bar_index,_a,border_color=color.new(_s,55),border_width=2,border_style=line.style_dotted,bgcolor=na,xloc=xloc.bar_index)
+	_qy(_at,_c,_f,_a)
+	if _hb
+		_g:=line.new(_c,_cu,bar_index,_cu,xloc.bar_index,extend.none,color.new(color.gray,45),line.style_dotted,1)
 	if _kb
-		_k:=line.new(_c,_by,bar_index,_by,xloc.bar_index,extend.none,color.new(color.gray,70),line.style_dotted,1)
-		_w:=line.new(_c,_bc,bar_index,_bc,xloc.bar_index,extend.none,color.new(color.gray,70),line.style_dotted,1)
-	if _ha
-		_z:=label.new(_c,_f,'',xloc=xloc.bar_index,yloc=yloc.price,color=_cb,style=label.style_label_down,textcolor=color.new(_r,10),size=_gl)
+		_k:=line.new(_c,_bu,bar_index,_bu,xloc.bar_index,extend.none,color.new(color.gray,70),line.style_dotted,1)
+		_w:=line.new(_c,_ba,bar_index,_ba,xloc.bar_index,extend.none,color.new(color.gray,70),line.style_dotted,1)
+	if _hh
+		_z:=label.new(_c,_f,'',xloc=xloc.bar_index,yloc=yloc.price,color=_cb,style=label.style_label_down,textcolor=color.new(_s,10),size=_gm)
 	_cc:=true
-if _u and _fv
-	_cv=_iu*_cl
-	_fl=_lk*_cl
-	if _hj and not _gk and close <=_f and close >=_a
-		if high > _f and high <=_f+_fl
+if _v and _fj
+	_cw=_id*_cq
+	_fs=_lv*_cq
+	if _hc and not _gg and close <=_f and close >=_a
+		if high > _f and high <=_f+_fs
 			_f:=high
-		if low < _a and low >=_a-_fl
+		if low < _a and low >=_a-_fs
 			_a:=low
-	_pm=_gk?high > _f+_cv:close > _f+_cv
-	_kx=_gk?low < _a-_cv:close < _a-_cv
-	_qx=_fj > 0 and bar_index-_gt+1 >=_fj
-	if _pm or _kx or _qx
-		_b=_pm?1:_kx?-1:0
-		_rk=_b !=0?bar_index-_c:bar_index-_c+1
-		_nk=_a !=0?(_f-_a)/_a*100.0:0.0
-		_jz=_hh and _b !=0 and _l
-		if _l
-			_fh=_b==1?_fm:_b==-1?_gb:_r
-			_op=_b==1?_fz:_b==-1?_fp:_hi
-			_iq=_b==1?_cf:_b==-1?_ch:_fi
+	_pq=_gg?high > _f+_cw:close > _f+_cw
+	_kx=_gg?low < _a-_cw:close < _a-_cw
+	_qt=_fu > 0 and bar_index-_gy+1 >=_fu
+	if _pq or _kx or _qt
+		_b=_pq?1:_kx?-1:0
+		_sd=_b !=0?bar_index-_c:bar_index-_c+1
+		_ng=_a !=0?(_f-_a)/_a*100.0:0.0
+		_ke=_ha and _b !=0 and _m
+		if _m
+			_fg=_b==1?_fn:_b==-1?_fl:_s
+			_nw=_b==1?_fk:_b==-1?_gd:_hd
+			_hz=_b==1?_cf:_b==-1?_ch:_fi
 			box.set_lefttop(_t,_c,_f)
 			box.set_rightbottom(_t,bar_index,_a)
-			box.set_border_color(_t,color.new(_fh,30))
+			box.set_border_color(_t,color.new(_fg,30))
 			box.set_border_style(_t,line.style_dotted)
-			_gi(_at,_f,_a,_c,bar_index,na)
-			_bj.push(Rango.new(_c,bar_index,_f,_a,_op))
+			_go(_at,_f,_a,_c,bar_index,na)
+			_bj.push(Rango.new(_c,bar_index,_f,_a,_nw))
 			if _bj.size()> 8
 				_bj.shift()
 			if not na(_g)
@@ -449,31 +449,31 @@ if _u and _fv
 				line.set_x2(_w,bar_index)
 			if not na(_z)
 				label.set_xy(_z,int(math.avg(_c,bar_index)),_f)
-				label.set_text(_z,'RANGE   '+str.tostring(_rk)+' BARS   '+_ia(_nk))
-				label.set_textcolor(_z,color.new(_fh,10))
-			if _jy and _b !=0
-				_nu=(_b==1?'▲  ':'▼  ')+'Breakout'
-				if _fa
-					_au:=label.new(bar_index,_b==1?low:high,_b==1?'▲':'▼',xloc=xloc.bar_index,yloc=yloc.price,color=_cb,style=_b==1?label.style_label_up:label.style_label_down,textcolor=color.new(_fh,20),size=_kr,tooltip='Breakout del rango')
+				label.set_text(_z,'RANGE   '+str.tostring(_sd)+' BARS   '+_ib(_ng))
+				label.set_textcolor(_z,color.new(_fg,10))
+			if _ka and _b !=0
+				_oo=(_b==1?'▲  ':'▼  ')+'Breakout'
+				if _fc
+					_av:=label.new(bar_index,_b==1?low:high,_b==1?'▲':'▼',xloc=xloc.bar_index,yloc=yloc.price,color=_cb,style=_b==1?label.style_label_up:label.style_label_down,textcolor=color.new(_fg,20),size=_kt,tooltip='Breakout del rango')
 				else
-					_au:=label.new(bar_index,_b==1?low:high,_nu,xloc=xloc.bar_index,yloc=yloc.price,color=color.new(_iq,10),style=_b==1?label.style_label_up:label.style_label_down,textcolor=_eo(_iq),size=_gl)
+					_av:=label.new(bar_index,_b==1?low:high,_oo,xloc=xloc.bar_index,yloc=yloc.price,color=color.new(_hz,10),style=_b==1?label.style_label_up:label.style_label_down,textcolor=_en(_hz),size=_gm)
 			if _b==1
-				_cp:=true
+				_cl:=true
 			else if _b==-1
 				_bk:=true
 		else
 			box.delete(_t)
-			_os(_at)
+			_op(_at)
 			line.delete(_g)
 			line.delete(_k)
 			line.delete(_w)
 			label.delete(_z)
-		if _jz
-			_ba:=true
-			_dy:=bar_index
+		if _ke
+			_bb:=true
+			_dq:=bar_index
 			_p:=_b
 			_o:=_b==1?high:low
-			_bf:=bar_index
+			_bh:=bar_index
 		else
 			array.clear(_at)
 			_t:=na
@@ -481,327 +481,327 @@ if _u and _fv
 			_k:=na
 			_w:=na
 			_z:=na
-			_au:=na
-		_u:=false
-		_l:=false
-		_az:=_ly
+			_av:=na
+		_v:=false
+		_m:=false
+		_bd:=_mf
 	else
-		_l:=bar_index-_c+1 >=_ju
-if _ba and _fv
+		_m:=bar_index-_c+1 >=_jw
+if _bb and _fj
 	if _p==1 and high > _o
 		_o:=high
-		_bf:=bar_index
+		_bh:=bar_index
 	if _p==-1 and low < _o
 		_o:=low
-		_bf:=bar_index
-	_so=_p==1?close <=_f:close >=_a
-	_us=bar_index-_dy >=_hf
-	if _so and bar_index > _dy
+		_bh:=bar_index
+	_rn=_p==1?close <=_f:close >=_a
+	_vc=bar_index-_dq >=_he
+	if _rn and bar_index > _dq
 		_db=_p==1?_ch:_cf
-		_jw=(_p==1?'⤵  ':'⤴  ')+'Deviation'
-		if _ij
-			if _fa
-				_ke=_bn(_db,_x,_cg)
-				label.new(_bf,_o,_p==1?'⤵':'⤴',xloc=xloc.bar_index,yloc=yloc.price,color=_cb,style=_p==1?label.style_label_down:label.style_label_up,textcolor=color.new(_ke,20),size=_kr,tooltip='Deviation: ruptura fallida, el precio volvió al rango')
+		_jz=(_p==1?'⤵  ':'⤴  ')+'Deviation'
+		if _ik
+			if _fc
+				_jt=_bn(_db,_x,_cg)
+				label.new(_bh,_o,_p==1?'⤵':'⤴',xloc=xloc.bar_index,yloc=yloc.price,color=_cb,style=_p==1?label.style_label_down:label.style_label_up,textcolor=color.new(_jt,20),size=_kt,tooltip='Deviation: ruptura fallida, el precio volvió al rango')
 			else
-				label.new(_bf,_o,_jw,xloc=xloc.bar_index,yloc=yloc.price,color=color.new(_db,10),style=_p==1?label.style_label_down:label.style_label_up,textcolor=_eo(_db),size=_gl)
-		label.delete(_au)
-		_au:=na
+				label.new(_bh,_o,_jz,xloc=xloc.bar_index,yloc=yloc.price,color=color.new(_db,10),style=_p==1?label.style_label_down:label.style_label_up,textcolor=_en(_db),size=_gm)
+		label.delete(_av)
+		_av:=na
 		if not na(_t)
-			box.set_border_color(_t,color.new(_r,30))
-			_gi(_at,_f,_a,_c,bar_index,na)
+			box.set_border_color(_t,color.new(_s,30))
+			_go(_at,_f,_a,_c,bar_index,na)
 		if not na(_z)
-			label.set_textcolor(_z,color.new(_r,10))
-		_u:=true
-		_l:=true
-		_ba:=false
+			label.set_textcolor(_z,color.new(_s,10))
+		_v:=true
+		_m:=true
+		_bb:=false
 		_p:=0
-		_az:=0
+		_bd:=0
 		_bz:=true
 		if _bj.size()> 0 and _bj.last().x1==_c
 			_bj.pop()
-	else if _us
+	else if _vc
 		array.clear(_at)
-		_ba:=false
+		_bb:=false
 		_p:=0
 		_t:=na
 		_g:=na
 		_k:=na
 		_w:=na
 		_z:=na
-		_au:=na
-if _u
-	_pe=_a !=0?(_f-_a)/_a*100.0:0.0
-	_cw=math.avg(_f,_a)
-	_by=_a+(_f-_a)*0.25
-	_bc=_a+(_f-_a)*0.75
+		_av:=na
+if _v
+	_of=_a !=0?(_f-_a)/_a*100.0:0.0
+	_cu=math.avg(_f,_a)
+	_bu=_a+(_f-_a)*0.25
+	_ba=_a+(_f-_a)*0.75
 	box.set_lefttop(_t,_c,_f)
 	box.set_rightbottom(_t,bar_index,_a)
-	box.set_border_color(_t,color.new(_r,_l?30:55))
+	box.set_border_color(_t,color.new(_s,_m?30:55))
 	box.set_border_style(_t,line.style_dotted)
-	_gi(_at,_f,_a,_c,bar_index,na)
+	_go(_at,_f,_a,_c,bar_index,na)
 	if not na(_g)
-		line.set_xy1(_g,_c,_cw)
-		line.set_xy2(_g,bar_index,_cw)
+		line.set_xy1(_g,_c,_cu)
+		line.set_xy2(_g,bar_index,_cu)
 	if not na(_k)
-		line.set_xy1(_k,_c,_by)
-		line.set_xy2(_k,bar_index,_by)
-		line.set_xy1(_w,_c,_bc)
-		line.set_xy2(_w,bar_index,_bc)
+		line.set_xy1(_k,_c,_bu)
+		line.set_xy2(_k,bar_index,_bu)
+		line.set_xy1(_w,_c,_ba)
+		line.set_xy2(_w,bar_index,_ba)
 	if not na(_z)
 		label.set_xy(_z,int(math.avg(_c,bar_index)),_f)
-		label.set_text(_z,(_l?'RANGE   ':'FORMING   ')+str.tostring(bar_index-_c+1)+' BARS   '+_ia(_pe))
-_hg=_cp or _bk
-_hk=_eq and _u
-_gq=_eq and _u[1]and not _u
-_ye=ta.pivothigh(high,_ca,_ca)
-_vx=ta.pivotlow(low,_ca,_ca)
+		label.set_text(_z,(_m?'RANGE   ':'FORMING   ')+str.tostring(bar_index-_c+1)+' BARS   '+_ib(_of))
+_hi=_cl or _bk
+_ho=_ed and _v
+_gx=_ed and _v[1]and not _v
+_yk=ta.pivothigh(high,_ca,_ca)
+_xg=ta.pivotlow(low,_ca,_ca)
 var float _j=na
-var int _ho=na
+var int _hk=na
 var float _h=na
-var int _fq=na
+var int _fz=na
 var int _i=0
-if not na(_ye)
-	_j:=_ye
-	_ho:=bar_index[_ca]
-if not na(_vx)
-	_h:=_vx
-	_fq:=bar_index[_ca]
-_rg=ta.sma(volume,_ul)
-_ud=volume > (_rg*_td)
-_eg=volume > (_rg*_uj)
-_gz(int dir,float _rc)=>
-	_vo=math.max(high-low,syminfo.mintick)
-	_wt=math.abs(close-open)
-	_xk=dir==1?high-math.max(open,close):math.min(open,close)-low
-	int _im=0
-	string _cn=""
-	if _xk/_vo >=_sb/100
-		_im+=1
-		_cn+="• Mecha de rechazo\n"
-	if math.abs(close-_rc)< _sy*_cj
-		_im+=1
-		_cn+="• Ruptura corta\n"
-	if _vo > _qv*_cj
-		_im+=1
-		_cn+="• Vela de clímax\n"
-	if(dir==1 and close < _ie)or(dir==-1 and close > _ie)
-		_im+=1
-		_cn+="• Contra la EMA lenta\n"
-	if _wt/_vo < _qs/100
-		_im+=1
-		_cn+="• Cuerpo pequeño\n"
-	_ep=false
-	for z in _hd
-		if dir==1 and z.dir==-1 and z._ai >=close and z._ai-close <=_pg*_cj
-			_ep:=true
-		if dir==-1 and z.dir==1 and z._ah <=close and close-z._ah <=_pg*_cj
-			_ep:=true
-	if _ep
-		_im+=1
-		_cn+="• FVG contrario delante\n"
-	[_im,_cn]
-_be=barstate.isconfirmed
+if not na(_yk)
+	_j:=_yk
+	_hk:=bar_index[_ca]
+if not na(_xg)
+	_h:=_xg
+	_fz:=bar_index[_ca]
+_sh=ta.sma(volume,_uw)
+_ud=volume > (_sh*_tb)
+_el=volume > (_sh*_vk)
+_gt(int dir,float _sa)=>
+	_vi=math.max(high-low,syminfo.mintick)
+	_wg=math.abs(close-open)
+	_xx=dir==1?high-math.max(open,close):math.min(open,close)-low
+	int _hy=0
+	string _cm=""
+	if _xx/_vi >=_sg/100
+		_hy+=1
+		_cm+="• Mecha de rechazo\n"
+	if math.abs(close-_sa)< _tm*_ci
+		_hy+=1
+		_cm+="• Ruptura corta\n"
+	if _vi > _rb*_ci
+		_hy+=1
+		_cm+="• Vela de clímax\n"
+	if(dir==1 and close < _iw)or(dir==-1 and close > _iw)
+		_hy+=1
+		_cm+="• Contra la EMA lenta\n"
+	if _wg/_vi < _qp/100
+		_hy+=1
+		_cm+="• Cuerpo pequeño\n"
+	_ei=false
+	for z in _hj
+		if dir==1 and z.dir==-1 and z._ah >=close and z._ah-close <=_qa*_ci
+			_ei:=true
+		if dir==-1 and z.dir==1 and z._ai <=close and close-z._ai <=_qa*_ci
+			_ei:=true
+	if _ei
+		_hy+=1
+		_cm+="• FVG contrario delante\n"
+	[_hy,_cm]
+_ay=barstate.isconfirmed
 var int _n=na
 var int _am=0
-var float _ab=na
-var int _ad=na
-var string _cm=""
-var string _fr=""
-var int _dm=0
+var float _ae=na
+var int _ab=na
+var string _cn=""
+var string _ft=""
+var int _dz=0
 var bool _e=false
-var int _ag=0
+var int _af=0
 var float _q=na
-var int _cu=na
+var int _ct=na
 var string _cd=""
 var label _y=na
-var line _bd=na
-var int _ez=na
-var label _aq=na
-var int _bq=na
-var int _da=0
-_ce(int _si,int _rf)=>
-	if _hu and not na(_bq)and _da==-_si and(_jj==0 or _rf-_bq <=_jj)
-		_aq.delete()
-_dx(int dir,int _vq,float _rc,int _la,string _xm,string tip,color col,bool _nx)=>
-	ln=line.new(_vq,_rc,_la,_rc,color=col,width=1,style=_nx?line.style_dashed:line.style_solid)
-	lb=label.new(_la-_st,_rc,_xm,style=dir==1?label.style_label_down:label.style_label_up,color=color.new(color.white,100),textcolor=col,size=size.small,tooltip=tip)
+var line _ax=na
+var int _ff=na
+var label _ar=na
+var int _bs=na
+var int _cy=0
+_ce(int _rq,int _rx)=>
+	if _hu and not na(_bs)and _cy==-_rq and(_im==0 or _rx-_bs <=_im)
+		_ar.delete()
+_dt(int dir,int _up,float _sa,int _lc,string _xr,string tip,color col,bool _oh)=>
+	ln=line.new(_up,_sa,_lc,_sa,color=col,width=1,style=_oh?line.style_dashed:line.style_solid)
+	lb=label.new(_lc-_sw,_sa,_xr,style=dir==1?label.style_label_down:label.style_label_up,color=color.new(color.white,100),textcolor=col,size=size.small,tooltip=tip)
 	[ln,lb]
-_hc=na(_c)?_i:nz(_i[math.max(0,bar_index-_c+1)],0)
-if _eq and(_cc or _bz)and not na(_c)
-	_i:=_hc
-	if _hx.size()> 0
-		for i=_hx.size()-1 to 0
-			m=_hx.get(i)
+_hf=na(_c)?_i:nz(_i[math.max(0,bar_index-_c+1)],0)
+if _ed and(_cc or _bz)and not na(_c)
+	_i:=_hf
+	if _in.size()> 0
+		for i=_in.size()-1 to 0
+			m=_in.get(i)
 			if m.bar >=_c
 				m.lb.delete()
 				m.ln.delete()
-				_hx.remove(i)
+				_in.remove(i)
 	if not na(_n)and _n >=_c
 		_n:=na
-	if _e and _ez >=_c
+	if _e and _ff >=_c
 		_e:=false
 		_y:=na
-		_bd:=na
-_di=false
-_dh=false
-if _be and _hk and not na(_n)
+		_ax:=na
+_dk=false
+_df=false
+if _ay and _ho and not na(_n)
 	_n:=na
-	_i:=_dm
-if _be and not na(_n)and bar_index==_n+1
-	_nx=_am==1?close < _ab:close > _ab
-	_vd=_am==1?_ae:_v
-	if _nx
+	_i:=_dz
+if _ay and not na(_n)and bar_index==_n+1
+	_oh=_am==1?close < _ae:close > _ae
+	_un=_am==1?_ac:_u
+	if _oh
 		_e:=true
-		_ag:=_am
-		_q:=_ab
-		_cu:=_ad
-		_cd:=_cm
-		_ez:=_n
+		_af:=_am
+		_q:=_ae
+		_ct:=_ab
+		_cd:=_cn
+		_ff:=_n
 		_y:=na
-		_bd:=na
+		_ax:=na
 		if _am==1
-			_di:=true
+			_dk:=true
 		else
-			_dh:=true
-		if _ip
-			[_yi,_yg]=_dx(_am,_ad,_ab,_n,"✗ "+_cm,"CHoCH fallido: la vela siguiente cerró de nuevo al otro lado del nivel\n"+_fr,_lx,true)
-			_y:=_yg
-			_bd:=_yi
-			_an(_yg,_yi,_n)
-		if _hs
-			_i:=_dm
+			_df:=true
+		if _ir
+			[_yg,_yd]=_dt(_am,_ab,_ae,_n,"✗ "+_cn,"CHoCH fallido: la vela siguiente cerró de nuevo al otro lado del nivel\n"+_ft,_lk,true)
+			_y:=_yd
+			_ax:=_yg
+			_aj(_yd,_yg,_n)
+		if _ht
+			_i:=_dz
 			if _am==1 and na(_j)
-				_j:=_ab
-				_ho:=_ad
+				_j:=_ae
+				_hk:=_ab
 			if _am==-1 and na(_h)
-				_h:=_ab
-				_fq:=_ad
+				_h:=_ae
+				_fz:=_ab
 	else
-		[_yp,_ys]=_dx(_am,_ad,_ab,_n,_cm,_fr,_vd,false)
-		_an(_ys,_yp,_n)
+		[_yn,_yu]=_dt(_am,_ab,_ae,_n,_cn,_ft,_un,false)
+		_aj(_yu,_yn,_n)
 		_ce(_am,_n)
 	_n:=na
-_dc=false
-_cz=false
-if _be and _e and not _hk
-	if _ag==1 and close > _q
-		_dc:=true
+_dd=false
+_da=false
+if _ay and _e and not _ho
+	if _af==1 and close > _q
+		_dd:=true
 		_i:=1
 		if _j==_q
 			_j:=na
-	else if _ag==-1 and close < _q
-		_cz:=true
+	else if _af==-1 and close < _q
+		_da:=true
 		_i:=-1
 		if _h==_q
 			_h:=na
-	if _dc or _cz
+	if _dd or _da
 		_e:=false
-		_sa=_ag==1?_ae:_v
+		_rd=_af==1?_ac:_u
 		if na(_y)
-			[_yt,_yr]=_dx(_ag,_cu,_q,bar_index,_cd,"CHoCH confirmado al recuperar el nivel",_sa,false)
-			_an(_yr,_yt,bar_index)
+			[_yv,_yr]=_dt(_af,_ct,_q,bar_index,_cd,"CHoCH confirmado al recuperar el nivel",_rd,false)
+			_aj(_yr,_yv,bar_index)
 		else
 			_y.set_text(_cd)
-			_y.set_textcolor(_sa)
+			_y.set_textcolor(_rd)
 			_y.set_tooltip("CHoCH confirmado al recuperar el nivel")
-			_bd.set_color(_sa)
-			_bd.set_style(line.style_solid)
-		_ce(_ag,bar_index)
-_gw=_be and not _hk and _ud and not na(_j)and close > _j and(close[1]<=_j or _gq)
-_ik=_be and not _hk and _ud and not na(_h)and close < _h and(close[1]>=_h or _gq)
-_mj=_gw and not na(_j)and _i <=0
-_lz=_ik and not na(_h)and _i >=0
+			_ax.set_color(_rd)
+			_ax.set_style(line.style_solid)
+		_ce(_af,bar_index)
+_gr=_ay and not _ho and _ud and not na(_j)and close > _j and(close[1]<=_j or _gx)
+_il=_ay and not _ho and _ud and not na(_h)and close < _h and(close[1]>=_h or _gx)
+_li=_gr and not na(_j)and _i <=0
+_lo=_il and not na(_h)and _i >=0
 _eb=false
-_ec=false
-_me(int dir,int idx)=>
-	_ah=_mw?math.max(open[idx],close[idx]):high[idx]
-	_ai=_mw?math.min(open[idx],close[idx]):low[idx]
-	col=dir==1?_kt:_kl
-	if _mz
+_ea=false
+_ln(int dir,int idx)=>
+	_ai=_nr?math.max(open[idx],close[idx]):high[idx]
+	_ah=_nr?math.min(open[idx],close[idx]):low[idx]
+	col=dir==1?_kw:_km
+	if _na
 		line.new(bar_index-idx,high[idx],bar_index-idx,low[idx],color=color.new(col,10),width=5)
-	obs.push(Zona.new(bar_index-idx,_ah,_ai,dir,na,bar_index))
-	if obs.size()> _wo
+	obs.push(Zona.new(bar_index-idx,_ai,_ah,dir,na,bar_index))
+	if obs.size()> _wr
 		obs.shift()
-_qd(int dir,int _sl)=>
-	n=math.min(math.max(bar_index-_sl,1),150)
+_pg(int dir,int _re)=>
+	n=math.min(math.max(bar_index-_re,1),150)
 	int idx=na
 	float ext=na
 	for i=0 to n
-		_rl=dir==1?close[i]< open[i]:close[i]> open[i]
-		_or=dir==1?low[i]:high[i]
-		if _rl and(na(ext)or(dir==1?_or < ext:_or > ext))
-			ext:=_or
+		_si=dir==1?close[i]< open[i]:close[i]> open[i]
+		_nu=dir==1?low[i]:high[i]
+		if _si and(na(ext)or(dir==1?_nu < ext:_nu > ext))
+			ext:=_nu
 			idx:=i
 	if na(idx)
 		for i=0 to n
-			_or=dir==1?low[i]:high[i]
-			if na(ext)or(dir==1?_or < ext:_or > ext)
-				ext:=_or
+			_nu=dir==1?low[i]:high[i]
+			if na(ext)or(dir==1?_nu < ext:_nu > ext)
+				ext:=_nu
 				idx:=i
-	_gd=false
+	_fq=false
 	if idx >=2
-		for j=idx to math.max(idx-_mu+1,2)
-			if dir==1?low[j-2]-high[j]>=_cq*nz(_cj)and low[j-2]> high[j]:low[j]-high[j-2]>=_cq*nz(_cj)and high[j-2]< low[j]
-				_gd:=true
-	if _gd
-		_me(dir,idx)
-if _gw and not na(_j)
+		for j=idx to math.max(idx-_no+1,2)
+			if dir==1?low[j-2]-high[j]>=_cj*nz(_ci)and low[j-2]> high[j]:low[j]-high[j-2]>=_cj*nz(_ci)and high[j-2]< low[j]
+				_fq:=true
+	if _fq
+		_ln(dir,idx)
+if _gr and not na(_j)
 	if _i <=0
-		[_np,_cn]=_gz(1,_j)
-		_eb:=_fu and _np >=_kn
+		[_mm,_cm]=_gt(1,_j)
+		_eb:=_fw and _mm >=_kq
 		_n:=bar_index
 		_am:=1
-		_ab:=_j
-		_ad:=_ho
-		_cm:=_eg?"🔥 CHoCH":"CHoCH"
-		_fr:="Riesgo de fallo al romper: "+str.tostring(_np)+"/6\n"+_cn
-		_dm:=_i
+		_ae:=_j
+		_ab:=_hk
+		_cn:=_el?"🔥 CHoCH":"CHoCH"
+		_ft:="Riesgo de fallo al romper: "+str.tostring(_mm)+"/6\n"+_cm
+		_dz:=_i
 		_e:=false
-	else if _ig and not _e
-		_aq:=label.new(bar_index,high,"BOS",yloc=yloc.abovebar,style=label.style_none,textcolor=_ae,size=size.small)
-		_bq:=bar_index
-		_da:=1
-		_an(_aq,na,bar_index)
-	if _ko and(_i <=0 or not _fk)
-		if _bg
-			_qd(1,_ho)
+	else if _iz and not _e
+		_ar:=label.new(bar_index,high,"BOS",yloc=yloc.abovebar,style=label.style_none,textcolor=_ac,size=size.small)
+		_bs:=bar_index
+		_cy:=1
+		_aj(_ar,na,bar_index)
+	if _kl and(_i <=0 or not _gb)
+		if _bc
+			_pg(1,_hk)
 	_i:=1
 	_j:=na
-if _ik and not na(_h)
+if _il and not na(_h)
 	if _i >=0
-		[_np,_cn]=_gz(-1,_h)
-		_ec:=_fu and _np >=_kn
+		[_mm,_cm]=_gt(-1,_h)
+		_ea:=_fw and _mm >=_kq
 		_n:=bar_index
 		_am:=-1
-		_ab:=_h
-		_ad:=_fq
-		_cm:=_eg?"🔥 CHoCH":"CHoCH"
-		_fr:="Riesgo de fallo al romper: "+str.tostring(_np)+"/6\n"+_cn
-		_dm:=_i
+		_ae:=_h
+		_ab:=_fz
+		_cn:=_el?"🔥 CHoCH":"CHoCH"
+		_ft:="Riesgo de fallo al romper: "+str.tostring(_mm)+"/6\n"+_cm
+		_dz:=_i
 		_e:=false
-	else if _ig and not _e
-		_aq:=label.new(bar_index,low,"BOS",yloc=yloc.belowbar,style=label.style_none,textcolor=_v,size=size.small)
-		_bq:=bar_index
-		_da:=-1
-		_an(_aq,na,bar_index)
-	if _ko and(_i >=0 or not _fk)
-		if _bg
-			_qd(-1,_fq)
+	else if _iz and not _e
+		_ar:=label.new(bar_index,low,"BOS",yloc=yloc.belowbar,style=label.style_none,textcolor=_u,size=size.small)
+		_bs:=bar_index
+		_cy:=-1
+		_aj(_ar,na,bar_index)
+	if _kl and(_i >=0 or not _gb)
+		if _bc
+			_pg(-1,_fz)
 	_i:=-1
 	_h:=na
-if _be and obs.size()> 0
+if _ay and obs.size()> 0
 	for i=obs.size()-1 to 0
 		ob=obs.get(i)
-		if ob._sn !=bar_index and _ey(ob)
+		if ob._rk !=bar_index and _ey(ob)
 			obs.remove(i)
-bgcolor(_mx?color.white:na)
-plot(_ee?_qm:na,"EMA rápida",color=_ot,linewidth=1)
-plot(_ee?_sh:na,"EMA media",color=_ns,linewidth=1)
-plot(_ee?_ie:na,"EMA lenta",color=_pd,linewidth=2)
-_ff=false
-_fd=false
-_rs()=>
+bgcolor(_mp?color.white:na)
+plot(_eq?_qr:na,"EMA rápida",color=_ov,linewidth=1)
+plot(_eq?_rh:na,"EMA media",color=_om,linewidth=1)
+plot(_eq?_iw:na,"EMA lenta",color=_oq,linewidth=2)
+_fb=false
+_fe=false
+_rl()=>
 	string r=timeframe.period
 	if timeframe.isseconds
 		r:="S"+str.tostring(timeframe.multiplier)
@@ -814,72 +814,72 @@ _rs()=>
 	else if timeframe.ismonthly
 		r:=timeframe.multiplier==1?"MN":str.tostring(timeframe.multiplier)+"MN"
 	r
-_dt=_rs()
+_dr=_rl()
 _d=timeframe.in_seconds()
-_gf(int _vt)=>
-	_cq*nz(_cj)*math.sqrt(_vt*60.0/math.max(_d,1))
-_qe=_d==60?_cs:_d==300?_bv:_d==900?_bb:_d==3600?_bh:_d==14400?_ar:_ob
-_to=_d==60?_nr:_d==300?_mv:_d==900?_kp:_d==3600?_kh:_d==14400?_iz:_sf
-_te=_d==60?_mm:_d==300?_na:_d==900?_ky:_d==3600?_lc:_d==14400?_in:_rq
-_gu=input.int(4,"Alerta de retesteo de IFVG: velas posteriores a vigilar",minval=1,maxval=20,group=_qb)
-_fw(array<Zona> arr)=>
-	_yc=false
+_gk(int _vt)=>
+	_cj*nz(_ci)*math.sqrt(_vt*60.0/math.max(_d,1))
+_pw=_d==60?_cs:_d==300?_bx:_d==900?_bf:_d==3600?_aw:_d==14400?_aq:_nt
+_ss=_d==60?_ni:_d==300?_mu:_d==900?_ks:_d==3600?_lb:_d==14400?_ig:_sb
+_sv=_d==60?_nh:_d==300?_ml:_d==900?_le:_d==3600?_kz:_d==14400?_jj:_sf
+_gu=input.int(4,"Alerta de retesteo de IFVG: velas posteriores a vigilar",minval=1,maxval=20,group=_pk)
+_fy(array<Zona> arr)=>
+	_yh=false
 	for z in arr
-		n=bar_index-z._sn
-		if not z._lg and n >=1 and n <=_gu and high >=z._ai and low <=z._ah
-			z._lg:=true
-			_yc:=true
-	_yc
-_ea=_fw(_jq)
-_sg=input.bool(true,"Alerta de retesteo también para IFVG de M1 (aunque no se dibujen)",group=_qb)
+		n=bar_index-z._rk
+		if not z._ma and n >=1 and n <=_gu and high >=z._ah and low <=z._ai
+			z._ma:=true
+			_yh:=true
+	_yh
+_ec=_fy(_hs)
+_sk=input.bool(true,"Alerta de retesteo también para IFVG de M1 (aunque no se dibujen)",group=_pk)
 type EstadoLTF
 	float h2
 	float l2
 	float h1
 	float l1
 	int n=0
-_gx(Zona z,float hi,float lo)=>
-	_fx=z.dir==1?lo <=z._ai:hi >=z._ah
-	if not _fx
-		_bi=na(z._bi)?(z.dir==1?z._ah:z._ai):z._bi
+_gw(Zona z,float hi,float lo)=>
+	_fo=z.dir==1?lo <=z._ah:hi >=z._ai
+	if not _fo
+		_bi=na(z._bi)?(z.dir==1?z._ai:z._ah):z._bi
 		if z.dir==1?lo < _bi:hi > _bi
 			z._bi:=z.dir==1?lo:hi
-	_fx
-_bu(array<Zona> fvg,array<Zona> _tv,EstadoLTF s,array<float> ao,array<float> ah,array<float> al,array<float> ac,int _xi,float _rx)=>
-	_ty=false
+	_fo
+_by(array<Zona> fvg,array<Zona> _tv,EstadoLTF s,array<float> ao,array<float> ah,array<float> al,array<float> ac,int _xi,float _sc)=>
+	_ue=false
 	if ah.size()> 0
-		_fc=barstate.isconfirmed?ah.size()-1:ah.size()-2
+		_ez=barstate.isconfirmed?ah.size()-1:ah.size()-2
 		for k=0 to ah.size()-1
 			o1=ao.get(k)
 			h1=ah.get(k)
 			l1=al.get(k)
 			c1=ac.get(k)
 			for z in _tv
-				n=s.n-z._sn
-				if not z._lg and n >=1 and n <=_gu and h1 >=z._ai and l1 <=z._ah
-					if k <=_fc
-						z._lg:=true
-					_ty:=true
-			if k <=_fc
+				n=s.n-z._rk
+				if not z._ma and n >=1 and n <=_gu and h1 >=z._ah and l1 <=z._ai
+					if k <=_ez
+						z._ma:=true
+					_ue:=true
+			if k <=_ez
 				if _tv.size()> 0
 					for i=_tv.size()-1 to 0
-						if _gx(_tv.get(i),h1,l1)
+						if _gw(_tv.get(i),h1,l1)
 							_tv.remove(i)
 				if fvg.size()> 0
 					for i=fvg.size()-1 to 0
 						z=fvg.get(i)
-						inv=na(z._bi)and(z.dir==1?(o1 >=z._ah and c1 < z._ai):(o1 <=z._ai and c1 > z._ah))
+						inv=na(z._bi)and(z.dir==1?(o1 >=z._ai and c1 < z._ah):(o1 <=z._ah and c1 > z._ai))
 						if inv
 							fvg.remove(i)
-							_tv.push(Zona.new(z.x1,z._ah,z._ai,-z.dir,na,s.n))
+							_tv.push(Zona.new(z.x1,z._ai,z._ah,-z.dir,na,s.n))
 							if _tv.size()> _xi
 								_tv.shift()
-						else if _gx(z,h1,l1)
+						else if _gw(z,h1,l1)
 							fvg.remove(i)
 				if not na(s.h2)
-					if l1 > s.h2 and l1-s.h2 >=_rx
+					if l1 > s.h2 and l1-s.h2 >=_sc
 						fvg.push(Zona.new(bar_index,l1,s.h2,1))
-					else if h1 < s.l2 and s.l2-h1 >=_rx
+					else if h1 < s.l2 and s.l2-h1 >=_sc
 						fvg.push(Zona.new(bar_index,s.l2,h1,-1))
 					if fvg.size()> _xi
 						fvg.shift()
@@ -888,190 +888,190 @@ _bu(array<Zona> fvg,array<Zona> _tv,EstadoLTF s,array<float> ao,array<float> ah,
 				s.h1:=h1
 				s.l1:=l1
 				s.n:=s.n+1
-	_ty
-var _yo=EstadoLTF.new()
-var _yv=EstadoLTF.new()
-var _xq=EstadoLTF.new()
-var _xv=EstadoLTF.new()
-var _wq=EstadoLTF.new()
-_yh=timeframe.isintraday and((_cs and not _m)or _sg)and _d > 60
-_xz=timeframe.isintraday and _bv and not _m and _d > 300
-_wf=timeframe.isintraday and _bb and not _m and _d > 900
-_ws=timeframe.isintraday and _bh and not _m and _d > 3600
-_tw=_ar and not _m and _d > 14400
-_dd=false
-if _yh and _bg
-	[o_,h_,l_,c_]=request.security_lower_tf(syminfo.tickerid,_yh?"1":timeframe.period,[open,high,low,close])
-	_dd:=_bu(_xt,_xe,_yo,o_,h_,l_,c_,30,_gf(1))
-_bo=false
+	_ue
+var _yq=EstadoLTF.new()
+var _yp=EstadoLTF.new()
+var _xn=EstadoLTF.new()
+var _xo=EstadoLTF.new()
+var _vx=EstadoLTF.new()
+_yf=timeframe.isintraday and((_cs and not _l)or _sk)and _d > 60
+_ya=timeframe.isintraday and _bx and not _l and _d > 300
+_we=timeframe.isintraday and _bf and not _l and _d > 900
+_wy=timeframe.isintraday and _aw and not _l and _d > 3600
+_tu=_aq and not _l and _d > 14400
+_dc=false
+if _yf and _bc
+	[o_,h_,l_,c_]=request.security_lower_tf(syminfo.tickerid,_yf?"1":timeframe.period,[open,high,low,close])
+	_dc:=_by(_xk,_wk,_yq,o_,h_,l_,c_,30,_gk(1))
+_bp=false
 if _d < 300
-	_bo:=_fw(_tm)
-else if _xz and _bg
-	[o_,h_,l_,c_]=request.security_lower_tf(syminfo.tickerid,_xz?"5":timeframe.period,[open,high,low,close])
-	_bo:=_bu(_vs,_tm,_yv,o_,h_,l_,c_,_gg,_gf(5))
-_aw=false
+	_bp:=_fy(_tc)
+else if _ya and _bc
+	[o_,h_,l_,c_]=request.security_lower_tf(syminfo.tickerid,_ya?"5":timeframe.period,[open,high,low,close])
+	_bp:=_by(_vs,_tc,_yp,o_,h_,l_,c_,_gl,_gk(5))
+_az=false
 if _d < 900
-	_aw:=_fw(_po)
-else if _wf and _bg
-	[o_,h_,l_,c_]=request.security_lower_tf(syminfo.tickerid,_wf?"15":timeframe.period,[open,high,low,close])
-	_aw:=_bu(_qy,_po,_xq,o_,h_,l_,c_,_gg,_gf(15))
-_bs=false
-if _d < 3600
-	_bs:=_fw(_pu)
-else if _ws and _bg
-	[o_,h_,l_,c_]=request.security_lower_tf(syminfo.tickerid,_ws?"60":timeframe.period,[open,high,low,close])
-	_bs:=_bu(_qt,_pu,_xv,o_,h_,l_,c_,_gg,_gf(60))
+	_az:=_fy(_pt)
+else if _we and _bc
+	[o_,h_,l_,c_]=request.security_lower_tf(syminfo.tickerid,_we?"15":timeframe.period,[open,high,low,close])
+	_az:=_by(_qx,_pt,_xn,o_,h_,l_,c_,_gl,_gk(15))
 _br=false
+if _d < 3600
+	_br:=_fy(_qb)
+else if _wy and _bc
+	[o_,h_,l_,c_]=request.security_lower_tf(syminfo.tickerid,_wy?"60":timeframe.period,[open,high,low,close])
+	_br:=_by(_qs,_qb,_xo,o_,h_,l_,c_,_gl,_gk(60))
+_bq=false
 if _d < 14400
-	_br:=_fw(_lr)
-else if _tw and _bg
-	[o_,h_,l_,c_]=request.security_lower_tf(syminfo.tickerid,_tw?"240":timeframe.period,[open,high,low,close])
-	_br:=_bu(_ki,_lr,_wq,o_,h_,l_,c_,_gg,_gf(240))
-_hv=_ea or _dd or _bo or _aw or _bs or _br
-if _hv
-	tfs=(_dd?" M1":"")+(_bo?" M5":"")+(_ea?" "+_dt:"")+(_aw?" M15":"")+(_bs?" H1":"")+(_br?" H4":"")
+	_bq:=_fy(_me)
+else if _tu and _bc
+	[o_,h_,l_,c_]=request.security_lower_tf(syminfo.tickerid,_tu?"240":timeframe.period,[open,high,low,close])
+	_bq:=_by(_la,_me,_vx,o_,h_,l_,c_,_gl,_gk(240))
+_if=_ec or _dc or _bp or _az or _br or _bq
+if _if
+	tfs=(_dc?" M1":"")+(_bp?" M5":"")+(_ec?" "+_dr:"")+(_az?" M15":"")+(_br?" H1":"")+(_bq?" H4":"")
 	alert("Retesteo de IFVG ("+str.trim(tfs)+") en "+syminfo.ticker+" a "+str.tostring(close),alert.freq_once_per_bar)
-if _be and _jq.size()> 0
-	for i=_jq.size()-1 to 0
-		if _ey(_jq.get(i))
-			_jq.remove(i)
-if _be and _hd.size()> 0
-	for i=_hd.size()-1 to 0
-		z=_hd.get(i)
-		_ir=na(z._bi)and(z.dir==1?(open >=z._ah and close < z._ai):(open <=z._ai and close > z._ah))
-		if _ir
-			_hd.remove(i)
+if _ay and _hs.size()> 0
+	for i=_hs.size()-1 to 0
+		if _ey(_hs.get(i))
+			_hs.remove(i)
+if _ay and _hj.size()> 0
+	for i=_hj.size()-1 to 0
+		z=_hj.get(i)
+		_jp=na(z._bi)and(z.dir==1?(open >=z._ai and close < z._ah):(open <=z._ah and close > z._ai))
+		if _jp
+			_hj.remove(i)
 			if z.dir==1
-				_fd:=true
+				_fe:=true
 			else
-				_ff:=true
-			_jq.push(Zona.new(z.x1,z._ah,z._ai,-z.dir,na,bar_index))
-			if _jq.size()> _ng
-				_jq.shift()
+				_fb:=true
+			_hs.push(Zona.new(z.x1,z._ai,z._ah,-z.dir,na,bar_index))
+			if _hs.size()> _nb
+				_hs.shift()
 		else if _ey(z)
-			_hd.remove(i)
-_jn=_be and low > high[2]and(low-high[2])>=_cq*nz(_cj)
-_jc=_be and high < low[2]and(low[2]-high)>=_cq*nz(_cj)
-_jl(float _ah,float _ai,int dir)=>
-	_hd.push(Zona.new(bar_index-2,_ah,_ai,dir))
-	if _hd.size()> _ng
-		_hd.shift()
-if _jn
-	_jl(low,high[2],1)
-else if _jc
-	_jl(low[2],high,-1)
-_io=timeframe.in_seconds()
-_oe=str.startswith(_ku,"Automático")
-_oi=str.startswith(_ku,"Invierno")
-_je=_oe?"America/New_York":"Europe/Madrid"
-_ak=_oe?9*60:_oi?14*60:15*60
-_ge=hour(time,_je)*60+minute(time,_je)
-_qc=nz(_ge[1],_ge)
-_eu(int _ex)=>
-	_ge >=_ex and(_qc < _ex or _qc > _ge)
+			_hj.remove(i)
+_jd=_ay and low > high[2]and(low-high[2])>=_cj*nz(_ci)
+_jk=_ay and high < low[2]and(low[2]-high)>=_cj*nz(_ci)
+_iy(float _ai,float _ah,int dir)=>
+	_hj.push(Zona.new(bar_index-2,_ai,_ah,dir))
+	if _hj.size()> _nb
+		_hj.shift()
+if _jd
+	_iy(low,high[2],1)
+else if _jk
+	_iy(low[2],high,-1)
+_it=timeframe.in_seconds()
+_ol=str.startswith(_kk,"Automático")
+_or=str.startswith(_kk,"Invierno")
+_jm=_ol?"America/New_York":"Europe/Madrid"
+_ak=_ol?9*60:_or?14*60:15*60
+_ga=hour(time,_jm)*60+minute(time,_jm)
+_py=nz(_ga[1],_ga)
+_et(int _ex)=>
+	_ga >=_ex and(_py < _ex or _py > _ga)
 _ew(int _ex)=>
-	_oe?str.format_time(time-(_ge-_ex)*60000,"HH:mm","Europe/Madrid"):str.format("{0,number,00}:{1,number,00}",int(_ex/60),_ex%60)
-_du(string txt,bool _ua)=>
-	line.new(bar_index,low,bar_index,high,extend=extend.both,color=color.new(_nh,_ua?30:60),style=_ua?line.style_dashed:line.style_dotted,width=1)
-	label.new(bar_index,high,txt,yloc=yloc.abovebar,style=label.style_none,textcolor=color.new(_nh,10),size=size.tiny)
-if _ma and timeframe.isintraday and _io <=900
-	if _eu(_ak)
-		_du(_ew(_ak),false)
-	if _eu(_ak+30)
-		_du(_ew(_ak+30),false)
-	if _eu(_ak+45)
-		_du(_ew(_ak+45),false)
-	if _eu(_ak+60)
-		_du(_ew(_ak+60),true)
-_lp()=>
+	_ol?str.format_time(time-(_ga-_ex)*60000,"HH:mm","Europe/Madrid"):str.format("{0,number,00}:{1,number,00}",int(_ex/60),_ex%60)
+_dy(string txt,bool _ub)=>
+	line.new(bar_index,low,bar_index,high,extend=extend.both,color=color.new(_mr,_ub?30:60),style=_ub?line.style_dashed:line.style_dotted,width=1)
+	label.new(bar_index,high,txt,yloc=yloc.abovebar,style=label.style_none,textcolor=color.new(_mr,10),size=size.tiny)
+if _mg and timeframe.isintraday and _it <=900
+	if _et(_ak)
+		_dy(_ew(_ak),false)
+	if _et(_ak+30)
+		_dy(_ew(_ak+30),false)
+	if _et(_ak+45)
+		_dy(_ew(_ak+45),false)
+	if _et(_ak+60)
+		_dy(_ew(_ak+60),true)
+_ly()=>
 	[low[1]> high[3],high[1]< low[3],low[1],high[3],high[1],low[3],time[3]]
-_vm(int t)=>
+_uu(int t)=>
 	int k=0
 	while k < 1500 and time[k]> t
 		k+=1
 	bar_index-k
-_bx(array<Zona> arr,float _ah,float _ai,int dir,int _ur,int _vt)=>
-	if _ah-_ai >=_gf(_vt)
-		z=Zona.new(_vm(_ur),_ah,_ai,dir)
+_bv(array<Zona> arr,float _ai,float _ah,int dir,int _ux,int _vt)=>
+	if _ai-_ah >=_gk(_vt)
+		z=Zona.new(_uu(_ux),_ai,_ah,dir)
 		if not _ey(z)
 			arr.push(z)
-			if arr.size()> _gg
+			if arr.size()> _gl
 				arr.shift()
-_bp(array<Zona> arr,array<Zona> _dq)=>
-	_vy=false
-	if _dq.size()> 0
-		for i=_dq.size()-1 to 0
-			if _ey(_dq.get(i))
-				_dq.remove(i)
+_bt(array<Zona> arr,array<Zona> _dm)=>
+	_ws=false
+	if _dm.size()> 0
+		for i=_dm.size()-1 to 0
+			if _ey(_dm.get(i))
+				_dm.remove(i)
 	if arr.size()> 0
 		for i=arr.size()-1 to 0
 			z=arr.get(i)
-			_ti=(z._ah+z._ai)/2
-			if low <=_ti and high >=_ti
-				_vy:=true
-			_ir=na(z._bi)and(z.dir==1?(open >=z._ah and close < z._ai):(open <=z._ai and close > z._ah))
-			if _ir
+			_tg=(z._ai+z._ah)/2
+			if low <=_tg and high >=_tg
+				_ws:=true
+			_jp=na(z._bi)and(z.dir==1?(open >=z._ai and close < z._ah):(open <=z._ah and close > z._ai))
+			if _jp
 				arr.remove(i)
-				_dq.push(Zona.new(z.x1,z._ah,z._ai,-z.dir,na,bar_index))
-				if _dq.size()> _gg
-					_dq.shift()
+				_dm.push(Zona.new(z.x1,z._ai,z._ah,-z.dir,na,bar_index))
+				if _dm.size()> _gl
+					_dm.shift()
 			else if _ey(z)
 				arr.remove(i)
-	_vy
-_uv=timeframe.change("5")
-_th=timeframe.change("15")
-_ph=timeframe.change("60")
-_nq=timeframe.change("240")
-_qz=false
-_ii=false
-_ld=false
-_kw=false
-if _be and timeframe.isintraday and _bg
-	if _bv and not _m and _io < 300
-		_qz:=_bp(_vs,_tm)
-		if _uv
-			[a5,b5,_xa,_wv,_vz,_wb,t5]=request.security(syminfo.tickerid,"5",_lp(),lookahead=barmerge.lookahead_on)
+	_ws
+_vn=timeframe.change("5")
+_sy=timeframe.change("15")
+_qi=timeframe.change("60")
+_nk=timeframe.change("240")
+_qm=false
+_io=false
+_kj=false
+_kh=false
+if _ay and timeframe.isintraday and _bc
+	if _bx and not _l and _it < 300
+		_qm:=_bt(_vs,_tc)
+		if _vn
+			[a5,b5,_wd,_wq,_wb,_xc,t5]=request.security(syminfo.tickerid,"5",_ly(),lookahead=barmerge.lookahead_on)
 			if a5
-				_bx(_vs,_xa,_wv,1,t5,5)
+				_bv(_vs,_wd,_wq,1,t5,5)
 			else if b5
-				_bx(_vs,_wb,_vz,-1,t5,5)
-	if _bb and not _m and _io < 900
-		_ii:=_bp(_qy,_po)
-		if _th
-			[a15,b15,_uw,_vp,_vh,_vl,t15]=request.security(syminfo.tickerid,"15",_lp(),lookahead=barmerge.lookahead_on)
+				_bv(_vs,_xc,_wb,-1,t5,5)
+	if _bf and not _l and _it < 900
+		_io:=_bt(_qx,_pt)
+		if _sy
+			[a15,b15,_vp,_vl,_vj,_ur,t15]=request.security(syminfo.tickerid,"15",_ly(),lookahead=barmerge.lookahead_on)
 			if a15
-				_bx(_qy,_uw,_vp,1,t15,15)
+				_bv(_qx,_vp,_vl,1,t15,15)
 			else if b15
-				_bx(_qy,_vl,_vh,-1,t15,15)
-	if _bh and not _m and _io < 3600
-		_ld:=_bp(_qt,_pu)
-		if _ph
-			[a60,b60,_uo,_vb,_un,_ui,t60]=request.security(syminfo.tickerid,"60",_lp(),lookahead=barmerge.lookahead_on)
+				_bv(_qx,_ur,_vj,-1,t15,15)
+	if _aw and not _l and _it < 3600
+		_kj:=_bt(_qs,_qb)
+		if _qi
+			[a60,b60,_uv,_vr,_ui,_vb,t60]=request.security(syminfo.tickerid,"60",_ly(),lookahead=barmerge.lookahead_on)
 			if a60
-				_bx(_qt,_uo,_vb,1,t60,60)
+				_bv(_qs,_uv,_vr,1,t60,60)
 			else if b60
-				_bx(_qt,_ui,_un,-1,t60,60)
-	if _ar and not _m and _io < 14400
-		_kw:=_bp(_ki,_lr)
-		if _nq
-			[_yu,_wj,_sx,_ss,_tg,_ta,_yk]=request.security(syminfo.tickerid,"240",_lp(),lookahead=barmerge.lookahead_on)
-			if _yu
-				_bx(_ki,_sx,_ss,1,_yk,240)
-			else if _wj
-				_bx(_ki,_ta,_tg,-1,_yk,240)
+				_bv(_qs,_vb,_ui,-1,t60,60)
+	if _aq and not _l and _it < 14400
+		_kh:=_bt(_la,_me)
+		if _nk
+			[_yt,_xb,_tt,_su,_th,_tk,_yb]=request.security(syminfo.tickerid,"240",_ly(),lookahead=barmerge.lookahead_on)
+			if _yt
+				_bv(_la,_tt,_su,1,_yb,240)
+			else if _xb
+				_bv(_la,_tk,_th,-1,_yb,240)
 type Nivel
 	line ln
 	label lb
 	float _aa
 	int dir
 var _dl=array.new<Nivel>()
-var _dj=array.new<Nivel>()
-_rm(simple int len)=>
+var _dh=array.new<Nivel>()
+_rt(simple int len)=>
 	[ta.pivothigh(high,len,len)[1],ta.pivotlow(low,len,len)[1],time[1+len]]
-[ph4,pl4,tp4]=request.security(syminfo.tickerid,"240",_rm(_qr),lookahead=barmerge.lookahead_on)
-[ph1,pl1,tp1]=request.security(syminfo.tickerid,"60",_rm(_qp),lookahead=barmerge.lookahead_on)
-_ds(array<Nivel> arr,float _aa,int dir,int _ur,string tf,int _xi,color col)=>
-	ln=line.new(_ur,_aa,time,_aa,xloc=xloc.bar_time,color=color.new(col,20),width=1)
+[ph4,pl4,tp4]=request.security(syminfo.tickerid,"240",_rt(_qn),lookahead=barmerge.lookahead_on)
+[ph1,pl1,tp1]=request.security(syminfo.tickerid,"60",_rt(_qq),lookahead=barmerge.lookahead_on)
+_ds(array<Nivel> arr,float _aa,int dir,int _ux,string tf,int _xi,color col)=>
+	ln=line.new(_ux,_aa,time,_aa,xloc=xloc.bar_time,color=color.new(col,20),width=1)
 	lb=label.new(time,_aa,(dir==1?"Alto ":"Bajo ")+tf,xloc=xloc.bar_time,style=label.style_label_left,color=color.new(color.white,100),textcolor=color.new(col,10),size=size.tiny)
 	arr.push(Nivel.new(ln,lb,_aa,dir))
 	if arr.size()> _xi
@@ -1089,94 +1089,94 @@ _cr(array<Nivel> arr)=>
 			else
 				n.ln.set_x2(time)
 				n.lb.set_x(time)
-if _be and _ka and timeframe.isintraday and _io < 14400
+if _ay and _jv and timeframe.isintraday and _it < 14400
 	_cr(_dl)
-	if _nq
+	if _nk
 		if not na(ph4)
-			_ds(_dl,ph4,1,tp4,"H4",_kg,_dr)
+			_ds(_dl,ph4,1,tp4,"H4",_kg,_du)
 		if not na(pl4)
-			_ds(_dl,pl4,-1,tp4,"H4",_kg,_dr)
-if _be and _jt and timeframe.isintraday and _io < 3600
-	_cr(_dj)
-	if _ph
+			_ds(_dl,pl4,-1,tp4,"H4",_kg,_du)
+if _ay and _ju and timeframe.isintraday and _it < 3600
+	_cr(_dh)
+	if _qi
 		if not na(ph1)
-			_ds(_dj,ph1,1,tp1,"H1",_kk,_kj)
+			_ds(_dh,ph1,1,tp1,"H1",_ld,_ki)
 		if not na(pl1)
-			_ds(_dj,pl1,-1,tp1,"H1",_kk,_kj)
+			_ds(_dh,pl1,-1,tp1,"H1",_ld,_ki)
 [pdh,pdl]=request.security(syminfo.tickerid,"D",[high[1],low[1]],lookahead=barmerge.lookahead_on)
-_uc=_qo and timeframe.isintraday and not timeframe.change("D")
-plot(_uc?pdh:na,"Alto día anterior",color=color.new(_dr,30),style=plot.style_linebr,linewidth=1)
-plot(_uc?pdl:na,"Bajo día anterior",color=color.new(_dr,30),style=plot.style_linebr,linewidth=1)
-plot(_vc and timeframe.isintraday and not timeframe.change("D")?(pdh+pdl)/2:na,"50 % día anterior",color=color.new(#7E57C2,25),style=plot.style_linebr,linewidth=1)
-_jp=timeframe.isintraday and _d <=3600
-_as=_jp and not na(time(timeframe.period,"2000-0000","America/New_York"))
-_ck=_jp and not na(time(timeframe.period,"0200-0500","America/New_York"))
-_ww=_jp and not na(time(timeframe.period,"0930-1100","America/New_York"))
-bgcolor(_lw?(_as?color.new(#7E57C2,94):_ck?color.new(#1E88E5,94):_ww?color.new(#F9A825,90):na):na,title="Sesiones")
-var float _fn=na
-var float _gr=na
-var float _lh=na
-var float _nb=na
-var bool _hz=false
-var bool _ji=false
-var bool _mq=false
-var bool _ne=false
+_ug=_qu and timeframe.isintraday and not timeframe.change("D")
+plot(_ug?pdh:na,"Alto día anterior",color=color.new(_du,30),style=plot.style_linebr,linewidth=1)
+plot(_ug?pdl:na,"Bajo día anterior",color=color.new(_du,30),style=plot.style_linebr,linewidth=1)
+plot(_vf and timeframe.isintraday and not timeframe.change("D")?(pdh+pdl)/2:na,"50 % día anterior",color=color.new(#7E57C2,25),style=plot.style_linebr,linewidth=1)
+_ia=timeframe.isintraday and _d <=3600
+_as=_ia and not na(time(timeframe.period,"2000-0000","America/New_York"))
+_ck=_ia and not na(time(timeframe.period,"0200-0500","America/New_York"))
+_wf=_ia and not na(time(timeframe.period,"0930-1100","America/New_York"))
+bgcolor(_lx?(_as?color.new(#7E57C2,94):_ck?color.new(#1E88E5,94):_wf?color.new(#F9A825,90):na):na,title="Sesiones")
+var float _fr=na
+var float _gv=na
+var float _lp=na
+var float _ms=na
+var bool _jn=false
+var bool _hw=false
+var bool _mz=false
+var bool _nc=false
 if _as
 	if not _as[1]
-		_fn:=high
-		_gr:=low
-		_hz:=false
-		_ji:=false
+		_fr:=high
+		_gv:=low
+		_jn:=false
+		_hw:=false
 	else
-		_fn:=math.max(_fn,high)
-		_gr:=math.min(_gr,low)
-else if not na(_fn)
-	_hz:=_hz or high > _fn
-	_ji:=_ji or low < _gr
+		_fr:=math.max(_fr,high)
+		_gv:=math.min(_gv,low)
+else if not na(_fr)
+	_jn:=_jn or high > _fr
+	_hw:=_hw or low < _gv
 if _ck
 	if not _ck[1]
-		_lh:=high
-		_nb:=low
-		_mq:=false
-		_ne:=false
+		_lp:=high
+		_ms:=low
+		_mz:=false
+		_nc:=false
 	else
-		_lh:=math.max(_lh,high)
-		_nb:=math.min(_nb,low)
-else if not na(_lh)
-	_mq:=_mq or high > _lh
-	_ne:=_ne or low < _nb
-_ei=_jp and not na(time(timeframe.period,"0930-1600","America/New_York"))
-var float _xu=na
-var float _xn=na
-if _ei
-	_xu:=_ei[1]?math.max(_xu,high):high
-	_xn:=_ei[1]?math.min(_xn,low):low
+		_lp:=math.max(_lp,high)
+		_ms:=math.min(_ms,low)
+else if not na(_lp)
+	_mz:=_mz or high > _lp
+	_nc:=_nc or low < _ms
+_ee=_ia and not na(time(timeframe.period,"0930-1600","America/New_York"))
+var float _xt=na
+var float _xm=na
+if _ee
+	_xt:=_ee[1]?math.max(_xt,high):high
+	_xm:=_ee[1]?math.min(_xm,low):low
 type NivelSes
 	line ln
 	label lb
 	float _aa
-	int _xo=na
+	int _xp=na
 	int k=0
-	int _wi=na
+	int _wl=na
 var array<NivelSes> _es=array.new<NivelSes>(6)
-var array<NivelSes> _s=array.new<NivelSes>()
-_ej(int x,float v,string nom,color col)=>
+var array<NivelSes> _r=array.new<NivelSes>()
+_eh(int x,float v,string nom,color col)=>
 	[line.new(x,v,bar_index,v,color=color.new(col,15),width=1),label.new(bar_index,v,nom,style=label.style_label_left,color=color.new(color.white,100),textcolor=col,size=size.tiny)]
-_de(int k,bool en,bool ini,float v,int dir,string ses,color col)=>
-	_ro=(dir==1?"Máximo ":"Mínimo ")+ses
+_di(int k,bool en,bool ini,float v,int dir,string ses,color col)=>
+	_ri=(dir==1?"Máximo ":"Mínimo ")+ses
 	o=_es.get(k)
 	if ini
 		if not na(o)and not na(o.ln)
 			o.ln.delete()
 			o.lb.delete()
-		if _s.size()> 0
-			for i=_s.size()-1 to 0
-				q=_s.get(i)
+		if _r.size()> 0
+			for i=_r.size()-1 to 0
+				q=_r.get(i)
 				if q.k==k
-					_s.remove(i)
+					_r.remove(i)
 					q.ln.delete()
 					q.lb.delete()
-		[ln,lb]=_ej(bar_index,v,_ro,col)
+		[ln,lb]=_eh(bar_index,v,_ri,col)
 		_es.set(k,NivelSes.new(ln,lb,v,na,k,bar_index))
 	else if not na(o)
 		if en and not na(o.ln)
@@ -1188,17 +1188,17 @@ _de(int k,bool en,bool ini,float v,int dir,string ses,color col)=>
 		else if na(o.ln)
 			if dir==1?high > o._aa:low < o._aa
 				o._aa:=dir==1?high:low
-				o._wi:=bar_index
-			if bar_index-o._xo >=5
+				o._wl:=bar_index
+			if bar_index-o._xp >=5
 				dup=false
 				for j=0 to 5
 					p=_es.get(j)
-					if j !=k and not na(p)and not na(p.ln)and math.abs(p._aa-o._aa)<=0.1*nz(_cj)
+					if j !=k and not na(p)and not na(p.ln)and math.abs(p._aa-o._aa)<=0.1*nz(_ci)
 						dup:=true
 				if dup
 					_es.set(k,na)
 				else
-					[ln,lb]=_ej(o._wi,o._aa,_ro,col)
+					[ln,lb]=_eh(o._wl,o._aa,_ri,col)
 					o.ln:=ln
 					o.lb:=lb
 					o.lb.set_xy(bar_index,o._aa)
@@ -1209,246 +1209,246 @@ _de(int k,bool en,bool ini,float v,int dir,string ses,color col)=>
 			o.lb.set_xy(bar_index,o._aa)
 			o.lb.set_text((dir==1?"Máximo manipulado ":"Mínimo manipulado ")+ses)
 			o.lb.set_textcolor(#9E9E9E)
-			_s.push(o)
-			if _s.size()> 24
-				q=_s.shift()
+			_r.push(o)
+			if _r.size()> 24
+				q=_r.shift()
 				q.ln.delete()
 				q.lb.delete()
 			_es.set(k,NivelSes.new(na,na,dir==1?high:low,bar_index,k,bar_index))
 		else
 			o.ln.set_x2(bar_index)
 			o.lb.set_xy(bar_index,o._aa)
-_md=timeframe.change("D")
-if _no and _jp and _bg
-	if _md
+_lu=timeframe.change("D")
+if _nm and _ia and _bc
+	if _lu
 		for k=0 to 5
 			o=_es.get(k)
 			if not na(o)and not na(o.ln)
 				o.ln.delete()
 				o.lb.delete()
 			_es.set(k,na)
-		for q in _s
+		for q in _r
 			q.ln.delete()
 			q.lb.delete()
-		_s.clear()
-	if((_as and not _as[1])or(_ck and not _ck[1])or(_ei and not _ei[1]))and _s.size()> 0
-		for q in _s
+		_r.clear()
+	if((_as and not _as[1])or(_ck and not _ck[1])or(_ee and not _ee[1]))and _r.size()> 0
+		for q in _r
 			q.ln.delete()
 			q.lb.delete()
-		_s.clear()
-	_de(0,_as,_as and not _as[1],_fn,1,"Asia",#5E35B1)
-	_de(1,_as,_as and not _as[1],_gr,-1,"Asia",#5E35B1)
-	_de(2,_ck,_ck and not _ck[1],_lh,1,"Londres",#1E88E5)
-	_de(3,_ck,_ck and not _ck[1],_nb,-1,"Londres",#1E88E5)
-	_de(4,_ei,_ei and not _ei[1],_xu,1,"NY",#EF6C00)
-	_de(5,_ei,_ei and not _ei[1],_xn,-1,"NY",#EF6C00)
-var array<bool> _ac=array.new<bool>(6,false)
-var array<label> _el=array.new<label>()
+		_r.clear()
+	_di(0,_as,_as and not _as[1],_fr,1,"Asia",#5E35B1)
+	_di(1,_as,_as and not _as[1],_gv,-1,"Asia",#5E35B1)
+	_di(2,_ck,_ck and not _ck[1],_lp,1,"Londres",#1E88E5)
+	_di(3,_ck,_ck and not _ck[1],_ms,-1,"Londres",#1E88E5)
+	_di(4,_ee,_ee and not _ee[1],_xt,1,"NY",#EF6C00)
+	_di(5,_ee,_ee and not _ee[1],_xm,-1,"NY",#EF6C00)
+var array<bool> _ad=array.new<bool>(6,false)
+var array<label> _eg=array.new<label>()
 if timeframe.change("D")
-	_ac.fill(false)
+	_ad.fill(false)
 if _as and not _as[1]
-	_ac.set(2,false)
-	_ac.set(3,false)
+	_ad.set(2,false)
+	_ad.set(3,false)
 if _ck and not _ck[1]
-	_ac.set(4,false)
-	_ac.set(5,false)
-if _lu and _be and _jp and _bg
+	_ad.set(4,false)
+	_ad.set(5,false)
+if _mh and _ay and _ia and _bc
 	for k=0 to 5
-		nv=k==0?pdh:k==1?pdl:k==2?_fn:k==3?_gr:k==4?_lh:_nb
-		_yn=k < 2 or(k < 4?not _as:not _ck)
-		_vv=k%2==0
-		if _yn and not na(nv)and not _ac.get(k)and(_vv?high > nv and close < nv:low < nv and close > nv)
-			_ac.set(k,true)
-			nom=(k < 2?(_vv?"PDH":"PDL"):k < 4?(_vv?"Alto Asia":"Bajo Asia"):(_vv?"Alto Londres":"Bajo Londres"))
-			_el.push(label.new(bar_index,_vv?high:low,"Barrido "+nom,style=_vv?label.style_label_down:label.style_label_up,color=color.new(color.white,100),textcolor=#6A1B9A,size=size.tiny))
-			if _el.size()> 20
-				_el.shift().delete()
+		nv=k==0?pdh:k==1?pdl:k==2?_fr:k==3?_gv:k==4?_lp:_ms
+		_ys=k < 2 or(k < 4?not _as:not _ck)
+		_vw=k%2==0
+		if _ys and not na(nv)and not _ad.get(k)and(_vw?high > nv and close < nv:low < nv and close > nv)
+			_ad.set(k,true)
+			nom=(k < 2?(_vw?"PDH":"PDL"):k < 4?(_vw?"Alto Asia":"Bajo Asia"):(_vw?"Alto Londres":"Bajo Londres"))
+			_eg.push(label.new(bar_index,_vw?high:low,"Barrido "+nom,style=_vw?label.style_label_down:label.style_label_up,color=color.new(color.white,100),textcolor=#6A1B9A,size=size.tiny))
+			if _eg.size()> 20
+				_eg.shift().delete()
 type Igual
 	line ln
 	label lb
 	float _aa
 	int dir
-var array<Igual> _dn=array.new<Igual>()
-var float _sw=na
+var array<Igual> _dx=array.new<Igual>()
+var float _sz=na
 var int _ps=na
-var float _tb=na
-var int _pt=na
-_ub=nz(_cj)*0.1
-_sz=ta.pivothigh(high,_ca,_ca)
-_tp=ta.pivotlow(low,_ca,_ca)
-if _re and _bg and timeframe.isintraday
-	if not na(_sz)
+var float _ts=na
+var int _pi=na
+_ua=nz(_ci)*0.1
+_tn=ta.pivothigh(high,_ca,_ca)
+_ta=ta.pivotlow(low,_ca,_ca)
+if _rc and _bc and timeframe.isintraday
+	if not na(_tn)
 		x=bar_index-_ca
-		if not na(_sw)and math.abs(_sz-_sw)<=_ub and x-_ps <=150
-			nv=math.max(_sz,_sw)
-			_dn.push(Igual.new(line.new(_ps,nv,bar_index,nv,color=color.new(#6A1B9A,20),style=line.style_dotted,width=1),label.new(_ps,nv,"EQH",style=label.style_label_down,color=color.new(color.white,100),textcolor=#6A1B9A,size=size.tiny),nv,1))
-		_sw:=_sz
+		if not na(_sz)and math.abs(_tn-_sz)<=_ua and x-_ps <=150
+			nv=math.max(_tn,_sz)
+			_dx.push(Igual.new(line.new(_ps,nv,bar_index,nv,color=color.new(#6A1B9A,20),style=line.style_dotted,width=1),label.new(_ps,nv,"EQH",style=label.style_label_down,color=color.new(color.white,100),textcolor=#6A1B9A,size=size.tiny),nv,1))
+		_sz:=_tn
 		_ps:=x
-	if not na(_tp)
+	if not na(_ta)
 		x=bar_index-_ca
-		if not na(_tb)and math.abs(_tp-_tb)<=_ub and x-_pt <=150
-			nv=math.min(_tp,_tb)
-			_dn.push(Igual.new(line.new(_pt,nv,bar_index,nv,color=color.new(#6A1B9A,20),style=line.style_dotted,width=1),label.new(_pt,nv,"EQL",style=label.style_label_up,color=color.new(color.white,100),textcolor=#6A1B9A,size=size.tiny),nv,-1))
-		_tb:=_tp
-		_pt:=x
-	if _dn.size()> 8
-		q=_dn.shift()
+		if not na(_ts)and math.abs(_ta-_ts)<=_ua and x-_pi <=150
+			nv=math.min(_ta,_ts)
+			_dx.push(Igual.new(line.new(_pi,nv,bar_index,nv,color=color.new(#6A1B9A,20),style=line.style_dotted,width=1),label.new(_pi,nv,"EQL",style=label.style_label_up,color=color.new(color.white,100),textcolor=#6A1B9A,size=size.tiny),nv,-1))
+		_ts:=_ta
+		_pi:=x
+	if _dx.size()> 8
+		q=_dx.shift()
 		q.ln.delete()
 		q.lb.delete()
-	if _dn.size()> 0
-		for i=_dn.size()-1 to 0
-			q=_dn.get(i)
+	if _dx.size()> 0
+		for i=_dx.size()-1 to 0
+			q=_dx.get(i)
 			if q.dir==1?high > q._aa:low < q._aa
-				_dn.remove(i)
+				_dx.remove(i)
 				q.ln.delete()
 				q.lb.delete()
 			else
 				q.ln.set_x2(bar_index)
-_hb="SMT (divergencias entre índices)"
-_dz=input.bool(false,"Mostrar SMT (pide datos de ES/YM: hace el indicador más lento)",group=_hb)
-_mh=input.bool(true,"Mostrar etiquetas de la SMT",group=_hb)
-_rp=input.bool(true,"Mostrar línea de la SMT",group=_hb)
-_tk=input.bool(true,"Comparar con",inline="smt1",group=_hb)
-_pz=input.symbol("CME_MINI:ES1!","",inline="smt1",group=_hb)
-_tl=input.bool(true,"Comparar con",inline="smt2",group=_hb)
-_qi=input.symbol("CBOT_MINI:YM1!","",inline="smt2",group=_hb)
-_gj=input.int(5,"Sensibilidad pivotes SMT (velas a cada lado)",minval=2,maxval=20,group=_hb)
-_qf=input.int(60,"Máx. velas entre los dos altos/bajos comparados",minval=5,maxval=400,group=_hb)
-_rj=input.int(20,"Máx. SMT en el gráfico",minval=1,maxval=60,group=_hb)
-_hr=input.color(#ff1100,"SMT bajista (en altos)",group=_hb)
-_jg=input.color(#2157f3,"SMT alcista (en bajos)",group=_hb)
-_kz(string s)=>
-	_uf=str.split(s,":")
-	_uf.size()> 0?_uf.last():s
-_ry=_kz(_pz)
-_rr=_kz(_qi)
-_xf=str.replace(_ry,"1!","")
-_wd=str.replace(_rr,"1!","")
-_tu=str.replace(syminfo.ticker,"1!","")
-_oq=_dz and _tk and _xf !=_tu
-_of=_dz and _tl and _wd !=_tu
-_sk()=>
-	w=2*_gj+1
+_hg="SMT (divergencias entre índices)"
+_dp=input.bool(false,"Mostrar SMT (pide datos de ES/YM: hace el indicador más lento)",group=_hg)
+_lh=input.bool(true,"Mostrar etiquetas de la SMT",group=_hg)
+_so=input.bool(true,"Mostrar línea de la SMT",group=_hg)
+_st=input.bool(true,"Comparar con",inline="smt1",group=_hg)
+_qh=input.symbol("CME_MINI:ES1!","",inline="smt1",group=_hg)
+_to=input.bool(true,"Comparar con",inline="smt2",group=_hg)
+_ph=input.symbol("CBOT_MINI:YM1!","",inline="smt2",group=_hg)
+_gp=input.int(5,"Sensibilidad pivotes SMT (velas a cada lado)",minval=2,maxval=20,group=_hg)
+_qk=input.int(60,"Máx. velas entre los dos altos/bajos comparados",minval=5,maxval=400,group=_hg)
+_rp=input.int(20,"Máx. SMT en el gráfico",minval=1,maxval=60,group=_hg)
+_ih=input.color(#ff1100,"SMT bajista (en altos)",group=_hg)
+_jq=input.color(#2157f3,"SMT alcista (en bajos)",group=_hg)
+_ko(string s)=>
+	_tz=str.split(s,":")
+	_tz.size()> 0?_tz.last():s
+_sm=_ko(_qh)
+_se=_ko(_ph)
+_wt=str.replace(_sm,"1!","")
+_vz=str.replace(_se,"1!","")
+_ty=str.replace(syminfo.ticker,"1!","")
+_pb=_dp and _st and _wt !=_ty
+_ns=_dp and _to and _vz !=_ty
+_rm()=>
+	w=2*_gp+1
 	[ta.highest(high,w),ta.lowest(low,w),ta.highestbars(high,w),ta.lowestbars(low,w)]
-float _pk=na
+float _pm=na
 float _qg=na
-int _sm=na
-int _sp=na
-float _qk=na
-float _qa=na
-int _rn=na
-int _sc=na
-if _oq and _bg
-	[h_,l_,hb_,lb_]=request.security(_pz,timeframe.period,_sk(),gaps=barmerge.gaps_off,lookahead=barmerge.lookahead_off)
-	_pk:=h_
+int _ru=na
+int _ro=na
+float _pz=na
+float _px=na
+int _rv=na
+int _rg=na
+if _pb and _bc
+	[h_,l_,hb_,lb_]=request.security(_qh,timeframe.period,_rm(),gaps=barmerge.gaps_off,lookahead=barmerge.lookahead_off)
+	_pm:=h_
 	_qg:=l_
-	_sm:=hb_
-	_sp:=lb_
-if _of and _bg
-	[h_,l_,hb_,lb_]=request.security(_qi,timeframe.period,_sk(),gaps=barmerge.gaps_off,lookahead=barmerge.lookahead_off)
-	_qk:=h_
-	_qa:=l_
-	_rn:=hb_
-	_sc:=lb_
-_ni=ta.pivothigh(high,_gj,_gj)
-_nm=ta.pivotlow(low,_gj,_gj)
-_qw=bar_index-_gj
+	_ru:=hb_
+	_ro:=lb_
+if _ns and _bc
+	[h_,l_,hb_,lb_]=request.security(_ph,timeframe.period,_rm(),gaps=barmerge.gaps_off,lookahead=barmerge.lookahead_off)
+	_pz:=h_
+	_px:=l_
+	_rv:=hb_
+	_rg:=lb_
+_nd=ta.pivothigh(high,_gp,_gp)
+_nj=ta.pivotlow(low,_gp,_gp)
+_qo=bar_index-_gp
 var int _hp=na
-var float _ga=na
-var float _jm=na
-var float _ix=na
+var float _fm=na
+var float _hr=na
+var float _iu=na
 var int _hl=na
-var float _gc=na
-var float _jr=na
-var float _jf=na
-var array<line> _gh=array.new<line>()
-var array<label> _gn=array.new<label>()
-_dw(float y,float _ut,float c,float _nj,bool _ok)=>
-	_uh=_ok?y > _ut:y < _ut
-	_uk=_ok?c > _nj:c < _nj
-	not na(_ut)and not na(_nj)and not na(c)and _uh !=_uk
-_fy(string t,float c,float _nj)=>
-	t+(c > _nj?" ↑":c < _nj?" ↓":" =")
-_kv(int x1,float y1,int xv,string txt,color col,bool _ok)=>
-	yv=_ok?high[bar_index-xv]:low[bar_index-xv]
-	if _rp
-		_gh.push(line.new(x1,y1,xv,yv,color=col))
-	if _mh
-		_gn.push(label.new(xv,yv,txt,style=_ok?label.style_label_down:label.style_label_up,color=col,textcolor=color.white,size=size.tiny,tooltip="SMT "+(_ok?"bajista":"alcista")+". Flecha = dónde quedó ese índice respecto a su "+(_ok?"alto":"bajo")+" anterior: ↑ más alto, ↓ más bajo, = igual"))
-	if _gh.size()> _rj
-		_gh.shift().delete()
-	if _gn.size()> _rj
-		_gn.shift().delete()
-var int _ci=na
-var int _dv=0
-_iy=false
-_ih=false
+var float _fx=na
+var float _ip=na
+var float _hx=na
+var array<line> _gi=array.new<line>()
+var array<label> _gf=array.new<label>()
+_dn(float y,float _va,float c,float _mv,bool _pa)=>
+	_uq=_pa?y > _va:y < _va
+	_us=_pa?c > _mv:c < _mv
+	not na(_va)and not na(_mv)and not na(c)and _uq !=_us
+_fv(string t,float c,float _mv)=>
+	t+(c > _mv?" ↑":c < _mv?" ↓":" =")
+_kp(int x1,float y1,int xv,string txt,color col,bool _pa)=>
+	yv=_pa?high[bar_index-xv]:low[bar_index-xv]
+	if _so
+		_gi.push(line.new(x1,y1,xv,yv,color=col))
+	if _lh
+		_gf.push(label.new(xv,yv,txt,style=_pa?label.style_label_down:label.style_label_up,color=col,textcolor=color.white,size=size.tiny,tooltip="SMT "+(_pa?"bajista":"alcista")+". Flecha = dónde quedó ese índice respecto a su "+(_pa?"alto":"bajo")+" anterior: ↑ más alto, ↓ más bajo, = igual"))
+	if _gi.size()> _rp
+		_gi.shift().delete()
+	if _gf.size()> _rp
+		_gf.shift().delete()
+var int _co=na
+var int _do=0
+_iv=false
+_ja=false
 if barstate.isconfirmed
-	if not na(_ni)
-		_sd=not na(_hp)and _qw-_hp <=_qf
-		d1=_sd and _oq and _dw(_ni,_ga,_pk,_jm,true)
-		d2=_sd and _of and _dw(_ni,_ga,_qk,_ix,true)
+	if not na(_nd)
+		_rr=not na(_hp)and _qo-_hp <=_qk
+		d1=_rr and _pb and _dn(_nd,_fm,_pm,_hr,true)
+		d2=_rr and _ns and _dn(_nd,_fm,_pz,_iu,true)
 		if d1 or d2
-			_iy:=true
-			_ci:=bar_index
-			_dv:=-1
-			_ja=_ni > _ga
-			xv=_ja?_qw:bar_index+int(d1?_sm:_rn)
-			t1=_fy(_ry,_pk,_jm)
-			t2=_fy(_rr,_qk,_ix)
-			_kv(_hp,_ga,xv,d1 and d2?t1+" | "+t2:d1?t1:t2,_hr,true)
-		_hp:=_qw
-		_ga:=_ni
-		_jm:=_pk
-		_ix:=_qk
-	if not na(_nm)
-		_sd=not na(_hl)and _qw-_hl <=_qf
-		d1=_sd and _oq and _dw(_nm,_gc,_qg,_jr,false)
-		d2=_sd and _of and _dw(_nm,_gc,_qa,_jf,false)
+			_iv:=true
+			_co:=bar_index
+			_do:=-1
+			_jl=_nd > _fm
+			xv=_jl?_qo:bar_index+int(d1?_ru:_rv)
+			t1=_fv(_sm,_pm,_hr)
+			t2=_fv(_se,_pz,_iu)
+			_kp(_hp,_fm,xv,d1 and d2?t1+" | "+t2:d1?t1:t2,_ih,true)
+		_hp:=_qo
+		_fm:=_nd
+		_hr:=_pm
+		_iu:=_pz
+	if not na(_nj)
+		_rr=not na(_hl)and _qo-_hl <=_qk
+		d1=_rr and _pb and _dn(_nj,_fx,_qg,_ip,false)
+		d2=_rr and _ns and _dn(_nj,_fx,_px,_hx,false)
 		if d1 or d2
-			_ih:=true
-			_ci:=bar_index
-			_dv:=1
-			_ja=_nm < _gc
-			xv=_ja?_qw:bar_index+int(d1?_sp:_sc)
-			t1=_fy(_ry,_qg,_jr)
-			t2=_fy(_rr,_qa,_jf)
-			_kv(_hl,_gc,xv,d1 and d2?t1+" | "+t2:d1?t1:t2,_jg,false)
-		_hl:=_qw
-		_gc:=_nm
-		_jr:=_qg
-		_jf:=_qa
+			_ja:=true
+			_co:=bar_index
+			_do:=1
+			_jl=_nj < _fx
+			xv=_jl?_qo:bar_index+int(d1?_ro:_rg)
+			t1=_fv(_sm,_qg,_ip)
+			t2=_fv(_se,_px,_hx)
+			_kp(_hl,_fx,xv,d1 and d2?t1+" | "+t2:d1?t1:t2,_jq,false)
+		_hl:=_qo
+		_fx:=_nj
+		_ip:=_qg
+		_hx:=_px
 type Pieza
 	int x1
 	int x2
 	float top
 	float bot
 	int dir=0
-var array<box> _ek=array.new<box>()
-var array<line> _dk=array.new<line>()
+var array<box> _em=array.new<box>()
+var array<line> _de=array.new<line>()
 var array<label> _bw=array.new<label>()
 var array<int> uso=array.from(0,0,0)
-_rb(int x1,float top,int x2,float bot,color col)=>
+_ra(int x1,float top,int x2,float bot,color col)=>
 	i=uso.get(0)
-	if i < _ek.size()
-		b=_ek.get(i)
+	if i < _em.size()
+		b=_em.get(i)
 		b.set_lefttop(x1,top)
 		b.set_rightbottom(x2,bot)
 		b.set_bgcolor(col)
 	else
-		_ek.push(box.new(x1,top,x2,bot,border_color=na,bgcolor=col))
+		_em.push(box.new(x1,top,x2,bot,border_color=na,bgcolor=col))
 	uso.set(0,i+1)
-_ow(int x1,int x2,float y,color col)=>
+_ox(int x1,int x2,float y,color col)=>
 	i=uso.get(1)
-	if i < _dk.size()
-		l=_dk.get(i)
+	if i < _de.size()
+		l=_de.get(i)
 		l.set_xy1(x1,y)
 		l.set_xy2(x2,y)
 		l.set_color(col)
 	else
-		_dk.push(line.new(x1,y,x2,y,color=col,style=line.style_dashed,width=1))
+		_de.push(line.new(x1,y,x2,y,color=col,style=line.style_dashed,width=1))
 	uso.set(1,i+1)
-_lj(int x,float y,string txt,color col)=>
+_mj(int x,float y,string txt,color col)=>
 	i=uso.get(2)
 	if i < _bw.size()
 		e=_bw.get(i)
@@ -1463,14 +1463,14 @@ type Letrero
 	float y
 	string txt
 	color col
-	bool _xp
-	bool _rh
-var array<Letrero> _ft=array.new<Letrero>()
-_if=nz(ta.atr(50))*0.5
-_vn=input.float(8.0,"Separación entre zonas alcistas y bajistas que se tocan (% del ATR, 0 = sin hueco)",minval=0,maxval=50,step=1,group=_pf)
-_en=nz(ta.atr(50))*_vn/100
-var array<Pieza> _gm=array.new<Pieza>()
-_wc(Pieza p,Pieza o)=>
+	bool _xu
+	bool _rz
+var array<Letrero> _gc=array.new<Letrero>()
+_je=nz(ta.atr(50))*0.5
+_uh=input.float(8.0,"Separación entre zonas alcistas y bajistas que se tocan (% del ATR, 0 = sin hueco)",minval=0,maxval=50,step=1,group=_oz)
+_ek=nz(ta.atr(50))*_uh/100
+var array<Pieza> _gn=array.new<Pieza>()
+_xh(Pieza p,Pieza o)=>
 	out=array.new<Pieza>()
 	if o.x2 <=p.x1 or o.x1 >=p.x2 or o.bot >=p.top or o.top <=p.bot
 		out.push(p)
@@ -1486,117 +1486,117 @@ _wc(Pieza p,Pieza o)=>
 		if o.bot > p.bot
 			out.push(Pieza.new(cx1,cx2,o.bot,p.bot))
 	out
-_pj(Pieza p)=>
+_pn(Pieza p)=>
 	res=array.from(p)
-	if _le and _gm.size()> 0
-		for o in _gm
+	if _kf and _gn.size()> 0
+		for o in _gn
 			if not(o.x2 <=p.x1 or o.x1 >=p.x2 or o.bot >=p.top or o.top <=p.bot)
-				_xg=array.new<Pieza>()
+				_wp=array.new<Pieza>()
 				for q in res
-					for r in _wc(q,o)
-						_xg.push(r)
-				res:=_xg
+					for r in _xh(q,o)
+						_wp.push(r)
+				res:=_wp
 				if res.size()==0 or res.size()> 10
 					break
 	res
-_gy(Pieza p,color col,int dir)=>
-	for q in _pj(p)
+_gq(Pieza p,color col,int dir)=>
+	for q in _pn(p)
 		top=q.top
 		bot=q.bot
-		if _en > 0 and dir !=0
-			for o in _gm
+		if _ek > 0 and dir !=0
+			for o in _gn
 				if o.dir==-dir and not(o.x2 <=q.x1 or o.x1 >=q.x2)
-					if math.abs(top-o.bot)<=_en
-						top:=math.min(top,o.bot-_en)
-					if math.abs(bot-o.top)<=_en
-						bot:=math.max(bot,o.top+_en)
+					if math.abs(top-o.bot)<=_ek
+						top:=math.min(top,o.bot-_ek)
+					if math.abs(bot-o.top)<=_ek
+						bot:=math.max(bot,o.top+_ek)
 		if q.x2 > q.x1 and top > bot and uso.get(0)< 440
-			_rb(q.x1,top,q.x2,bot,col)
-_mt(int _up,int x2,float _ah,float _ai,int dir,float _bi,color col,string txt,color _wx,color _pq,color _ol,bool _rh)=>
-	x1=math.max(_up,bar_index-1000)
-	_yj=na(_bi)?_ah:(dir==1?_bi:_ah)
-	_yl=na(_bi)?_ai:(dir==1?_ai:_bi)
-	_gy(Pieza.new(x1,x2,_yj,_yl),col,dir)
+			_ra(q.x1,top,q.x2,bot,col)
+_mt(int _vd,int x2,float _ai,float _ah,int dir,float _bi,color col,string txt,color _wa,color _pv,color _ot,bool _rz)=>
+	x1=math.max(_vd,bar_index-1000)
+	_yl=na(_bi)?_ai:(dir==1?_bi:_ai)
+	_ym=na(_bi)?_ah:(dir==1?_ah:_bi)
+	_gq(Pieza.new(x1,x2,_yl,_ym),col,dir)
 	if not na(_bi)
-		_gy(Pieza.new(x1,x2,dir==1?_ah:_bi,dir==1?_bi:_ai),_ol,dir)
-	if txt !="" and _ft.size()< 60
-		_ft.push(Letrero.new(x2,(_yj+_yl)/2,txt,_wx,true,_rh))
-	if not na(_pq)
-		m=(_ah+_ai)/2
-		for q in _pj(Pieza.new(x1,x2,m,m))
+		_gq(Pieza.new(x1,x2,dir==1?_ai:_bi,dir==1?_bi:_ah),_ot,dir)
+	if txt !="" and _gc.size()< 60
+		_gc.push(Letrero.new(x2,(_yl+_ym)/2,txt,_wa,true,_rz))
+	if not na(_pv)
+		m=(_ai+_ah)/2
+		for q in _pn(Pieza.new(x1,x2,m,m))
 			if q.x2 > q.x1
-				_ow(q.x1,q.x2,m,_pq)
-	_gm.push(Pieza.new(x1,x2,_ah,_ai,dir))
-_ay(array<Zona> arr,color _xr,color _xy,int _tx,string txt,bool _ym,bool _ti,color _ol,bool _rh)=>
+				_ox(q.x1,q.x2,m,_pv)
+	_gn.push(Pieza.new(x1,x2,_ai,_ah,dir))
+_be(array<Zona> arr,color _xy,color _xj,int _uf,string txt,bool _yj,bool _tg,color _ot,bool _rz)=>
 	if arr.size()> 0
 		for i=arr.size()-1 to 0
 			z=arr.get(i)
-			c=z.dir==1?_xr:_xy
+			c=z.dir==1?_xy:_xj
 			t=txt
-			_yw=z._ai > close?z._ai-close:close > z._ah?close-z._ah:0.0
-			if uso.get(0)< 440 and _gm.size()< _mf and(_pn==0 or _yw/close*100 <=_pn)
-				_mt(z.x1,bar_index+1,z._ah,z._ai,z.dir,z._bi,color.new(c,_nc),t,c,_ti?color.new(color.white,30):na,_ol,_rh)
-_av()=>
-	if _qe
-		_ay(_jq,_hn,_hn,88,"IFVG "+_dt,true,false,_al,false)
-		_ay(_hd,_to,_te,80,"FVG "+_dt,true,false,_al,true)
-	_ay(obs,_kt,_kl,90,"OB "+_dt,true,false,_al,false)
-_dg(bool ver,int _vt,array<Zona> f,array<Zona> fi,color ca,color cb,int _tx,string nom)=>
-	if ver and not _m and _d !=_vt*60
-		_ay(fi,_hn,_hn,88,"IFVG "+nom,true,false,_al,false)
-		_ay(f,ca,cb,_tx,"FVG "+nom,true,_vt >=15,_al,true)
+			_yo=z._ah > close?z._ah-close:close > z._ai?close-z._ai:0.0
+			if uso.get(0)< 440 and _gn.size()< _ll and(_pp==0 or _yo/close*100 <=_pp)
+				_mt(z.x1,bar_index+1,z._ai,z._ah,z.dir,z._bi,color.new(c,_ne),t,c,_tg?color.new(color.white,30):na,_ot,_rz)
+_au()=>
+	if _pw
+		_be(_hs,_hm,_hm,88,"IFVG "+_dr,true,false,_al,false)
+		_be(_hj,_ss,_sv,80,"FVG "+_dr,true,false,_al,true)
+	_be(obs,_kw,_km,90,"OB "+_dr,true,false,_al,false)
+_dj(bool ver,int _vt,array<Zona> f,array<Zona> fi,color ca,color cb,int _uf,string nom)=>
+	if ver and not _l and _d !=_vt*60
+		_be(fi,_hm,_hm,88,"IFVG "+nom,true,false,_al,false)
+		_be(f,ca,cb,_uf,"FVG "+nom,true,_vt >=15,_al,true)
 if barstate.islast
 	uso.set(0,0)
 	uso.set(1,0)
 	uso.set(2,0)
-	_ft.clear()
-	_gm.clear()
-	_af=false
+	_gc.clear()
+	_gn.clear()
+	_ag=false
 	if _d <=60
-		_av()
-		_af:=true
-	_dg(_cs,1,_xt,_xe,_nr,_mm,84,"M1")
-	if not _af and _d <=300
-		_av()
-		_af:=true
-	_dg(_bv,5,_vs,_tm,_mv,_na,84,"M5")
-	if not _af and _d <=900
-		_av()
-		_af:=true
-	_dg(_bb,15,_qy,_po,_kp,_ky,84,"M15")
-	if not _af and _d <=3600
-		_av()
-		_af:=true
-	_dg(_bh,60,_qt,_pu,_kh,_lc,82,"H1")
-	if not _af and _d <=14400
-		_av()
-		_af:=true
-	_dg(_ar,240,_ki,_lr,_iz,_in,80,"H4")
-	if not _af
-		_av()
-	if _ft.size()> 0
-		_ml=array.new<Letrero>()
-		for l in _ft
+		_au()
+		_ag:=true
+	_dj(_cs,1,_xk,_wk,_ni,_nh,84,"M1")
+	if not _ag and _d <=300
+		_au()
+		_ag:=true
+	_dj(_bx,5,_vs,_tc,_mu,_ml,84,"M5")
+	if not _ag and _d <=900
+		_au()
+		_ag:=true
+	_dj(_bf,15,_qx,_pt,_ks,_le,84,"M15")
+	if not _ag and _d <=3600
+		_au()
+		_ag:=true
+	_dj(_aw,60,_qs,_qb,_lb,_kz,82,"H1")
+	if not _ag and _d <=14400
+		_au()
+		_ag:=true
+	_dj(_aq,240,_la,_me,_ig,_jj,80,"H4")
+	if not _ag
+		_au()
+	if _gc.size()> 0
+		_mx=array.new<Letrero>()
+		for l in _gc
 			x=l.x
-			_tn=str.length(l.txt)+2
-			for _ux=0 to 3
-				_rt=false
-				for c in _ml
-					_ri=str.length(c.txt)+2
-					if math.abs(c.y-l.y)< _if and x > c.x-_ri and x-_tn < c.x
-						x:=c.x-_ri
-						_rt:=true
-				if not _rt
+			_tq=str.length(l.txt)+2
+			for _uz=0 to 3
+				_ry=false
+				for c in _mx
+					_rw=str.length(c.txt)+2
+					if math.abs(c.y-l.y)< _je and x > c.x-_rw and x-_tq < c.x
+						x:=c.x-_rw
+						_ry:=true
+				if not _ry
 					break
-			_ml.push(Letrero.new(x,l.y,l.txt,l.col,true,l._rh))
-			_lj(x,l.y,l.txt,color.white)
-	while _ek.size()> uso.get(0)
-		_ek.pop().delete()
-	while _dk.size()> uso.get(1)
-		_dk.pop().delete()
+			_mx.push(Letrero.new(x,l.y,l.txt,l.col,true,l._rz))
+			_mj(x,l.y,l.txt,color.white)
+	while _em.size()> uso.get(0)
+		_em.pop().delete()
+	while _de.size()> uso.get(1)
+		_de.pop().delete()
 	while _bw.size()> uso.get(2)
 		_bw.pop().delete()
-_pp()=>
+_qf()=>
 	var int t=0
 	var float uh=na
 	var float ul=na
@@ -1613,223 +1613,223 @@ _pp()=>
 		t:=-1
 		ul:=na
 	t[1]
-_bl(array<Zona> arr,string nom,bool _wh)=>
-	float _tj=na
+_bl(array<Zona> arr,string nom,bool _xd)=>
+	float _tp=na
 	string txt=""
 	for z in arr
-		lo=z.dir==1 or na(z._bi)?z._ai:z._bi
-		hi=z.dir==-1 or na(z._bi)?z._ah:z._bi
-		d=close >=lo and close <=hi?0.0:_wh?(lo > close?lo-close:na):(hi < close?close-hi:na)
-		if not na(d)and(na(_tj)or d < _tj)
-			_tj:=d
+		lo=z.dir==1 or na(z._bi)?z._ah:z._bi
+		hi=z.dir==-1 or na(z._bi)?z._ai:z._bi
+		d=close >=lo and close <=hi?0.0:_xd?(lo > close?lo-close:na):(hi < close?close-hi:na)
+		if not na(d)and(na(_tp)or d < _tp)
+			_tp:=d
 			txt:=nom+(z.dir==1?" alcista":" bajista")
-	[_tj,txt]
-_py(table t,int f,string a,string b,color cb,string tam)=>
+	[_tp,txt]
+_pj(table t,int f,string a,string b,color cb,string tam)=>
 	t.cell(0,f,a,text_color=#424242,text_size=tam,text_halign=text.align_left)
 	t.cell(1,f,b,text_color=cb,text_size=tam,text_halign=text.align_left)
-_ll(int b)=>
+_mc(int b)=>
 	b==1?"▲ Alcista":b==-1?"▼ Bajista":"—"
-_mg(int b)=>
-	b==1?_ae:b==-1?_v:#757575
-_wr(float d,string n)=>
+_mb(int b)=>
+	b==1?_ac:b==-1?_u:#757575
+_xa(float d,string n)=>
 	na(d)?"—":d==0?"Precio dentro de "+n:n+" · a "+str.tostring(d,format.mintick)+" pts"
-_wa(string n)=>
-	str.contains(n,"alcista")?_ae:str.contains(n,"bajista")?_v:#757575
-_se(float h,float l,bool en,bool bh,bool bl)=>
+_wm(string n)=>
+	str.contains(n,"alcista")?_ac:str.contains(n,"bajista")?_u:#757575
+_rf(float h,float l,bool en,bool bh,bool bl)=>
 	na(h)?"—":str.tostring(l,format.mintick)+" – "+str.tostring(h,format.mintick)+(en?" (en curso)":bh and bl?" · barridos los dos":bh?" · barrido el alto":bl?" · barrido el bajo":" · sin barrer")
-var table _em=na
-if barstate.islast and _lv
-	pos=_ib=="Arriba izquierda"?position.top_left:_ib=="Abajo derecha"?position.bottom_right:_ib=="Abajo izquierda"?position.bottom_left:position.top_right
-	tam=_nn=="Muy pequeño"?size.tiny:_nn=="Normal"?size.normal:size.small
-	if na(_em)
-		_em:=table.new(pos,2,14,bgcolor=color.new(color.white,8),border_color=color.new(#9E9E9E,60),border_width=1,frame_color=color.new(#9E9E9E,30),frame_width=1)
-	_em.clear(0,0,1,13)
+var table _ef=na
+if barstate.islast and _ls
+	pos=_jf=="Arriba izquierda"?position.top_left:_jf=="Abajo derecha"?position.bottom_right:_jf=="Abajo izquierda"?position.bottom_left:position.top_right
+	tam=_mo=="Muy pequeño"?size.tiny:_mo=="Normal"?size.normal:size.small
+	if na(_ef)
+		_ef:=table.new(pos,2,14,bgcolor=color.new(color.white,8),border_color=color.new(#9E9E9E,60),border_width=1,frame_color=color.new(#9E9E9E,30),frame_width=1)
+	_ef.clear(0,0,1,13)
 	int f=0
-	int _wj=0
+	int _xb=0
 	int b60=0
 	if timeframe.isintraday and _d < 14400
-		_wj:=request.security(syminfo.tickerid,"240",_pp(),lookahead=barmerge.lookahead_on)
+		_xb:=request.security(syminfo.tickerid,"240",_qf(),lookahead=barmerge.lookahead_on)
 	if timeframe.isintraday and _d < 3600
-		b60:=request.security(syminfo.tickerid,"60",_pp(),lookahead=barmerge.lookahead_on)
-	_py(_em,f,"Bias H4",_d < 14400?_ll(_wj):"(gráfico ≥ H4)",_mg(_wj),tam)
+		b60:=request.security(syminfo.tickerid,"60",_qf(),lookahead=barmerge.lookahead_on)
+	_pj(_ef,f,"Bias H4",_d < 14400?_mc(_xb):"(gráfico ≥ H4)",_mb(_xb),tam)
 	f+=1
-	_py(_em,f,"Bias H1",_d < 3600?_ll(b60):"(gráfico ≥ H1)",_mg(b60),tam)
+	_pj(_ef,f,"Bias H1",_d < 3600?_mc(b60):"(gráfico ≥ H1)",_mb(b60),tam)
 	f+=1
-	ev=_fb.get(0)
-	_wm=ev==""?"":" · "+ev+" hace "+str.tostring(bar_index-_fe.get(0))+" velas"
-	_py(_em,f,"Estructura "+_dt,_ll(_i)+_wm,_mg(_i),tam)
+	ev=_fa.get(0)
+	_wn=ev==""?"":" · "+ev+" hace "+str.tostring(bar_index-_fd.get(0))+" velas"
+	_pj(_ef,f,"Estructura "+_dr,_mc(_i)+_wn,_mb(_i),tam)
 	f+=1
 	tz="America/New_York"
-	_wu=hour(timenow,tz)*60+minute(timenow,tz)
-	_yb=dayofweek(timenow,tz)
-	_yd=timestamp(tz,year(timenow,tz),month(timenow,tz),dayofmonth(timenow,tz),9,30)
-	_yq=timestamp(tz,year(timenow,tz),month(timenow,tz),dayofmonth(timenow,tz),16,0)
-	_xc=_yb==dayofweek.saturday or _yb==dayofweek.sunday
-	_vr=570-_wu
-	ses=_xc?"Cerrada (fin de semana)":_wu < 570?"Abre a las "+str.format_time(_yd,"HH:mm","Europe/Madrid")+" (en "+(_vr >=60?str.tostring(int(_vr/60))+" h ":"")+str.tostring(_vr%60)+" min)":_wu < 960?"● Abierta (cierra "+str.format_time(_yq,"HH:mm","Europe/Madrid")+")":"Cerrada (abre mañana "+str.format_time(_yd,"HH:mm","Europe/Madrid")+")"
-	_py(_em,f,"Sesión NY",ses,not _xc and _wu >=570 and _wu < 960?_ae:#424242,tam)
+	_ww=hour(timenow,tz)*60+minute(timenow,tz)
+	_yc=dayofweek(timenow,tz)
+	_yi=timestamp(tz,year(timenow,tz),month(timenow,tz),dayofmonth(timenow,tz),9,30)
+	_yw=timestamp(tz,year(timenow,tz),month(timenow,tz),dayofmonth(timenow,tz),16,0)
+	_wu=_yc==dayofweek.saturday or _yc==dayofweek.sunday
+	_uo=570-_ww
+	ses=_wu?"Cerrada (fin de semana)":_ww < 570?"Abre a las "+str.format_time(_yi,"HH:mm","Europe/Madrid")+" (en "+(_uo >=60?str.tostring(int(_uo/60))+" h ":"")+str.tostring(_uo%60)+" min)":_ww < 960?"● Abierta (cierra "+str.format_time(_yw,"HH:mm","Europe/Madrid")+")":"Cerrada (abre mañana "+str.format_time(_yi,"HH:mm","Europe/Madrid")+")"
+	_pj(_ef,f,"Sesión NY",ses,not _wu and _ww >=570 and _ww < 960?_ac:#424242,tam)
 	f+=1
-	float _sr=na
-	string _wp=""
 	float _sq=na
-	string _wn=""
-	if _qe
-		[d1,t1]=_bl(_hd,"FVG "+_dt,true)
-		[d2,t2]=_bl(_jq,"IFVG "+_dt,true)
-		[d3,t3]=_bl(_hd,"FVG "+_dt,false)
-		[d4,t4]=_bl(_jq,"IFVG "+_dt,false)
-		if not na(d1)and(na(_sr)or d1 < _sr)
-			_sr:=d1
-			_wp:=t1
-		if not na(d2)and(na(_sr)or d2 < _sr)
-			_sr:=d2
-			_wp:=t2
-		if not na(d3)and(na(_sq)or d3 < _sq)
-			_sq:=d3
-			_wn:=t3
-		if not na(d4)and(na(_sq)or d4 < _sq)
-			_sq:=d4
-			_wn:=t4
-	if not _m
+	string _xe=""
+	float _sr=na
+	string _wj=""
+	if _pw
+		[d1,t1]=_bl(_hj,"FVG "+_dr,true)
+		[d2,t2]=_bl(_hs,"IFVG "+_dr,true)
+		[d3,t3]=_bl(_hj,"FVG "+_dr,false)
+		[d4,t4]=_bl(_hs,"IFVG "+_dr,false)
+		if not na(d1)and(na(_sq)or d1 < _sq)
+			_sq:=d1
+			_xe:=t1
+		if not na(d2)and(na(_sq)or d2 < _sq)
+			_sq:=d2
+			_xe:=t2
+		if not na(d3)and(na(_sr)or d3 < _sr)
+			_sr:=d3
+			_wj:=t3
+		if not na(d4)and(na(_sr)or d4 < _sr)
+			_sr:=d4
+			_wj:=t4
+	if not _l
 		for k=0 to 4
-			arr=k==0?_xt:k==1?_vs:k==2?_qy:k==3?_qt:_ki
+			arr=k==0?_xk:k==1?_vs:k==2?_qx:k==3?_qs:_la
 			nom=k==0?"FVG M1":k==1?"FVG M5":k==2?"FVG M15":k==3?"FVG H1":"FVG H4"
-			ver=k==0?_cs:k==1?_bv:k==2?_bb:k==3?_bh:_ar
+			ver=k==0?_cs:k==1?_bx:k==2?_bf:k==3?_aw:_aq
 			if ver
 				[da,ta_]=_bl(arr,nom,true)
 				[db,tb]=_bl(arr,nom,false)
-				if not na(da)and(na(_sr)or da < _sr)
-					_sr:=da
-					_wp:=ta_
-				if not na(db)and(na(_sq)or db < _sq)
-					_sq:=db
-					_wn:=tb
-	_py(_em,f,"FVG por arriba",_wr(_sr,_wp),_wa(_wp),tam)
+				if not na(da)and(na(_sq)or da < _sq)
+					_sq:=da
+					_xe:=ta_
+				if not na(db)and(na(_sr)or db < _sr)
+					_sr:=db
+					_wj:=tb
+	_pj(_ef,f,"FVG por arriba",_xa(_sq,_xe),_wm(_xe),tam)
 	f+=1
-	_py(_em,f,"FVG por abajo",_wr(_sq,_wn),_wa(_wn),tam)
+	_pj(_ef,f,"FVG por abajo",_xa(_sr,_wj),_wm(_wj),tam)
 	f+=1
-	_uq=not _dz?"(apagada)":na(_ci)?"Ninguna reciente":(_dv==1?"▲ Alcista":"▼ Bajista")+" hace "+str.tostring(bar_index-_ci)+" velas"
-	_py(_em,f,"SMT",_uq,not _dz or na(_ci)?#757575:_dv==1?_jg:_hr,tam)
+	_uj=not _dp?"(apagada)":na(_co)?"Ninguna reciente":(_do==1?"▲ Alcista":"▼ Bajista")+" hace "+str.tostring(bar_index-_co)+" velas"
+	_pj(_ef,f,"SMT",_uj,not _dp or na(_co)?#757575:_do==1?_jq:_ih,tam)
 	f+=1
-	if _oz
-		_oo=request.security(_uy,"D",close[1],lookahead=barmerge.lookahead_on)
-		[_nj,_xh,_wk]=request.security(syminfo.tickerid,"D",[close[1],high,low],lookahead=barmerge.lookahead_on)
-		pct=_oo/16
-		pts=_nj*pct/100
-		_tt=pts > 0?(_xh-_wk)/pts*100:na
-		_vi=na(_oo)?"Sin datos del VIX":"±"+str.tostring(pct,"#.##")+" % · ±"+str.tostring(pts,"#")+" pts (VIX "+str.tostring(_oo,"#.#")+") · hoy "+str.tostring(_xh-_wk,"#")+" pts = "+str.tostring(_tt,"#")+" %"
-		_py(_em,f,"Mov. esperado",_vi,na(_tt)?#757575:_tt >=100?_v:_tt >=75?#EF6C00:#424242,tam)
+	if _nx
+		_ou=request.security(_vg,"D",close[1],lookahead=barmerge.lookahead_on)
+		[_mv,_wv,_wh]=request.security(syminfo.tickerid,"D",[close[1],high,low],lookahead=barmerge.lookahead_on)
+		pct=_ou/16
+		pts=_mv*pct/100
+		_te=pts > 0?(_wv-_wh)/pts*100:na
+		_vq=na(_ou)?"Sin datos del VIX":"±"+str.tostring(pct,"#.##")+" % · ±"+str.tostring(pts,"#")+" pts (VIX "+str.tostring(_ou,"#.#")+") · hoy "+str.tostring(_wv-_wh,"#")+" pts = "+str.tostring(_te,"#")+" %"
+		_pj(_ef,f,"Mov. esperado",_vq,na(_te)?#757575:_te >=100?_u:_te >=75?#EF6C00:#424242,tam)
 		f+=1
-	if _lf and _jp
-		_py(_em,f,"Asia",_se(_fn,_gr,_as,_hz,_ji),#5E35B1,tam)
+	if _lq and _ia
+		_pj(_ef,f,"Asia",_rf(_fr,_gv,_as,_jn,_hw),#5E35B1,tam)
 		f+=1
-		_py(_em,f,"Londres",_se(_lh,_nb,_ck,_mq,_ne),#1E88E5,tam)
+		_pj(_ef,f,"Londres",_rf(_lp,_ms,_ck,_mz,_nc),#1E88E5,tam)
 		f+=1
-	if _px or _fo
-		[_wg,_vf,d_h,d_l]=request.security(syminfo.tickerid,"D",[open,ta.atr(14)[1],high,low],lookahead=barmerge.lookahead_on)
-		if _px
+	if _qc or _ge
+		[_wc,_vh,d_h,d_l]=request.security(syminfo.tickerid,"D",[open,ta.atr(14)[1],high,low],lookahead=barmerge.lookahead_on)
+		if _qc
 			rng=d_h-d_l
-			_ln=_vf > 0?rng/_vf*100:na
-			_py(_em,f,"Rango hoy / ATR D",str.tostring(rng,"#")+" de "+str.tostring(_vf,"#")+" pts ("+str.tostring(_ln,"#")+" %)",na(_ln)?#757575:_ln >=100?_v:_ln >=75?#EF6C00:#424242,tam)
+			_lf=_vh > 0?rng/_vh*100:na
+			_pj(_ef,f,"Rango hoy / ATR D",str.tostring(rng,"#")+" de "+str.tostring(_vh,"#")+" pts ("+str.tostring(_lf,"#")+" %)",na(_lf)?#757575:_lf >=100?_u:_lf >=75?#EF6C00:#424242,tam)
 			f+=1
-		if _fo
-			dif=close-_wg
-			_py(_em,f,"vs apertura del día",(dif >=0?"Por encima +":"Por debajo ")+str.tostring(dif,format.mintick)+" pts"+(dif >=0?" · premium":" · descuento"),dif >=0?_v:_ae,tam)
+		if _ge
+			dif=close-_wc
+			_pj(_ef,f,"vs apertura del día",(dif >=0?"Por encima +":"Por debajo ")+str.tostring(dif,format.mintick)+" pts"+(dif >=0?" · premium":" · descuento"),dif >=0?_u:_ac,tam)
 			f+=1
-	if _ls
+	if _lj
+		float _vv=na
+		string _wx=""
 		float _vu=na
-		string _wl=""
-		float _vw=na
-		string _wy=""
-		_nl=array.from(pdh,pdl,_hz?na:_fn,_ji?na:_gr,_mq?na:_lh,_ne?na:_nb)
-		_nd=array.from("PDH","PDL","Alto Asia","Bajo Asia","Alto Londres","Bajo Londres")
+		string _vy=""
+		_nl=array.from(pdh,pdl,_jn?na:_fr,_hw?na:_gv,_mz?na:_lp,_nc?na:_ms)
+		_nq=array.from("PDH","PDL","Alto Asia","Bajo Asia","Alto Londres","Bajo Londres")
 		for nv in _dl
 			_nl.push(nv._aa)
-			_nd.push(nv.dir==1?"Alto H4":"Bajo H4")
-		for nv in _dj
+			_nq.push(nv.dir==1?"Alto H4":"Bajo H4")
+		for nv in _dh
 			_nl.push(nv._aa)
-			_nd.push(nv.dir==1?"Alto H1":"Bajo H1")
-		for q in _dn
+			_nq.push(nv.dir==1?"Alto H1":"Bajo H1")
+		for q in _dx
 			_nl.push(q._aa)
-			_nd.push(q.dir==1?"EQH":"EQL")
+			_nq.push(q.dir==1?"EQH":"EQL")
 		for i=0 to _nl.size()-1
 			pv=_nl.get(i)
 			if not na(pv)
-				if pv > close and(na(_vu)or pv < _vu)
+				if pv > close and(na(_vv)or pv < _vv)
+					_vv:=pv
+					_wx:=_nq.get(i)
+				if pv < close and(na(_vu)or pv > _vu)
 					_vu:=pv
-					_wl:=_nd.get(i)
-				if pv < close and(na(_vw)or pv > _vw)
-					_vw:=pv
-					_wy:=_nd.get(i)
-		_uu=(na(_vu)?"↑ —":"↑ "+_wl+" "+str.tostring(_vu,format.mintick)+" (+"+str.tostring(_vu-close,format.mintick)+")")+"  ·  "+(na(_vw)?"↓ —":"↓ "+_wy+" "+str.tostring(_vw,format.mintick)+" (−"+str.tostring(close-_vw,format.mintick)+")")
-		_py(_em,f,"Liquidez",_uu,#424242,tam)
+					_vy:=_nq.get(i)
+		_vm=(na(_vv)?"↑ —":"↑ "+_wx+" "+str.tostring(_vv,format.mintick)+" (+"+str.tostring(_vv-close,format.mintick)+")")+"  ·  "+(na(_vu)?"↓ —":"↓ "+_vy+" "+str.tostring(_vu,format.mintick)+" (−"+str.tostring(close-_vu,format.mintick)+")")
+		_pj(_ef,f,"Liquidez",_vm,#424242,tam)
 		f+=1
-	if _pw !=""
-		_py(_em,f,"Noticias hoy",_pw,#EF6C00,tam)
+	if _po !=""
+		_pj(_ef,f,"Noticias hoy",_po,#EF6C00,tam)
 		f+=1
 if barstate.islast
 	etq=array.new<label>()
-	_fs=array.new<bool>()
+	_fp=array.new<bool>()
 	for o in _es
 		if not na(o)and not na(o.lb)
 			etq.push(o.lb)
-			_fs.push(false)
+			_fp.push(false)
 	for n in _dl
 		etq.push(n.lb)
-		_fs.push(true)
-	for n in _dj
+		_fp.push(true)
+	for n in _dh
 		etq.push(n.lb)
-		_fs.push(true)
+		_fp.push(true)
 	if etq.size()> 1
 		ys=array.new<float>()
 		for e in etq
 			ys.push(e.get_y())
-		_xw=ys.sort_indices()
-		_tc=array.new<float>()
-		_ru=array.new<int>()
-		_oc=array.new<int>()
-		_vj=timeframe.in_seconds()*1000
-		for j in _xw
+		_xv=ys.sort_indices()
+		_ti=array.new<float>()
+		_sp=array.new<int>()
+		_pd=array.new<int>()
+		_um=timeframe.in_seconds()*1000
+		for j in _xv
 			e=etq.get(j)
 			y=e.get_y()
-			_tn=str.length(e.get_text())+2
+			_tq=str.length(e.get_text())+2
 			ini=0
-			for _ux=0 to 6
-				_rt=false
-				if _tc.size()> 0
-					for c=0 to _tc.size()-1
-						if math.abs(_tc.get(c)-y)< _if and ini < _oc.get(c)and ini+_tn > _ru.get(c)
-							ini:=_oc.get(c)
-							_rt:=true
-				if not _rt
+			for _uz=0 to 6
+				_ry=false
+				if _ti.size()> 0
+					for c=0 to _ti.size()-1
+						if math.abs(_ti.get(c)-y)< _je and ini < _pd.get(c)and ini+_tq > _sp.get(c)
+							ini:=_pd.get(c)
+							_ry:=true
+				if not _ry
 					break
-			_tc.push(y)
-			_ru.push(ini)
-			_oc.push(ini+_tn)
-			if _fs.get(j)
-				e.set_x(time+ini*_vj)
+			_ti.push(y)
+			_sp.push(ini)
+			_pd.push(ini+_tq)
+			if _fp.get(j)
+				e.set_x(time+ini*_um)
 			else
 				e.set_x(bar_index+ini)
-alertcondition(_iy,"SMT bajista","SMT bajista (divergencia en altos entre índices) en {{ticker}} ({{interval}})")
-alertcondition(_ih,"SMT alcista","SMT alcista (divergencia en bajos entre índices) en {{ticker}} ({{interval}})")
-alertcondition(_mj,"CHoCH alcista","CHoCH alcista en {{ticker}} ({{interval}})")
-alertcondition(_lz,"CHoCH bajista","CHoCH bajista en {{ticker}} ({{interval}})")
+alertcondition(_iv,"SMT bajista","SMT bajista (divergencia en altos entre índices) en {{ticker}} ({{interval}})")
+alertcondition(_ja,"SMT alcista","SMT alcista (divergencia en bajos entre índices) en {{ticker}} ({{interval}})")
+alertcondition(_li,"CHoCH alcista","CHoCH alcista en {{ticker}} ({{interval}})")
+alertcondition(_lo,"CHoCH bajista","CHoCH bajista en {{ticker}} ({{interval}})")
 alertcondition(_eb,"CHoCH alcista de riesgo (⚠)","CHoCH alcista con riesgo de fallo en {{ticker}} ({{interval}})")
-alertcondition(_ec,"CHoCH bajista de riesgo (⚠)","CHoCH bajista con riesgo de fallo en {{ticker}} ({{interval}})")
-alertcondition(_di,"CHoCH alcista fallido (✗)","CHoCH alcista fallido: posible reversión bajista en {{ticker}} ({{interval}})")
-alertcondition(_dh,"CHoCH bajista fallido (✗)","CHoCH bajista fallido: posible reversión alcista en {{ticker}} ({{interval}})")
-alertcondition(_dc,"Tendencia alcista reactivada","Tendencia alcista reactivada tras CHoCH fallido en {{ticker}} ({{interval}})")
-alertcondition(_cz,"Tendencia bajista reactivada","Tendencia bajista reactivada tras CHoCH fallido en {{ticker}} ({{interval}})")
-alertcondition(_hv,"Retesteo de IFVG (velas siguientes)","El precio toca un IFVG en las velas siguientes a su creación en {{ticker}} ({{interval}})")
-alertcondition(_ff,"IFVG alcista","Un FVG bajista se ha invertido (IFVG alcista) en {{ticker}} ({{interval}})")
-alertcondition(_fd,"IFVG bajista","Un FVG alcista se ha invertido (IFVG bajista) en {{ticker}} ({{interval}})")
-alertcondition(_jn,"FVG alcista","Nuevo FVG alcista en {{ticker}} ({{interval}})")
-alertcondition(_jc,"FVG bajista","Nuevo FVG bajista en {{ticker}} ({{interval}})")
+alertcondition(_ea,"CHoCH bajista de riesgo (⚠)","CHoCH bajista con riesgo de fallo en {{ticker}} ({{interval}})")
+alertcondition(_dk,"CHoCH alcista fallido (✗)","CHoCH alcista fallido: posible reversión bajista en {{ticker}} ({{interval}})")
+alertcondition(_df,"CHoCH bajista fallido (✗)","CHoCH bajista fallido: posible reversión alcista en {{ticker}} ({{interval}})")
+alertcondition(_dd,"Tendencia alcista reactivada","Tendencia alcista reactivada tras CHoCH fallido en {{ticker}} ({{interval}})")
+alertcondition(_da,"Tendencia bajista reactivada","Tendencia bajista reactivada tras CHoCH fallido en {{ticker}} ({{interval}})")
+alertcondition(_if,"Retesteo de IFVG (velas siguientes)","El precio toca un IFVG en las velas siguientes a su creación en {{ticker}} ({{interval}})")
+alertcondition(_fb,"IFVG alcista","Un FVG bajista se ha invertido (IFVG alcista) en {{ticker}} ({{interval}})")
+alertcondition(_fe,"IFVG bajista","Un FVG alcista se ha invertido (IFVG bajista) en {{ticker}} ({{interval}})")
+alertcondition(_jd,"FVG alcista","Nuevo FVG alcista en {{ticker}} ({{interval}})")
+alertcondition(_jk,"FVG bajista","Nuevo FVG bajista en {{ticker}} ({{interval}})")
 alertcondition(_cc,title='Range Detected',message='Auto Range Detector: new RANGE detected on {{exchange}}:{{ticker}} - {{interval}}')
-alertcondition(_cp,title='Range Breakout Up',message='Auto Range Detector: range broken to the UPSIDE on {{exchange}}:{{ticker}} - {{interval}}')
+alertcondition(_cl,title='Range Breakout Up',message='Auto Range Detector: range broken to the UPSIDE on {{exchange}}:{{ticker}} - {{interval}}')
 alertcondition(_bk,title='Range Breakdown',message='Auto Range Detector: range broken to the DOWNSIDE on {{exchange}}:{{ticker}} - {{interval}}')
-alertcondition(_hg,title='Any Range Break',message='Auto Range Detector: range break on {{exchange}}:{{ticker}} - {{interval}}')
+alertcondition(_hi,title='Any Range Break',message='Auto Range Detector: range break on {{exchange}}:{{ticker}} - {{interval}}')
 alertcondition(_bz,title='Range Deviation',message='Auto Range Detector: failed break, price returned INSIDE the range on {{exchange}}:{{ticker}} - {{interval}}')
-alertcondition(_ii,"Precio en el 50% de un FVG M15","Precio tocando el 50% de un FVG de M15 en {{ticker}} ({{interval}})")
-alertcondition(_ld,"Precio en el 50% de un FVG H1","Precio tocando el 50% de un FVG de H1 en {{ticker}} ({{interval}})")
-alertcondition(_kw,"Precio en el 50% de un FVG H4","Precio tocando el 50% de un FVG de H4 en {{ticker}} ({{interval}})")
+alertcondition(_io,"Precio en el 50% de un FVG M15","Precio tocando el 50% de un FVG de M15 en {{ticker}} ({{interval}})")
+alertcondition(_kj,"Precio en el 50% de un FVG H1","Precio tocando el 50% de un FVG de H1 en {{ticker}} ({{interval}})")
+alertcondition(_kh,"Precio en el 50% de un FVG H4","Precio tocando el 50% de un FVG de H4 en {{ticker}} ({{interval}})")

@@ -38,7 +38,7 @@ mostrar_fvg240  = input.bool(true,  "FVG H4", inline="fvgtf1", group=g_fvgtf)
 mostrar_fvg60   = input.bool(true,  "FVG H1", inline="fvgtf1", group=g_fvgtf)
 mostrar_fvg15   = input.bool(true,  "FVG M15", inline="fvgtf1", group=g_fvgtf)
 mostrar_fvg5    = input.bool(true,  "FVG M5", inline="fvgtf2", group=g_fvgtf)
-mostrar_fvg1    = input.bool(false, "FVG M1", inline="fvgtf2", group=g_fvgtf)
+mostrar_fvg1    = input.bool(true,  "FVG M1", inline="fvgtf2", group=g_fvgtf)
 mostrar_fvg     = input.bool(true, "FVG del gráfico si no es ninguna de las 5 (M3, M30, D…)", group=g_fvgtf)
 // Activado: cada temporalidad solo se ve en su propio gráfico (los FVG de H4 solo en el gráfico de H4,
 // los de M15 solo en el de M15…) y no se mezclan; los interruptores dicen en qué gráficos se ven.
