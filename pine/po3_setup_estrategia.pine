@@ -61,6 +61,7 @@ g_v        = "Visual"
 col_c      = input.color(#00A651, "Compra", group=g_v)
 col_v      = input.color(#E4002B, "Venta", group=g_v)
 ver_lineas = input.bool(true, "Dibujar entrada, SL y TP de cada señal", group=g_v)
+sep_etq    = input.float(2.0, "Separación de la etiqueta respecto a las velas (× ATR)", minval=0.5, step=0.5, group=g_v)
 
 // ─────────────────────────────
 // DATOS BASE
@@ -355,10 +356,18 @@ objetivo(float entrada, float riesgo, bool compra) =>
             nom := nombres.get(i)
     [na(mejor) ? (compra ? entrada + 2 * riesgo : entrada - 2 * riesgo) : mejor, nom]
 
+// Extremos de las últimas velas (se calculan en cada vela para que sean correctos)
+bajo10 = ta.lowest(low, 10)
+alto10 = ta.highest(high, 10)
 var int orden_bar = na
 dibujar(bool compra, float ent, float sl, float tp, string txt) =>
     col = compra ? col_c : col_v
-    label.new(bar_index, compra ? low : high, txt, style=compra ? label.style_label_up : label.style_label_down, color=col, textcolor=color.white, size=size.small)
+    // La etiqueta se saca a una zona limpia: por debajo (compra) o por encima (venta) de las velas de
+    // alrededor, separada sep_etq ATR, con una línea fina que la une a la vela de la señal
+    extremo = compra ? bajo10 : alto10
+    y = compra ? extremo - sep_etq * atr : extremo + sep_etq * atr
+    line.new(bar_index, compra ? low : high, bar_index, y, color=color.new(col, 40), style=line.style_dotted)
+    label.new(bar_index, y, txt, style=compra ? label.style_label_up : label.style_label_down, color=col, textcolor=color.white, size=size.small)
     if ver_lineas
         line.new(bar_index, ent, bar_index + 20, ent, color=color.new(#1565C0, 0), width=2)
         line.new(bar_index, sl, bar_index + 20, sl, color=color.new(col_v, 0), style=line.style_dashed)
