@@ -1479,7 +1479,7 @@ nueva_linea_ses(int x, float v, string nom, color col) =>
     [line.new(x, v, bar_index, v, color=color.new(col, 15), width=1), label.new(bar_index, v, nom, style=label.style_label_left, color=color.new(color.white, 100), textcolor=col, size=size.tiny)]
 
 nivel_ses(int k, bool en, bool ini, float v, int dir, string ses, color col) =>
-    nom_act = (dir == 1 ? "Máximo " : "Mínimo ") + ses
+    nom_act = (dir == 1 ? "Máx. " : "Mín. ") + ses
     o = niv_ses.get(k)
     if ini
         if not na(o) and not na(o.ln)
@@ -1529,7 +1529,7 @@ nivel_ses(int k, bool en, bool ini, float v, int dir, string ses, color col) =>
             o.ln.set_color(color.new(#9E9E9E, 20))
             o.ln.set_style(line.style_dashed)
             o.lb.set_xy(bar_index, o.precio)
-            o.lb.set_text((dir == 1 ? "Máximo manipulado " : "Mínimo manipulado ") + ses)
+            o.lb.set_text((dir == 1 ? "Máx. manip. " : "Mín. manip. ") + ses)
             o.lb.set_textcolor(#9E9E9E)
             niv_viejos.push(o)
             if niv_viejos.size() > 24
@@ -2240,7 +2240,8 @@ colocar_letreros(array<label> etq, bool en_tiempo, int desde, float sep) =>
         for j in orden
             e = etq.get(j)
             y = e.get_y()
-            ancho = str.length(e.get_text()) + 2
+            // Ancho estimado en velas: el texto es muy pequeño, algo menos de una vela por letra
+            ancho = int(math.ceil(str.length(e.get_text()) * 0.8)) + 1
             ini = desde
             for intento = 0 to 6
                 choca = false
