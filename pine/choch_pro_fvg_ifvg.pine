@@ -1456,8 +1456,8 @@ else if not na(lon_h)
 // vela actual. Si el precio la supera (manipulada), no se borra: queda en gris con el nombre «Máximo/
 // Mínimo manipulado …», fija donde estaba. 5 velas después se traza la línea nueva en el extremo que
 // dejó la manipulación (sin seguir al precio mientras tanto); si coincide con otro nivel vigente, no
-// se duplica. Las manipuladas se borran en cuanto
-// empieza otra sesión; las vigentes, cuando empieza la misma sesión al día siguiente.
+// se duplica. Las manipuladas se borran en cuanto empieza otra sesión, y todas al empezar el día
+// siguiente: solo se ven los niveles del día de hoy.
 en_nys = ses_ok and not na(time(timeframe.period, "0930-1600", "America/New_York"))
 var float ny_h = na
 var float ny_l = na
@@ -1542,7 +1542,21 @@ nivel_ses(int k, bool en, bool ini, float v, int dir, string ses, color col) =>
             o.ln.set_x2(bar_index)
             o.lb.set_xy(bar_index, o.precio)
 
+nuevo_dia_ses = timeframe.change("D")
 if info_ses_lin and ses_ok and en_calc
+    // Solo se ven los niveles del día de hoy: al empezar el día de trading (18:00 de Nueva York) se
+    // borran todas las líneas de sesión del día anterior, vigentes y manipuladas
+    if nuevo_dia_ses
+        for k = 0 to 5
+            o = niv_ses.get(k)
+            if not na(o) and not na(o.ln)
+                o.ln.delete()
+                o.lb.delete()
+            niv_ses.set(k, na)
+        for q in niv_viejos
+            q.ln.delete()
+            q.lb.delete()
+        niv_viejos.clear()
     // Al empezar cualquier sesión se borran las líneas manipuladas (grises)
     if ((en_asia and not en_asia[1]) or (en_lon and not en_lon[1]) or (en_nys and not en_nys[1])) and niv_viejos.size() > 0
         for q in niv_viejos
