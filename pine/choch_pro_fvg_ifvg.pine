@@ -29,6 +29,7 @@ info_killzone = input.bool(true, "Fondo suave en las sesiones de Asia, Londres y
 info_eq       = input.bool(true, "Línea del 50 % del día anterior (por encima premium, por debajo descuento)", group=g_extra)
 info_eqhl     = input.bool(true, "Altos y bajos iguales sin barrer (EQH / EQL)", group=g_extra)
 info_barridos = input.bool(true, "Marcar barridos de niveles (pasa el nivel y cierra de vuelta)", group=g_extra)
+info_ses_lin  = input.bool(true, "Máximos y mínimos de Asia, Londres y Nueva York (se quitan 5 velas después de ser barridos)", group=g_extra)
 
 // Interruptores de FVG por temporalidad (arriba en Ajustes): solo se ven y se calculan los activados.
 // Cada interruptor muestra los FVG y los IFVG de esa temporalidad, sea más alta o más baja que el gráfico.
@@ -1431,6 +1432,55 @@ if en_lon
 else if not na(lon_h)
     lon_bh := lon_bh or high > lon_h
     lon_bl := lon_bl or low < lon_l
+
+// --- Máximos y mínimos de cada sesión, con su nombre ---
+// Durante la sesión la línea sigue al máximo/mínimo según se forma. Cuando termina, se alarga hasta la
+// vela actual; en cuanto el precio la supera (manipulada/barrida) se espera 5 velas y se quita.
+en_nys = ses_ok and not na(time(timeframe.period, "0930-1600", "America/New_York"))
+var float ny_h = na
+var float ny_l = na
+if en_nys
+    ny_h := en_nys[1] ? math.max(ny_h, high) : high
+    ny_l := en_nys[1] ? math.min(ny_l, low) : low
+
+type NivelSes
+    line   ln
+    label  lb
+    float  precio
+    int    barrido = na   // vela en la que el precio lo superó
+var array<NivelSes> niv_ses = array.new<NivelSes>(6)
+
+nivel_ses(int k, bool en, bool ini, float v, int dir, string nom, color col) =>
+    o = niv_ses.get(k)
+    if ini
+        if not na(o)
+            o.ln.delete()
+            o.lb.delete()
+        o := NivelSes.new(line.new(bar_index, v, bar_index, v, color=color.new(col, 15), width=1), label.new(bar_index, v, nom, style=label.style_label_left, color=color.new(color.white, 100), textcolor=col, size=size.tiny), v)
+        niv_ses.set(k, o)
+    else if not na(o) and not na(o.ln)
+        if en
+            o.precio := v
+            o.ln.set_y1(v)
+            o.ln.set_y2(v)
+        else if na(o.barrido) and (dir == 1 ? high > o.precio : low < o.precio)
+            o.barrido := bar_index
+        if not en and not na(o.barrido) and bar_index - o.barrido >= 5
+            o.ln.delete()
+            o.lb.delete()
+            o.ln := na
+            o.lb := na
+        else
+            o.ln.set_x2(bar_index)
+            o.lb.set_xy(bar_index, o.precio)
+
+if info_ses_lin and ses_ok and en_calc
+    nivel_ses(0, en_asia, en_asia and not en_asia[1], asia_h, 1, "Alto Asia", #5E35B1)
+    nivel_ses(1, en_asia, en_asia and not en_asia[1], asia_l, -1, "Bajo Asia", #5E35B1)
+    nivel_ses(2, en_lon, en_lon and not en_lon[1], lon_h, 1, "Alto Londres", #1E88E5)
+    nivel_ses(3, en_lon, en_lon and not en_lon[1], lon_l, -1, "Bajo Londres", #1E88E5)
+    nivel_ses(4, en_nys, en_nys and not en_nys[1], ny_h, 1, "Alto NY", #EF6C00)
+    nivel_ses(5, en_nys, en_nys and not en_nys[1], ny_l, -1, "Bajo NY", #EF6C00)
 
 // --- Barridos: la vela pasa un nivel relevante y cierra de vuelta al otro lado (manipulación) ---
 var array<bool>  barrido_hecho = array.new<bool>(6, false)
