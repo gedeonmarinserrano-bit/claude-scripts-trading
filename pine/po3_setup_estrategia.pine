@@ -1,0 +1,389 @@
+// Po3 Setup NY (estrategia)
+// Señal de confluencia de la estrategia Bias + PO3 en la apertura de Nueva York, como estrategia de
+// TradingView para poder medirla en el Probador de estrategias. Es un script aparte: no depende del
+// indicador "Po3 + CHoCH PRO" ni lo modifica.
+//
+// Compra (la venta es el espejo):
+//   1. Bias: H1 alcista y H4 que no vaya en contra.
+//   2. Horario: por defecto todo el horario de mercado; opcionalmente solo la apertura de Nueva York
+//      (09:30-11:00 NY = 15:30-17:00 Madrid).
+//   3. Manipulación: barrido de un bajo relevante (día anterior, Asia, Londres, bajos iguales) o toque
+//      del 50 % de un FVG alcista de M15 o H1.
+//   4. Confirmación: CHoCH alcista después de la manipulación que no falla en la vela siguiente.
+//   5. Filtros: precio en descuento, rango del día por debajo del ATR diario (y opcionalmente del
+//      movimiento esperado VIX/16) y sin mercado lateral.
+//   6. Punto extra: SMT alcista con ES.
+// Entrada en el FVG que deja el impulso (orden límite), SL bajo el mínimo de la manipulación y TP en la
+// siguiente liquidez por arriba con un riesgo/beneficio mínimo. Todo se calcula con velas cerradas.
+
+//@version=6
+strategy("Po3 Setup NY (estrategia)", shorttitle="Po3 Setup", overlay=true, initial_capital=10000, default_qty_type=strategy.fixed, default_qty_value=1, commission_type=strategy.commission.cash_per_contract, commission_value=0.5, slippage=1, pyramiding=0, calc_on_every_tick=false, process_orders_on_close=false, max_labels_count=500, max_lines_count=500)
+
+// ─────────────────────────────
+// AJUSTES
+// ─────────────────────────────
+g_s        = "Señal"
+dir_op     = input.string("Compras y ventas", "Operar", options=["Compras y ventas", "Solo compras", "Solo ventas"], group=g_s)
+horario    = input.string("Todo el horario de mercado", "Horario de las señales", options=["Todo el horario de mercado", "Solo apertura de Nueva York (15:30-17:00 Madrid)"], group=g_s)
+punt_min   = input.int(5, "Puntuación mínima (de 6)", minval=4, maxval=6, group=g_s, tooltip="Bias, horario, manipulación y CHoCH son siempre obligatorios (4 puntos; con todo el horario de mercado, el horario se cumple siempre). Los filtros y la SMT suman uno cada uno.")
+piv_len    = input.int(3, "Sensibilidad de los pivotes (velas a cada lado)", minval=2, maxval=10, group=g_s)
+vent_manip = input.int(20, "Velas máximas entre la manipulación y el CHoCH", minval=3, maxval=60, group=g_s)
+min_rr     = input.float(1.5, "Riesgo/beneficio mínimo", minval=0.5, step=0.1, group=g_s)
+sl_buf     = input.float(0.1, "Margen del SL más allá de la manipulación (× ATR)", minval=0, step=0.05, group=g_s)
+vence_lim  = input.int(10, "Velas para que el precio vuelva a la entrada (si no, se cancela)", minval=1, maxval=50, group=g_s)
+max_dia    = input.int(2, "Máx. operaciones por día", minval=1, maxval=10, group=g_s)
+cerrar_ses = input.bool(false, "Cerrar lo que siga abierto al llegar las 16:00 de Nueva York (22:00 Madrid)", group=g_s)
+
+g_f        = "Filtros (suman un punto si se cumplen todos los activados)"
+usar_h4    = input.bool(true, "H4 no puede ir en contra", group=g_f)
+usar_desc  = input.bool(true, "Comprar en descuento y vender en premium", group=g_f)
+usar_atr   = input.bool(true, "El rango de hoy no ha pasado el ATR diario", group=g_f)
+usar_vix   = input.bool(false, "El rango de hoy no ha pasado el movimiento esperado (VIX / 16)", group=g_f)
+vix_sym    = input.symbol("CBOE:VIX", "Índice de volatilidad (para el Nasdaq también vale CBOE:VXN)", group=g_f)
+usar_lat   = input.bool(true, "Evitar mercado lateral (últimas 30 velas en menos de 2 ATR)", group=g_f)
+
+g_m        = "Manipulación válida"
+usar_pd    = input.bool(true, "Barrido del alto/bajo del día anterior", group=g_m)
+usar_ses   = input.bool(true, "Barrido del alto/bajo de Asia y de Londres", group=g_m)
+usar_eq    = input.bool(true, "Barrido de altos/bajos iguales (EQH / EQL)", group=g_m)
+usar_fvg50 = input.bool(true, "Toque del 50 % de un FVG de M15 o H1", group=g_m)
+
+g_smt      = "SMT (punto extra)"
+usar_smt   = input.bool(true, "Sumar un punto si hay SMT con el otro índice", group=g_smt)
+smt_sym    = input.symbol("CME_MINI:ES1!", "Comparar con", group=g_smt)
+
+g_v        = "Visual"
+col_c      = input.color(#00A651, "Compra", group=g_v)
+col_v      = input.color(#E4002B, "Venta", group=g_v)
+ver_lineas = input.bool(true, "Dibujar entrada, SL y TP de cada señal", group=g_v)
+
+// ─────────────────────────────
+// DATOS BASE
+// ─────────────────────────────
+tz        = "America/New_York"
+atr       = ta.atr(14)
+operable  = timeframe.isintraday and timeframe.in_seconds() <= 900   // M1 a M15
+cerrada   = barstate.isconfirmed
+min_ny    = hour(time, tz) * 60 + minute(time, tz)
+en_ny     = min_ny >= 570 and min_ny < 660          // 09:30-11:00 NY
+// Horario válido para las señales: cualquier vela con mercado abierto, o solo la apertura de NY
+en_horario = horario == "Todo el horario de mercado" ? true : en_ny
+en_asia   = not na(time(timeframe.period, "2000-0000", tz))
+en_lon    = not na(time(timeframe.period, "0200-0500", tz))
+nuevo_dia = timeframe.change("D")
+
+// Bias de una temporalidad superior: dirección de la última ruptura de estructura, con su vela ya
+// cerrada (no repinta)
+bias_htf() =>
+    var int t = 0
+    var float uh = na
+    var float ul = na
+    ph = ta.pivothigh(high, 3, 3)
+    pl = ta.pivotlow(low, 3, 3)
+    if not na(ph)
+        uh := ph
+    if not na(pl)
+        ul := pl
+    if not na(uh) and close > uh
+        t := 1
+        uh := na
+    else if not na(ul) and close < ul
+        t := -1
+        ul := na
+    t[1]
+b4 = request.security(syminfo.tickerid, "240", bias_htf(), lookahead=barmerge.lookahead_on)
+b1 = request.security(syminfo.tickerid, "60", bias_htf(), lookahead=barmerge.lookahead_on)
+
+// Día anterior y día actual
+[pdh, pdl, pdc, d_open, d_atr] = request.security(syminfo.tickerid, "D", [high[1], low[1], close[1], open, ta.atr(14)[1]], lookahead=barmerge.lookahead_on)
+var float dh = na
+var float dl = na
+if nuevo_dia
+    dh := high
+    dl := low
+else
+    dh := math.max(nz(dh, high), high)
+    dl := math.min(nz(dl, low), low)
+float vix_ant = na
+if usar_vix
+    vix_ant := request.security(vix_sym, "D", close[1], lookahead=barmerge.lookahead_on)
+
+// Rangos de Asia y Londres (solo cuentan como nivel cuando la sesión ya ha terminado)
+var float asia_h = na
+var float asia_l = na
+var float lon_h  = na
+var float lon_l  = na
+if en_asia
+    asia_h := en_asia[1] ? math.max(asia_h, high) : high
+    asia_l := en_asia[1] ? math.min(asia_l, low) : low
+if en_lon
+    lon_h := en_lon[1] ? math.max(lon_h, high) : high
+    lon_l := en_lon[1] ? math.min(lon_l, low) : low
+asia_hv = en_asia ? na : asia_h
+asia_lv = en_asia ? na : asia_l
+lon_hv  = en_lon ? na : lon_h
+lon_lv  = en_lon ? na : lon_l
+
+// Último FVG alcista y bajista sin rellenar de una temporalidad superior (vela cerrada)
+fvg_ult() =>
+    var float bt = na
+    var float bb = na
+    var float st = na
+    var float sb = na
+    if not na(bb) and low <= bb
+        bt := na
+        bb := na
+    if not na(st) and high >= st
+        st := na
+        sb := na
+    if low > high[2]
+        bt := low
+        bb := high[2]
+    if high < low[2]
+        st := low[2]
+        sb := high
+    [bt[1], bb[1], st[1], sb[1]]
+[m15_bt, m15_bb, m15_st, m15_sb] = request.security(syminfo.tickerid, "15", fvg_ult(), lookahead=barmerge.lookahead_on)
+[h1_bt, h1_bb, h1_st, h1_sb] = request.security(syminfo.tickerid, "60", fvg_ult(), lookahead=barmerge.lookahead_on)
+
+// ─────────────────────────────
+// ESTRUCTURA DEL GRÁFICO: pivotes, CHoCH y altos/bajos iguales
+// ─────────────────────────────
+ph = ta.pivothigh(high, piv_len, piv_len)
+pl = ta.pivotlow(low, piv_len, piv_len)
+var float lph = na      // último alto de swing sin romper
+var float lpl = na      // último bajo de swing sin romper
+var int   tend = 0
+var float prev_ph = na
+var float prev_pl = na
+var float eqh = na
+var float eql = na
+if not na(ph)
+    if not na(prev_ph) and math.abs(ph - prev_ph) <= 0.1 * atr
+        eqh := math.max(ph, prev_ph)
+    prev_ph := ph
+    lph := ph
+if not na(pl)
+    if not na(prev_pl) and math.abs(pl - prev_pl) <= 0.1 * atr
+        eql := math.min(pl, prev_pl)
+    prev_pl := pl
+    lpl := pl
+
+choch_alc = false
+choch_baj = false
+float nivel_choch = na
+if cerrada and not na(lph) and close > lph
+    choch_alc := tend <= 0
+    nivel_choch := lph
+    tend := 1
+    lph := na
+else if cerrada and not na(lpl) and close < lpl
+    choch_baj := tend >= 0
+    nivel_choch := lpl
+    tend := -1
+    lpl := na
+
+// ─────────────────────────────
+// MANIPULACIÓN: barridos de liquidez o toque del 50 % de un FVG de M15/H1
+// ─────────────────────────────
+barre_bajo(float nv) =>
+    not na(nv) and low < nv and close > nv
+barre_alto(float nv) =>
+    not na(nv) and high > nv and close < nv
+
+string man_c = ""
+if cerrada
+    if usar_pd and barre_bajo(pdl)
+        man_c := "PDL"
+    else if usar_ses and barre_bajo(asia_lv)
+        man_c := "bajo de Asia"
+    else if usar_ses and barre_bajo(lon_lv)
+        man_c := "bajo de Londres"
+    else if usar_eq and barre_bajo(eql)
+        man_c := "EQL"
+    else if usar_fvg50 and not na(m15_bb) and low <= (m15_bt + m15_bb) / 2 and close > m15_bb
+        man_c := "50 % FVG M15"
+    else if usar_fvg50 and not na(h1_bb) and low <= (h1_bt + h1_bb) / 2 and close > h1_bb
+        man_c := "50 % FVG H1"
+string man_v = ""
+if cerrada
+    if usar_pd and barre_alto(pdh)
+        man_v := "PDH"
+    else if usar_ses and barre_alto(asia_hv)
+        man_v := "alto de Asia"
+    else if usar_ses and barre_alto(lon_hv)
+        man_v := "alto de Londres"
+    else if usar_eq and barre_alto(eqh)
+        man_v := "EQH"
+    else if usar_fvg50 and not na(m15_st) and high >= (m15_st + m15_sb) / 2 and close < m15_st
+        man_v := "50 % FVG M15"
+    else if usar_fvg50 and not na(h1_st) and high >= (h1_st + h1_sb) / 2 and close < h1_st
+        man_v := "50 % FVG H1"
+// Los altos/bajos iguales dejan de ser liquidez cuando se barren
+if not na(eql) and low < eql
+    eql := na
+if not na(eqh) and high > eqh
+    eqh := na
+
+// Última manipulación de cada lado, el extremo alcanzado desde entonces (para el SL) y el último FVG
+// que deja el impulso posterior (para la entrada)
+var int    mc_bar = na
+var float  mc_ext = na
+var string mc_txt = ""
+var float  mc_fvg = na
+var int    mv_bar = na
+var float  mv_ext = na
+var string mv_txt = ""
+var float  mv_fvg = na
+if man_c != ""
+    mc_bar := bar_index
+    mc_ext := low
+    mc_txt := man_c
+    mc_fvg := na
+else if not na(mc_bar)
+    mc_ext := math.min(mc_ext, low)
+if man_v != ""
+    mv_bar := bar_index
+    mv_ext := high
+    mv_txt := man_v
+    mv_fvg := na
+else if not na(mv_bar)
+    mv_ext := math.max(mv_ext, high)
+if cerrada and not na(mc_bar) and bar_index > mc_bar and low > high[2]
+    mc_fvg := low
+if cerrada and not na(mv_bar) and bar_index > mv_bar and high < low[2]
+    mv_fvg := high
+
+// ─────────────────────────────
+// SMT con el otro índice (punto extra)
+// ─────────────────────────────
+var int smt_c_bar = na
+var int smt_v_bar = na
+if usar_smt
+    [o_l, o_h] = request.security(smt_sym, timeframe.period, [ta.lowest(low, 2 * piv_len + 1), ta.highest(high, 2 * piv_len + 1)], gaps=barmerge.gaps_off)
+    var float ant_pl = na
+    var float ant_ol = na
+    var float ant_ph = na
+    var float ant_oh = na
+    if not na(pl)
+        if not na(ant_pl) and not na(o_l) and not na(ant_ol) and (pl < ant_pl) != (o_l < ant_ol)
+            smt_c_bar := bar_index
+        ant_pl := pl
+        ant_ol := o_l
+    if not na(ph)
+        if not na(ant_ph) and not na(o_h) and not na(ant_oh) and (ph > ant_ph) != (o_h > ant_oh)
+            smt_v_bar := bar_index
+        ant_ph := ph
+        ant_oh := o_h
+
+// ─────────────────────────────
+// CONFIRMACIÓN: el CHoCH no puede fallar en la vela siguiente
+// ─────────────────────────────
+var int   pc_bar = na
+var float pc_lvl = na
+var int   pv_bar = na
+var float pv_lvl = na
+conf_c = false
+conf_v = false
+if cerrada and not na(pc_bar) and bar_index == pc_bar + 1
+    conf_c := close > pc_lvl
+    pc_bar := na
+if cerrada and not na(pv_bar) and bar_index == pv_bar + 1
+    conf_v := close < pv_lvl
+    pv_bar := na
+if choch_alc and not na(mc_bar) and bar_index - mc_bar <= vent_manip
+    pc_bar := bar_index
+    pc_lvl := nivel_choch
+if choch_baj and not na(mv_bar) and bar_index - mv_bar <= vent_manip
+    pv_bar := bar_index
+    pv_lvl := nivel_choch
+
+// ─────────────────────────────
+// PUNTUACIÓN Y SEÑAL
+// ─────────────────────────────
+var int ops_hoy = 0
+if nuevo_dia
+    ops_hoy := 0
+
+rango_hoy = dh - dl
+lateral   = ta.highest(high, 30) - ta.lowest(low, 30) < 2 * atr
+mitad_ant = (pdh + pdl) / 2
+filtros_comunes = (not usar_atr or na(d_atr) or rango_hoy < d_atr) and (not usar_vix or na(vix_ant) or rango_hoy < pdc * vix_ant / 16 / 100) and (not usar_lat or not lateral)
+filtros_c = filtros_comunes and (not usar_desc or close < mitad_ant or close < d_open)
+filtros_v = filtros_comunes and (not usar_desc or close > mitad_ant or close > d_open)
+bias_c = b1 == 1 and (not usar_h4 or b4 != -1)
+bias_v = b1 == -1 and (not usar_h4 or b4 != 1)
+smt_c  = usar_smt and not na(smt_c_bar) and bar_index - smt_c_bar <= vent_manip + piv_len
+smt_v  = usar_smt and not na(smt_v_bar) and bar_index - smt_v_bar <= vent_manip + piv_len
+man_ok_c = not na(mc_bar) and bar_index - mc_bar <= vent_manip + 1
+man_ok_v = not na(mv_bar) and bar_index - mv_bar <= vent_manip + 1
+
+punt_c = (bias_c ? 1 : 0) + (en_horario ? 1 : 0) + (man_ok_c ? 1 : 0) + (conf_c ? 1 : 0) + (filtros_c ? 1 : 0) + (smt_c ? 1 : 0)
+punt_v = (bias_v ? 1 : 0) + (en_horario ? 1 : 0) + (man_ok_v ? 1 : 0) + (conf_v ? 1 : 0) + (filtros_v ? 1 : 0) + (smt_v ? 1 : 0)
+puede  = operable and cerrada and strategy.position_size == 0 and ops_hoy < max_dia
+senal_c = puede and dir_op != "Solo ventas" and bias_c and en_horario and man_ok_c and conf_c and punt_c >= punt_min
+senal_v = puede and dir_op != "Solo compras" and bias_v and en_horario and man_ok_v and conf_v and punt_v >= punt_min and not senal_c
+
+// Objetivo: la liquidez más cercana en la dirección de la operación que dé el riesgo/beneficio mínimo;
+// si no hay ninguna, 2R
+objetivo(float entrada, float riesgo, bool compra) =>
+    cands = compra ? array.from(pdh, asia_hv, lon_hv, eqh, dh) : array.from(pdl, asia_lv, lon_lv, eql, dl)
+    nombres = array.from(compra ? "PDH" : "PDL", compra ? "alto de Asia" : "bajo de Asia", compra ? "alto de Londres" : "bajo de Londres", compra ? "EQH" : "EQL", compra ? "alto del día" : "bajo del día")
+    float mejor = na
+    string nom = "2R"
+    for i = 0 to cands.size() - 1
+        nv = cands.get(i)
+        dist = compra ? nv - entrada : entrada - nv
+        if not na(nv) and dist >= min_rr * riesgo and (na(mejor) or dist < (compra ? mejor - entrada : entrada - mejor))
+            mejor := nv
+            nom := nombres.get(i)
+    [na(mejor) ? (compra ? entrada + 2 * riesgo : entrada - 2 * riesgo) : mejor, nom]
+
+var int orden_bar = na
+dibujar(bool compra, float ent, float sl, float tp, string txt) =>
+    col = compra ? col_c : col_v
+    label.new(bar_index, compra ? low : high, txt, style=compra ? label.style_label_up : label.style_label_down, color=col, textcolor=color.white, size=size.small)
+    if ver_lineas
+        line.new(bar_index, ent, bar_index + 20, ent, color=color.new(#1565C0, 0), width=2)
+        line.new(bar_index, sl, bar_index + 20, sl, color=color.new(col_v, 0), style=line.style_dashed)
+        line.new(bar_index, tp, bar_index + 20, tp, color=color.new(col_c, 0), style=line.style_dashed)
+
+if senal_c
+    ent = na(mc_fvg) ? close : math.min(mc_fvg, close)
+    sl = mc_ext - sl_buf * atr
+    riesgo = ent - sl
+    if riesgo > 0
+        [tp, tp_nom] = objetivo(ent, riesgo, true)
+        rr = (tp - ent) / riesgo
+        strategy.entry("Compra", strategy.long, limit=na(mc_fvg) ? na : ent, comment="Setup " + str.tostring(punt_c) + "/6")
+        strategy.exit("Salida compra", "Compra", stop=sl, limit=tp)
+        orden_bar := bar_index
+        ops_hoy += 1
+        dibujar(true, ent, sl, tp, "▲ SETUP " + str.tostring(punt_c) + "/6\nBarrido " + mc_txt + (smt_c ? " + SMT" : "") + "\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
+        alert("▲ Setup de compra " + str.tostring(punt_c) + "/6 en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick) + " (" + tp_nom + ")", alert.freq_once_per_bar_close)
+        mc_bar := na
+
+if senal_v
+    ent = na(mv_fvg) ? close : math.max(mv_fvg, close)
+    sl = mv_ext + sl_buf * atr
+    riesgo = sl - ent
+    if riesgo > 0
+        [tp, tp_nom] = objetivo(ent, riesgo, false)
+        rr = (ent - tp) / riesgo
+        strategy.entry("Venta", strategy.short, limit=na(mv_fvg) ? na : ent, comment="Setup " + str.tostring(punt_v) + "/6")
+        strategy.exit("Salida venta", "Venta", stop=sl, limit=tp)
+        orden_bar := bar_index
+        ops_hoy += 1
+        dibujar(false, ent, sl, tp, "▼ SETUP " + str.tostring(punt_v) + "/6\nBarrido " + mv_txt + (smt_v ? " + SMT" : "") + "\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
+        alert("▼ Setup de venta " + str.tostring(punt_v) + "/6 en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick) + " (" + tp_nom + ")", alert.freq_once_per_bar_close)
+        mv_bar := na
+
+// Orden límite que no se llena a tiempo: se cancela
+if strategy.position_size == 0 and not na(orden_bar) and bar_index - orden_bar > vence_lim
+    strategy.cancel("Compra")
+    strategy.cancel("Venta")
+    orden_bar := na
+
+// Cierre al llegar las 16:00 de Nueva York (solo en esa vela, para no cerrar las de la noche)
+if cerrar_ses and strategy.position_size != 0 and min_ny >= 960 and min_ny[1] < 960
+    strategy.close_all(comment="Cierre 16:00 NY")
