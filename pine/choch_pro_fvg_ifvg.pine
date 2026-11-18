@@ -2217,24 +2217,17 @@ if barstate.islast and mostrar_panel
 
 // ─────────────────────────────
 // LETREROS DE NIVELES SIN MONTARSE
-// Los nombres de los niveles (máximos/mínimos de sesión, altos/bajos de H4 y H1) van a la derecha de la
-// vela actual. Si dos quedan a la misma altura, el segundo se pone a la derecha del primero, en la
+// A la derecha de la vela actual, en dos columnas:
+//   1ª columna: máximos/mínimos de sesión (Asia, Londres, NY), todos en la misma vertical.
+//   2ª columna: altos/bajos de H4 y H1, justo a la derecha de la primera.
+// Si dos letreros de la misma columna quedan a la misma altura, el segundo se pone a su derecha, en la
 // misma línea, en vez de encima. El ancho de cada letrero se estima en velas (~1 vela por letra).
 // ─────────────────────────────
-if barstate.islast
-    etq = array.new<label>()
-    en_tiempo = array.new<bool>()
-    for o in niv_ses
-        if not na(o) and not na(o.lb)
-            etq.push(o.lb)
-            en_tiempo.push(false)
-    for n in niveles_h4
-        etq.push(n.lb)
-        en_tiempo.push(true)
-    for n in niveles_h1
-        etq.push(n.lb)
-        en_tiempo.push(true)
-    if etq.size() > 1
+// Coloca los letreros de una lista empezando en la columna «desde» (en velas a la derecha de la actual)
+// y devuelve dónde termina la columna
+colocar_letreros(array<label> etq, bool en_tiempo, int desde) =>
+    fin_col = desde
+    if etq.size() > 0
         ys = array.new<float>()
         for e in etq
             ys.push(e.get_y())
@@ -2247,7 +2240,7 @@ if barstate.islast
             e = etq.get(j)
             y = e.get_y()
             ancho = str.length(e.get_text()) + 2
-            ini = 0
+            ini = desde
             for intento = 0 to 6
                 choca = false
                 if pos_y.size() > 0
@@ -2260,10 +2253,25 @@ if barstate.islast
             pos_y.push(y)
             pos_ini.push(ini)
             pos_fin.push(ini + ancho)
-            if en_tiempo.get(j)
+            fin_col := math.max(fin_col, ini + ancho)
+            if en_tiempo
                 e.set_x(time + ini * ms_vela)
             else
                 e.set_x(bar_index + ini)
+    fin_col
+
+if barstate.islast
+    etq_ses = array.new<label>()
+    for o in niv_ses
+        if not na(o) and not na(o.lb)
+            etq_ses.push(o.lb)
+    etq_htf = array.new<label>()
+    for n in niveles_h4
+        etq_htf.push(n.lb)
+    for n in niveles_h1
+        etq_htf.push(n.lb)
+    fin_ses = colocar_letreros(etq_ses, false, 1)
+    colocar_letreros(etq_htf, true, etq_ses.size() > 0 ? fin_ses : 1)
 
 // ─────────────────────────────
 // ALERTAS
