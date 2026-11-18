@@ -110,6 +110,10 @@ fvg_baj_240     = fvg_baj_todos
 mostrar_niv_h4  = input.bool(true, "Niveles clave: altos/bajos relevantes de H4", group=g_ny)
 piv_h4_len      = input.int(3, "Sensibilidad altos/bajos H4", minval=1, maxval=10, group=g_ny)
 max_niv_h4      = input.int(6, "Máx. niveles H4 vigentes", minval=1, maxval=20, group=g_ny)
+mostrar_niv_h1  = input.bool(true, "Niveles clave: altos/bajos relevantes de H1", group=g_ny)
+piv_h1_len      = input.int(3, "Sensibilidad altos/bajos H1", minval=1, maxval=10, group=g_ny)
+max_niv_h1      = input.int(6, "Máx. niveles H1 vigentes", minval=1, maxval=20, group=g_ny)
+col_niv_h1      = input.color(#8D6E63, "Color niveles H1", group=g_ny)
 mostrar_pd      = input.bool(true, "Niveles clave: alto/bajo del día anterior", group=g_ny)
 col_niveles     = input.color(#424242, "Color niveles clave", group=g_ny)
 col_horas       = input.color(#757575, "Color horas", group=g_ny)
@@ -1343,7 +1347,7 @@ if cerrada and timeframe.isintraday and en_calc
             else if b240
                 nueva_htf(fvg240, b240_top, b240_bot, -1, t240, 240)
 
-// --- Niveles clave: altos y bajos relevantes de H4 (vigentes hasta que un cierre los rompe) ---
+// --- Niveles clave: altos y bajos relevantes de H4 y de H1 (vigentes hasta que un cierre los rompe) ---
 type Nivel
     line  ln
     label lb
@@ -1351,38 +1355,52 @@ type Nivel
     int   dir    // 1 = alto relevante, -1 = bajo relevante
 
 var niveles_h4 = array.new<Nivel>()
+var niveles_h1 = array.new<Nivel>()
 
-piv_h4() =>
-    [ta.pivothigh(high, piv_h4_len, piv_h4_len)[1], ta.pivotlow(low, piv_h4_len, piv_h4_len)[1], time[1 + piv_h4_len]]
+// Pivote alto/bajo de la última vela cerrada de otra temporalidad (no repinta)
+piv_htf(simple int len) =>
+    [ta.pivothigh(high, len, len)[1], ta.pivotlow(low, len, len)[1], time[1 + len]]
 
-[ph4, pl4, tp4] = request.security(syminfo.tickerid, "240", piv_h4(), lookahead = barmerge.lookahead_on)
+[ph4, pl4, tp4] = request.security(syminfo.tickerid, "240", piv_htf(piv_h4_len), lookahead = barmerge.lookahead_on)
+[ph1, pl1, tp1] = request.security(syminfo.tickerid, "60", piv_htf(piv_h1_len), lookahead = barmerge.lookahead_on)
 
-nuevo_nivel(float precio, int dir, int t_izq) =>
-    ln = line.new(t_izq, precio, time, precio, xloc=xloc.bar_time, color=color.new(col_niveles, 20), width=1)
-    lb = label.new(time, precio, dir == 1 ? "Alto H4" : "Bajo H4", xloc=xloc.bar_time, style=label.style_label_left, color=color.new(color.white, 100), textcolor=color.new(col_niveles, 10), size=size.tiny)
-    niveles_h4.push(Nivel.new(ln, lb, precio, dir))
-    if niveles_h4.size() > max_niv_h4
-        n = niveles_h4.shift()
+nuevo_nivel(array<Nivel> arr, float precio, int dir, int t_izq, string tf, int tope, color col) =>
+    ln = line.new(t_izq, precio, time, precio, xloc=xloc.bar_time, color=color.new(col, 20), width=1)
+    lb = label.new(time, precio, (dir == 1 ? "Alto " : "Bajo ") + tf, xloc=xloc.bar_time, style=label.style_label_left, color=color.new(color.white, 100), textcolor=color.new(col, 10), size=size.tiny)
+    arr.push(Nivel.new(ln, lb, precio, dir))
+    if arr.size() > tope
+        n = arr.shift()
         n.ln.delete()
         n.lb.delete()
 
-if cerrada and mostrar_niv_h4 and timeframe.isintraday and seg_tf < 14400
-    if niveles_h4.size() > 0
-        for i = niveles_h4.size() - 1 to 0
-            n = niveles_h4.get(i)
+// Los niveles rotos por un cierre dejan de ser vigentes y se borran; los demás se alargan
+actualizar_niveles(array<Nivel> arr) =>
+    if arr.size() > 0
+        for i = arr.size() - 1 to 0
+            n = arr.get(i)
             if (n.dir == 1 and close > n.precio) or (n.dir == -1 and close < n.precio)
-                // Nivel roto por cierre: deja de ser vigente y se borra
                 n.ln.delete()
                 n.lb.delete()
-                niveles_h4.remove(i)
+                arr.remove(i)
             else
                 n.ln.set_x2(time)
                 n.lb.set_x(time)
+
+if cerrada and mostrar_niv_h4 and timeframe.isintraday and seg_tf < 14400
+    actualizar_niveles(niveles_h4)
     if cambio240
         if not na(ph4)
-            nuevo_nivel(ph4, 1, tp4)
+            nuevo_nivel(niveles_h4, ph4, 1, tp4, "H4", max_niv_h4, col_niveles)
         if not na(pl4)
-            nuevo_nivel(pl4, -1, tp4)
+            nuevo_nivel(niveles_h4, pl4, -1, tp4, "H4", max_niv_h4, col_niveles)
+
+if cerrada and mostrar_niv_h1 and timeframe.isintraday and seg_tf < 3600
+    actualizar_niveles(niveles_h1)
+    if cambio60
+        if not na(ph1)
+            nuevo_nivel(niveles_h1, ph1, 1, tp1, "H1", max_niv_h1, col_niv_h1)
+        if not na(pl1)
+            nuevo_nivel(niveles_h1, pl1, -1, tp1, "H1", max_niv_h1, col_niv_h1)
 
 // --- Niveles clave: alto y bajo del día anterior ---
 [pdh, pdl] = request.security(syminfo.tickerid, "D", [high[1], low[1]], lookahead = barmerge.lookahead_on)
@@ -2139,6 +2157,9 @@ if barstate.islast and mostrar_panel
         for nv in niveles_h4
             cand_p.push(nv.precio)
             cand_n.push(nv.dir == 1 ? "Alto H4" : "Bajo H4")
+        for nv in niveles_h1
+            cand_p.push(nv.precio)
+            cand_n.push(nv.dir == 1 ? "Alto H1" : "Bajo H1")
         for q in iguales
             cand_p.push(q.precio)
             cand_n.push(q.dir == 1 ? "EQH" : "EQL")
