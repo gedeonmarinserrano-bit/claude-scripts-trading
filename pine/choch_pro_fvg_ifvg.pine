@@ -2226,7 +2226,7 @@ if barstate.islast and mostrar_panel
 // ─────────────────────────────
 // Coloca los letreros de una lista empezando en la columna «desde» (en velas a la derecha de la actual)
 // y devuelve dónde termina la columna
-colocar_letreros(array<label> etq, bool en_tiempo, int desde) =>
+colocar_letreros(array<label> etq, bool en_tiempo, int desde, float sep) =>
     fin_col = desde
     if etq.size() > 0
         ys = array.new<float>()
@@ -2246,7 +2246,7 @@ colocar_letreros(array<label> etq, bool en_tiempo, int desde) =>
                 choca = false
                 if pos_y.size() > 0
                     for c = 0 to pos_y.size() - 1
-                        if math.abs(pos_y.get(c) - y) < sep_letrero and ini < pos_fin.get(c) and ini + ancho > pos_ini.get(c)
+                        if math.abs(pos_y.get(c) - y) < sep and ini < pos_fin.get(c) and ini + ancho > pos_ini.get(c)
                             ini := pos_fin.get(c)
                             choca := true
                 if not choca
@@ -2275,8 +2275,10 @@ if barstate.islast
         etq_htf.push(n.lb)
     for n in niveles_h1
         etq_htf.push(n.lb)
-    fin_ses = colocar_letreros(etq_ses, false, 1)
-    colocar_letreros(etq_htf, true, etq_ses.size() > 0 ? fin_ses : 1)
+    // Margen vertical pequeño (los letreros son de texto muy pequeño): solo se apartan a la derecha
+    // cuando de verdad se tocarían, así casi siempre quedan todos en la misma vertical
+    fin_ses = colocar_letreros(etq_ses, false, 1, sep_letrero * 0.35)
+    colocar_letreros(etq_htf, true, etq_ses.size() > 0 ? fin_ses : 1, sep_letrero * 0.35)
 
 // ─────────────────────────────
 // ALERTAS
