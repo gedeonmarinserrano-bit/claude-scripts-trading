@@ -1531,6 +1531,15 @@ nivel_ses(int k, bool en, bool ini, float v, int dir, string ses, color col) =>
             o.lb.set_xy(bar_index, o.precio)
             o.lb.set_text((dir == 1 ? "Máx. manip. " : "Mín. manip. ") + ses)
             o.lb.set_textcolor(#9E9E9E)
+            // Solo un manipulado por nivel: si este nivel ya tenía uno anterior (barrido varias veces
+            // seguidas en una tendencia), se borra y queda solo el último
+            if niv_viejos.size() > 0
+                for i = niv_viejos.size() - 1 to 0
+                    q = niv_viejos.get(i)
+                    if q.k == k
+                        niv_viejos.remove(i)
+                        q.ln.delete()
+                        q.lb.delete()
             niv_viejos.push(o)
             if niv_viejos.size() > 24
                 q = niv_viejos.shift()
