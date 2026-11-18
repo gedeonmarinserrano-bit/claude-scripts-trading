@@ -2218,7 +2218,8 @@ if barstate.islast and mostrar_panel
 // ─────────────────────────────
 // LETREROS DE NIVELES SIN MONTARSE
 // A la derecha de la vela actual, en dos columnas:
-//   1ª columna: máximos/mínimos de sesión (Asia, Londres, NY), todos en la misma vertical.
+//   1ª columna: máximos/mínimos de sesión (Asia, Londres, NY), vigentes y manipulados, todos en la
+//              misma vertical.
 //   2ª columna: altos/bajos de H4 y H1, justo a la derecha de la primera.
 // Si dos letreros de la misma columna quedan a la misma altura, el segundo se pone a su derecha, en la
 // misma línea, en vez de encima. El ancho de cada letrero se estima en velas (~1 vela por letra).
@@ -2265,6 +2266,10 @@ if barstate.islast
     for o in niv_ses
         if not na(o) and not na(o.lb)
             etq_ses.push(o.lb)
+    // Las manipuladas (grises) también van en esa columna: su línea se alarga hasta la vela actual
+    for q in niv_viejos
+        q.ln.set_x2(bar_index)
+        etq_ses.push(q.lb)
     etq_htf = array.new<label>()
     for n in niveles_h4
         etq_htf.push(n.lb)
