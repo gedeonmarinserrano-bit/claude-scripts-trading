@@ -1455,8 +1455,8 @@ else if not na(lon_h)
 // Durante la sesión la línea sigue al máximo/mínimo según se forma. Cuando termina, se alarga hasta la
 // vela actual. Si el precio la supera (manipulada), no se borra: queda en gris con el nombre «Máx./
 // Mín. manip. …», fija donde estaba, y no se traza ningún nivel nuevo: solo se marcan el máximo y el
-// mínimo reales de cada sesión. Las manipuladas se borran en cuanto empieza otra sesión, y todas al
-// empezar el día siguiente: solo se ven los niveles del día de hoy.
+// mínimo reales de cada sesión. Todas (vigentes y manipuladas) se mantienen durante el día y se borran
+// al empezar el día siguiente: solo se ven los niveles del día de hoy.
 en_nys = ses_ok and not na(time(timeframe.period, "0930-1600", "America/New_York"))
 var float ny_h = na
 var float ny_l = na
@@ -1541,12 +1541,6 @@ if info_ses_lin and ses_ok and en_calc
                 o.ln.delete()
                 o.lb.delete()
             niv_ses.set(k, na)
-        for q in niv_viejos
-            q.ln.delete()
-            q.lb.delete()
-        niv_viejos.clear()
-    // Al empezar cualquier sesión se borran las líneas manipuladas (grises)
-    if ((en_asia and not en_asia[1]) or (en_lon and not en_lon[1]) or (en_nys and not en_nys[1])) and niv_viejos.size() > 0
         for q in niv_viejos
             q.ln.delete()
             q.lb.delete()
