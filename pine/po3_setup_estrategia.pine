@@ -10,8 +10,9 @@
 //   3. Manipulación: barrido de un bajo relevante (día anterior, Asia, Londres, bajos iguales) o toque
 //      del 50 % de un FVG alcista de M15 o H1.
 //   4. Confirmación: CHoCH alcista después de la manipulación que no falla en la vela siguiente.
-//   5. Filtros: precio en descuento, rango del día por debajo del ATR diario (y opcionalmente del
-//      movimiento esperado VIX/16) y sin mercado lateral.
+//   5. Filtros: precio en descuento y rango del día por debajo del ATR diario (y opcionalmente del
+//      movimiento esperado VIX/16).
+//   Nunca hay señal dentro de un rango: solo cuando el precio cierra fuera de él (breakout).
 //   6. Punto extra: SMT alcista con ES.
 // Entrada en el FVG que deja el impulso (orden límite), SL bajo el mínimo de la manipulación y TP en la
 // siguiente liquidez por arriba con un riesgo/beneficio mínimo. Todo se calcula con velas cerradas.
@@ -25,7 +26,7 @@ strategy("Po3 Setup NY (estrategia)", shorttitle="Po3 Setup", overlay=true, init
 g_s        = "Señal"
 dir_op     = input.string("Compras y ventas", "Operar", options=["Compras y ventas", "Solo compras", "Solo ventas"], group=g_s)
 horario    = input.string("Todo el horario de mercado", "Horario de las señales", options=["Todo el horario de mercado", "Solo apertura de Nueva York (15:30-17:00 Madrid)"], group=g_s)
-punt_min   = input.int(5, "Puntuación mínima (de 6)", minval=4, maxval=6, group=g_s, tooltip="Bias, horario, manipulación y CHoCH son siempre obligatorios (4 puntos; con todo el horario de mercado, el horario se cumple siempre). Los filtros y la SMT suman uno cada uno.")
+punt_min   = input.int(5, "Puntuación mínima (de 6)", minval=4, maxval=6, group=g_s, tooltip="Bias, horario, manipulación y CHoCH son siempre obligatorios (4 puntos; con todo el horario de mercado, el horario se cumple siempre). Los filtros y la SMT suman uno cada uno. Dentro de un rango nunca hay señal.")
 piv_len    = input.int(3, "Sensibilidad de los pivotes (velas a cada lado)", minval=2, maxval=10, group=g_s)
 vent_manip = input.int(20, "Velas máximas entre la manipulación y el CHoCH", minval=3, maxval=60, group=g_s)
 min_rr     = input.float(1.5, "Riesgo/beneficio mínimo", minval=0.5, step=0.1, group=g_s)
@@ -40,7 +41,11 @@ usar_desc  = input.bool(true, "Comprar en descuento y vender en premium", group=
 usar_atr   = input.bool(true, "El rango de hoy no ha pasado el ATR diario", group=g_f)
 usar_vix   = input.bool(false, "El rango de hoy no ha pasado el movimiento esperado (VIX / 16)", group=g_f)
 vix_sym    = input.symbol("CBOE:VIX", "Índice de volatilidad (para el Nasdaq también vale CBOE:VXN)", group=g_f)
-usar_lat   = input.bool(true, "Evitar mercado lateral (últimas 30 velas en menos de 2 ATR)", group=g_f)
+
+g_r        = "Rangos (nunca hay señal dentro de un rango)"
+rango_velas = input.int(30, "Velas que se miran para detectar el rango", minval=10, maxval=200, group=g_r)
+rango_atr   = input.float(3.0, "Es rango si su altura no pasa de (× ATR)", minval=1.0, step=0.5, group=g_r)
+rango_rot   = input.int(4, "Y el precio cruza su mitad al menos (veces)", minval=2, maxval=20, group=g_r)
 
 g_m        = "Manipulación válida"
 usar_pd    = input.bool(true, "Barrido del alto/bajo del día anterior", group=g_m)
@@ -306,9 +311,20 @@ if nuevo_dia
     ops_hoy := 0
 
 rango_hoy = dh - dl
-lateral   = ta.highest(high, 30) - ta.lowest(low, 30) < 2 * atr
+// Rango: las últimas velas (sin contar la actual) caben en poca altura y el precio rota alrededor de
+// su mitad. Mientras la vela actual cierre dentro de esa caja no puede haber señal; al cerrar fuera
+// (breakout) vuelve a estar permitida.
+r_alto = ta.highest(high, rango_velas)[1]
+r_bajo = ta.lowest(low, rango_velas)[1]
+r_mid  = (r_alto + r_bajo) / 2
+int cruces = 0
+for i = 1 to rango_velas - 1
+    if (close[i] > r_mid) != (close[i + 1] > r_mid)
+        cruces += 1
+es_rango = not na(r_alto) and r_alto - r_bajo <= rango_atr * atr and cruces >= rango_rot
+dentro_rango = es_rango and close <= r_alto and close >= r_bajo
 mitad_ant = (pdh + pdl) / 2
-filtros_comunes = (not usar_atr or na(d_atr) or rango_hoy < d_atr) and (not usar_vix or na(vix_ant) or rango_hoy < pdc * vix_ant / 16 / 100) and (not usar_lat or not lateral)
+filtros_comunes = (not usar_atr or na(d_atr) or rango_hoy < d_atr) and (not usar_vix or na(vix_ant) or rango_hoy < pdc * vix_ant / 16 / 100)
 filtros_c = filtros_comunes and (not usar_desc or close < mitad_ant or close < d_open)
 filtros_v = filtros_comunes and (not usar_desc or close > mitad_ant or close > d_open)
 bias_c = b1 == 1 and (not usar_h4 or b4 != -1)
@@ -320,7 +336,7 @@ man_ok_v = not na(mv_bar) and bar_index - mv_bar <= vent_manip + 1
 
 punt_c = (bias_c ? 1 : 0) + (en_horario ? 1 : 0) + (man_ok_c ? 1 : 0) + (conf_c ? 1 : 0) + (filtros_c ? 1 : 0) + (smt_c ? 1 : 0)
 punt_v = (bias_v ? 1 : 0) + (en_horario ? 1 : 0) + (man_ok_v ? 1 : 0) + (conf_v ? 1 : 0) + (filtros_v ? 1 : 0) + (smt_v ? 1 : 0)
-puede  = operable and cerrada and strategy.position_size == 0 and ops_hoy < max_dia
+puede  = operable and cerrada and strategy.position_size == 0 and ops_hoy < max_dia and not dentro_rango
 senal_c = puede and dir_op != "Solo ventas" and bias_c and en_horario and man_ok_c and conf_c and punt_c >= punt_min
 senal_v = puede and dir_op != "Solo compras" and bias_v and en_horario and man_ok_v and conf_v and punt_v >= punt_min and not senal_c
 
