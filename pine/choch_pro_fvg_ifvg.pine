@@ -1634,13 +1634,13 @@ if info_eqhl and en_calc and timeframe.isintraday
 //    de los activos que divergen. Alertas incluidas. Se ignora el activo si es el mismo del gráfico.
 // ─────────────────────────────
 g_smt        = "SMT (divergencias entre índices)"
-mostrar_smt  = input.bool(false, "Mostrar SMT (pide datos de ES/YM: hace el indicador más lento)", group=g_smt)
+mostrar_smt  = input.bool(true, "Mostrar SMT (pide datos de ES/YM: hace el indicador más lento)", group=g_smt)
 smt_etiquetas = input.bool(true, "Mostrar etiquetas de la SMT", group=g_smt)
 smt_linea    = input.bool(true, "Mostrar línea de la SMT", group=g_smt)
 smt_usa1     = input.bool(true, "Comparar con", inline="smt1", group=g_smt)
-smt_sym1     = input.symbol("CME_MINI:ES1!", "", inline="smt1", group=g_smt)
+smt_sym1     = input.symbol("CME_MINI:MES1!", "", inline="smt1", group=g_smt)
 smt_usa2     = input.bool(true, "Comparar con", inline="smt2", group=g_smt)
-smt_sym2     = input.symbol("CBOT_MINI:YM1!", "", inline="smt2", group=g_smt)
+smt_sym2     = input.symbol("CME_MINI:MNQ1!", "", inline="smt2", group=g_smt)
 smt_len      = input.int(5, "Sensibilidad pivotes SMT (velas a cada lado)", minval=2, maxval=20, group=g_smt)
 smt_dist     = input.int(60, "Máx. velas entre los dos altos/bajos comparados", minval=5, maxval=400, group=g_smt)
 smt_max      = input.int(20, "Máx. SMT en el gráfico", minval=1, maxval=60, group=g_smt)
