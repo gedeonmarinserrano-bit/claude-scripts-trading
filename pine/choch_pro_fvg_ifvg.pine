@@ -11,9 +11,9 @@ indicator("Po3 + CHoCH PRO - High Contrast + FVG + Rangos + OB", overlay=true, m
 
 // Panel de información: lo primero en Ajustes, para ponerlo o quitarlo cuando se quiera
 g_panel       = "Panel de información"
-mostrar_panel = input.bool(true, "Mostrar panel", group=g_panel)
-panel_pos     = input.string("Arriba derecha", "Posición", options=["Arriba derecha", "Arriba izquierda", "Abajo derecha", "Abajo izquierda"], group=g_panel)
-panel_tam     = input.string("Pequeño", "Tamaño del texto", options=["Muy pequeño", "Pequeño", "Normal"], group=g_panel)
+mostrar_panel = input.bool(false, "Mostrar panel", group=g_panel)
+panel_pos     = input.string("Abajo derecha", "Posición", options=["Arriba derecha", "Arriba izquierda", "Abajo derecha", "Abajo izquierda"], group=g_panel)
+panel_tam     = input.string("Muy pequeño", "Tamaño del texto", options=["Muy pequeño", "Pequeño", "Normal"], group=g_panel)
 // Movimiento esperado del día = índice de volatilidad / 16 (16 ≈ raíz de 252 sesiones al año)
 mostrar_vix   = input.bool(true, "Movimiento esperado del día (VIX / 16)", group=g_panel)
 vix_sym       = input.symbol("CBOE:VIX", "Índice de volatilidad (para el Nasdaq también vale CBOE:VXN)", group=g_panel)
@@ -26,9 +26,9 @@ noticias      = input.string("", "Noticias de hoy (texto libre, p. ej. «CPI 14:
 // Información extra en el gráfico: cada una se puede quitar y poner
 g_extra       = "Información en el gráfico"
 info_killzone = input.bool(true, "Fondo suave en las sesiones de Asia, Londres y apertura de Nueva York", group=g_extra)
-info_eq       = input.bool(true, "Línea del 50 % del día anterior (por encima premium, por debajo descuento)", group=g_extra)
+info_eq       = input.bool(false, "Línea del 50 % del día anterior (por encima premium, por debajo descuento)", group=g_extra)
 info_eqhl     = input.bool(true, "Altos y bajos iguales sin barrer (EQH / EQL)", group=g_extra)
-info_barridos = input.bool(true, "Marcar barridos de niveles (pasa el nivel y cierra de vuelta)", group=g_extra)
+info_barridos = input.bool(false, "Marcar barridos de niveles (pasa el nivel y cierra de vuelta)", group=g_extra)
 info_ses_lin  = input.bool(true, "Máximos y mínimos de Asia, Londres y Nueva York (los manipulados quedan en gris)", group=g_extra)
 
 // Interruptores de FVG por temporalidad (arriba en Ajustes): solo se ven y se calculan los activados.
