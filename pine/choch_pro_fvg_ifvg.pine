@@ -114,7 +114,7 @@ mostrar_niv_h1  = input.bool(true, "Niveles clave: altos/bajos relevantes de H1"
 piv_h1_len      = input.int(3, "Sensibilidad altos/bajos H1", minval=1, maxval=10, group=g_ny)
 max_niv_h1      = input.int(6, "Máx. niveles H1 vigentes", minval=1, maxval=20, group=g_ny)
 col_niv_h1      = input.color(#8D6E63, "Color niveles H1", group=g_ny)
-mostrar_pd      = input.bool(true, "Niveles clave: alto/bajo del día anterior", group=g_ny)
+mostrar_pd      = input.bool(false, "Niveles clave: alto/bajo del día anterior", group=g_ny)
 col_niveles     = input.color(#424242, "Color niveles clave", group=g_ny)
 col_horas       = input.color(#757575, "Color horas", group=g_ny)
 
@@ -122,9 +122,9 @@ mostrar_emas = input.bool(true, "Mostrar EMAs", group="EMAs")
 ema_rap_len  = input.int(9, "EMA rápida", minval=1, group="EMAs")
 ema_med_len  = input.int(20, "EMA media", minval=1, group="EMAs")
 ema_len_len  = input.int(200, "EMA lenta", minval=1, group="EMAs")
-ema_rap_col  = input.color(#546E7A, "Color EMA rápida", group="EMAs")
-ema_med_col  = input.color(#9E9D24, "Color EMA media", group="EMAs")
-ema_len_col  = input.color(color.black, "Color EMA lenta", group="EMAs")
+ema_rap_col  = input.color(#4CAF50, "Color EMA rápida", group="EMAs")
+ema_med_col  = input.color(#2962FF, "Color EMA media", group="EMAs")
+ema_len_col  = input.color(#363A45, "Color EMA lenta", group="EMAs")
 
 // CHoCH fallido: la vela siguiente cierra de nuevo al otro lado del nivel roto
 marcar_fallidos = input.bool(true, "Marcar CHoCH fallidos (✗)", group="CHoCH fallido / riesgo")
