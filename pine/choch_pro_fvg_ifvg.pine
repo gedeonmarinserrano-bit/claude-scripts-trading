@@ -2180,6 +2180,56 @@ if barstate.islast and mostrar_panel
         f += 1
 
 // ─────────────────────────────
+// LETREROS DE NIVELES SIN MONTARSE
+// Los nombres de los niveles (máximos/mínimos de sesión, altos/bajos de H4 y H1) van a la derecha de la
+// vela actual. Si dos quedan a la misma altura, el segundo se pone a la derecha del primero, en la
+// misma línea, en vez de encima. El ancho de cada letrero se estima en velas (~1 vela por letra).
+// ─────────────────────────────
+if barstate.islast
+    etq = array.new<label>()
+    en_tiempo = array.new<bool>()
+    for o in niv_ses
+        if not na(o) and not na(o.lb)
+            etq.push(o.lb)
+            en_tiempo.push(false)
+    for n in niveles_h4
+        etq.push(n.lb)
+        en_tiempo.push(true)
+    for n in niveles_h1
+        etq.push(n.lb)
+        en_tiempo.push(true)
+    if etq.size() > 1
+        ys = array.new<float>()
+        for e in etq
+            ys.push(e.get_y())
+        orden = ys.sort_indices()
+        pos_y   = array.new<float>()
+        pos_ini = array.new<int>()
+        pos_fin = array.new<int>()
+        ms_vela = timeframe.in_seconds() * 1000
+        for j in orden
+            e = etq.get(j)
+            y = e.get_y()
+            ancho = str.length(e.get_text()) + 2
+            ini = 0
+            for intento = 0 to 6
+                choca = false
+                if pos_y.size() > 0
+                    for c = 0 to pos_y.size() - 1
+                        if math.abs(pos_y.get(c) - y) < sep_letrero and ini < pos_fin.get(c) and ini + ancho > pos_ini.get(c)
+                            ini := pos_fin.get(c)
+                            choca := true
+                if not choca
+                    break
+            pos_y.push(y)
+            pos_ini.push(ini)
+            pos_fin.push(ini + ancho)
+            if en_tiempo.get(j)
+                e.set_x(time + ini * ms_vela)
+            else
+                e.set_x(bar_index + ini)
+
+// ─────────────────────────────
 // ALERTAS
 // ─────────────────────────────
 alertcondition(smt_bajista, "SMT bajista", "SMT bajista (divergencia en altos entre índices) en {{ticker}} ({{interval}})")
