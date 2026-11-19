@@ -29,6 +29,11 @@ info_killzone = input.bool(true, "Fondo suave en las sesiones de Asia, Londres y
 info_eq       = input.bool(false, "Línea del 50 % del día anterior (por encima premium, por debajo descuento)", group=g_extra)
 info_eqhl     = input.bool(true, "Altos y bajos iguales sin barrer (EQH / EQL)", group=g_extra)
 info_barridos = input.bool(false, "Marcar barridos de niveles (pasa el nivel y cierra de vuelta)", group=g_extra)
+// Horario de cada sesión en hora de Nueva York (seguidas, sin huecos): Asia 18:00-02:00 (00:00-08:00
+// Madrid), Londres 02:00-09:30 (08:00-15:30 Madrid) y Nueva York 09:30-16:00 (15:30-22:00 Madrid)
+ses_asia_h    = input.session("1800-0200", "Sesión de Asia (hora de Nueva York)", group=g_extra)
+ses_lon_h     = input.session("0200-0930", "Sesión de Londres (hora de Nueva York)", group=g_extra)
+ses_ny_h      = input.session("0930-1600", "Sesión de Nueva York (hora de Nueva York)", group=g_extra)
 info_ses_lin  = input.bool(true, "Máximos y mínimos de Asia, Londres y Nueva York (los manipulados quedan en gris)", group=g_extra)
 
 // Interruptores de FVG por temporalidad (arriba en Ajustes): solo se ven y se calculan los activados.
@@ -1411,10 +1416,11 @@ plot(ver_pd ? pdl : na, "Bajo día anterior", color=color.new(col_niveles, 30), 
 // --- Línea del 50 % del día anterior: por encima = premium (caro), por debajo = descuento (barato) ---
 plot(info_eq and timeframe.isintraday and not timeframe.change("D") ? (pdh + pdl) / 2 : na, "50 % día anterior", color=color.new(#7E57C2, 25), style=plot.style_linebr, linewidth=1)
 
-// --- Sesiones (hora de Nueva York): Asia 20:00-00:00, Londres 02:00-05:00, apertura NY 09:30-11:00 ---
+// --- Sesiones (hora de Nueva York, ajustables): por defecto Asia 18:00-02:00, Londres 02:00-09:30 y
+// Nueva York 09:30-16:00; la apertura de NY (fondo amarillo) es 09:30-11:00 ---
 ses_ok  = timeframe.isintraday and seg_graf <= 3600
-en_asia = ses_ok and not na(time(timeframe.period, "2000-0000", "America/New_York"))
-en_lon  = ses_ok and not na(time(timeframe.period, "0200-0500", "America/New_York"))
+en_asia = ses_ok and not na(time(timeframe.period, ses_asia_h, "America/New_York"))
+en_lon  = ses_ok and not na(time(timeframe.period, ses_lon_h, "America/New_York"))
 en_nyk  = ses_ok and not na(time(timeframe.period, "0930-1100", "America/New_York"))
 bgcolor(info_killzone ? (en_asia ? color.new(#7E57C2, 94) : en_lon ? color.new(#1E88E5, 94) : en_nyk ? color.new(#F9A825, 90) : na) : na, title="Sesiones")
 
@@ -1457,7 +1463,7 @@ else if not na(lon_h)
 // Mín. manip. …», fija donde estaba, y no se traza ningún nivel nuevo: solo se marcan el máximo y el
 // mínimo reales de cada sesión. Todas (vigentes y manipuladas) se mantienen durante el día y se borran
 // al empezar el día siguiente: solo se ven los niveles del día de hoy.
-en_nys = ses_ok and not na(time(timeframe.period, "0930-1600", "America/New_York"))
+en_nys = ses_ok and not na(time(timeframe.period, ses_ny_h, "America/New_York"))
 var float ny_h = na
 var float ny_l = na
 if en_nys
