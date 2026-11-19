@@ -2214,7 +2214,7 @@ if barstate.islast and mostrar_panel
 // ─────────────────────────────
 // Coloca los letreros de una lista empezando en la columna «desde» (en velas a la derecha de la actual)
 // y devuelve dónde termina la columna
-colocar_letreros(array<label> etq, bool en_tiempo, int desde, float sep) =>
+colocar_letreros(array<label> etq, array<line> lns, bool en_tiempo, int desde, float sep) =>
     fin_col = desde
     if etq.size() > 0
         ys = array.new<float>()
@@ -2244,30 +2244,38 @@ colocar_letreros(array<label> etq, bool en_tiempo, int desde, float sep) =>
             pos_ini.push(ini)
             pos_fin.push(ini + ancho)
             fin_col := math.max(fin_col, ini + ancho)
+            // El letrero se coloca y su línea se alarga hasta él
             if en_tiempo
                 e.set_x(time + ini * ms_vela)
+                lns.get(j).set_x2(time + ini * ms_vela)
             else
                 e.set_x(bar_index + ini)
+                lns.get(j).set_x2(bar_index + ini)
     fin_col
 
 if barstate.islast
     etq_ses = array.new<label>()
+    lin_ses = array.new<line>()
     for o in niv_ses
         if not na(o) and not na(o.lb)
             etq_ses.push(o.lb)
+            lin_ses.push(o.ln)
     // Las manipuladas (grises) también van en esa columna: su línea se alarga hasta la vela actual
     for q in niv_viejos
-        q.ln.set_x2(bar_index)
         etq_ses.push(q.lb)
+        lin_ses.push(q.ln)
     etq_htf = array.new<label>()
+    lin_htf = array.new<line>()
     for n in niveles_h4
         etq_htf.push(n.lb)
+        lin_htf.push(n.ln)
     for n in niveles_h1
         etq_htf.push(n.lb)
+        lin_htf.push(n.ln)
     // Margen vertical pequeño (los letreros son de texto muy pequeño): solo se apartan a la derecha
     // cuando de verdad se tocarían, así casi siempre quedan todos en la misma vertical
-    fin_ses = colocar_letreros(etq_ses, false, 1, sep_letrero * 0.35)
-    colocar_letreros(etq_htf, true, etq_ses.size() > 0 ? fin_ses : 1, sep_letrero * 0.35)
+    fin_ses = colocar_letreros(etq_ses, lin_ses, false, 1, sep_letrero * 0.35)
+    colocar_letreros(etq_htf, lin_htf, true, etq_ses.size() > 0 ? fin_ses : 1, sep_letrero * 0.35)
 
 // ─────────────────────────────
 // ALERTAS
