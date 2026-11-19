@@ -25,7 +25,7 @@ noticias      = input.string("", "Noticias de hoy (texto libre, p. ej. «CPI 14:
 
 // Información extra en el gráfico: cada una se puede quitar y poner
 g_extra       = "Información en el gráfico"
-info_killzone = input.bool(true, "Fondo suave en las sesiones de Asia, Londres y apertura de Nueva York", group=g_extra)
+info_killzone = input.bool(true, "Fondo suave en las killzones de Asia, Londres y apertura de Nueva York", group=g_extra)
 info_eq       = input.bool(false, "Línea del 50 % del día anterior (por encima premium, por debajo descuento)", group=g_extra)
 info_eqhl     = input.bool(true, "Altos y bajos iguales sin barrer (EQH / EQL)", group=g_extra)
 info_barridos = input.bool(false, "Marcar barridos de niveles (pasa el nivel y cierra de vuelta)", group=g_extra)
@@ -1422,7 +1422,11 @@ ses_ok  = timeframe.isintraday and seg_graf <= 3600
 en_asia = ses_ok and not na(time(timeframe.period, ses_asia_h, "America/New_York"))
 en_lon  = ses_ok and not na(time(timeframe.period, ses_lon_h, "America/New_York"))
 en_nyk  = ses_ok and not na(time(timeframe.period, "0930-1100", "America/New_York"))
-bgcolor(info_killzone ? (en_asia ? color.new(#7E57C2, 94) : en_lon ? color.new(#1E88E5, 94) : en_nyk ? color.new(#F9A825, 90) : na) : na, title="Sesiones")
+// Fondo suave solo en las killzones (las franjas más activas), no en las sesiones completas:
+// Asia 20:00-00:00, Londres 02:00-05:00 y apertura de Nueva York 09:30-11:00 (hora de Nueva York)
+kz_asia = ses_ok and not na(time(timeframe.period, "2000-0000", "America/New_York"))
+kz_lon  = ses_ok and not na(time(timeframe.period, "0200-0500", "America/New_York"))
+bgcolor(info_killzone ? (kz_asia ? color.new(#7E57C2, 94) : kz_lon ? color.new(#1E88E5, 94) : en_nyk ? color.new(#F9A825, 90) : na) : na, title="Killzones")
 
 var float asia_h = na
 var float asia_l = na
