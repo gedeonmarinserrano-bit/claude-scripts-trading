@@ -7,8 +7,10 @@
 //   1. Bias: H1 alcista y H4 que no vaya en contra.
 //   2. Horario: por defecto todo el horario de mercado; opcionalmente solo la apertura de Nueva York
 //      (09:30-11:00 NY = 15:30-17:00 Madrid).
-//   3. Manipulación: barrido de un bajo relevante (día anterior, Asia, Londres, bajos iguales) o toque
-//      del 50 % de un FVG alcista de M15 o H1.
+//   3. Manipulación: barrido de un bajo relevante (día anterior, semana anterior, Asia, Londres o
+//      Nueva York ya cerradas, bajos iguales, último bajo de H1 o H4) o toque del 50 % de un FVG
+//      alcista de M15 o H1. Las sesiones son las mismas que en el indicador (Asia 18:00-02:00,
+//      Londres 02:00-09:30 y Nueva York 09:30-16:00, hora de Nueva York).
 //   4. Confirmación: CHoCH alcista después de la manipulación que no falla en la vela siguiente.
 //   5. Filtros: precio en descuento y rango del día por debajo del ATR diario (y opcionalmente del
 //      movimiento esperado VIX/16).
@@ -49,13 +51,19 @@ rango_rot   = input.int(4, "Y el precio cruza su mitad al menos (veces)", minval
 
 g_m        = "Manipulación válida"
 usar_pd    = input.bool(true, "Barrido del alto/bajo del día anterior", group=g_m)
-usar_ses   = input.bool(true, "Barrido del alto/bajo de Asia y de Londres", group=g_m)
+usar_ses   = input.bool(true, "Barrido del alto/bajo de Asia, Londres y Nueva York (sesión ya cerrada)", group=g_m)
+usar_sem   = input.bool(true, "Barrido del alto/bajo de la semana anterior", group=g_m)
+usar_htf   = input.bool(true, "Barrido del último alto/bajo relevante de H1 y H4", group=g_m)
+// Mismas sesiones que el indicador (hora de Nueva York, seguidas, sin huecos)
+ses_asia_h = input.session("1800-0200", "Sesión de Asia (hora de Nueva York)", group=g_m)
+ses_lon_h  = input.session("0200-0930", "Sesión de Londres (hora de Nueva York)", group=g_m)
+ses_ny_h   = input.session("0930-1600", "Sesión de Nueva York (hora de Nueva York)", group=g_m)
 usar_eq    = input.bool(true, "Barrido de altos/bajos iguales (EQH / EQL)", group=g_m)
 usar_fvg50 = input.bool(true, "Toque del 50 % de un FVG de M15 o H1", group=g_m)
 
 g_smt      = "SMT (punto extra)"
 usar_smt   = input.bool(true, "Sumar un punto si hay SMT con el otro índice", group=g_smt)
-smt_sym    = input.symbol("CME_MINI:ES1!", "Comparar con", group=g_smt)
+smt_sym    = input.symbol("CME_MINI:MES1!", "Comparar con", group=g_smt)
 
 g_v        = "Visual"
 col_c      = input.color(#00A651, "Compra", group=g_v)
@@ -74,8 +82,9 @@ min_ny    = hour(time, tz) * 60 + minute(time, tz)
 en_ny     = min_ny >= 570 and min_ny < 660          // 09:30-11:00 NY
 // Horario válido para las señales: cualquier vela con mercado abierto, o solo la apertura de NY
 en_horario = horario == "Todo el horario de mercado" ? true : en_ny
-en_asia   = not na(time(timeframe.period, "2000-0000", tz))
-en_lon    = not na(time(timeframe.period, "0200-0500", tz))
+en_asia   = not na(time(timeframe.period, ses_asia_h, tz))
+en_lon    = not na(time(timeframe.period, ses_lon_h, tz))
+en_nys    = not na(time(timeframe.period, ses_ny_h, tz))
 nuevo_dia = timeframe.change("D")
 
 // Bias de una temporalidad superior: dirección de la última ruptura de estructura, con su vela ya
@@ -125,10 +134,46 @@ if en_asia
 if en_lon
     lon_h := en_lon[1] ? math.max(lon_h, high) : high
     lon_l := en_lon[1] ? math.min(lon_l, low) : low
+var float ny_h = na
+var float ny_l = na
+if en_nys
+    ny_h := en_nys[1] ? math.max(ny_h, high) : high
+    ny_l := en_nys[1] ? math.min(ny_l, low) : low
+// Al empezar el día (18:00 NY) los rangos de sesión son los del día nuevo
+if nuevo_dia
+    lon_h := na
+    lon_l := na
+    ny_h  := na
+    ny_l  := na
 asia_hv = en_asia ? na : asia_h
 asia_lv = en_asia ? na : asia_l
 lon_hv  = en_lon ? na : lon_h
 lon_lv  = en_lon ? na : lon_l
+ny_hv   = en_nys ? na : ny_h
+ny_lv   = en_nys ? na : ny_l
+
+// Semana anterior y último alto/bajo relevante (pivote de 3 velas) de H1 y H4, con su vela cerrada
+float pwh = na
+float pwl = na
+if usar_sem
+    [a_w, b_w] = request.security(syminfo.tickerid, "W", [high[1], low[1]], lookahead=barmerge.lookahead_on)
+    pwh := a_w
+    pwl := b_w
+piv_ult() =>
+    ph_ = ta.pivothigh(high, 3, 3)
+    pl_ = ta.pivotlow(low, 3, 3)
+    [ta.valuewhen(not na(ph_), ph_, 0)[1], ta.valuewhen(not na(pl_), pl_, 0)[1]]
+float h1_ph = na
+float h1_pl = na
+float h4_ph = na
+float h4_pl = na
+if usar_htf
+    [a1, b1_] = request.security(syminfo.tickerid, "60", piv_ult(), lookahead=barmerge.lookahead_on)
+    [a4, b4_] = request.security(syminfo.tickerid, "240", piv_ult(), lookahead=barmerge.lookahead_on)
+    h1_ph := a1
+    h1_pl := b1_
+    h4_ph := a4
+    h4_pl := b4_
 
 // Último FVG alcista y bajista sin rellenar de una temporalidad superior (vela cerrada)
 fvg_ult() =>
@@ -205,6 +250,14 @@ if cerrada
         man_c := "bajo de Asia"
     else if usar_ses and barre_bajo(lon_lv)
         man_c := "bajo de Londres"
+    else if usar_ses and barre_bajo(ny_lv)
+        man_c := "bajo de NY"
+    else if usar_sem and barre_bajo(pwl)
+        man_c := "bajo semana ant."
+    else if usar_htf and barre_bajo(h4_pl)
+        man_c := "bajo H4"
+    else if usar_htf and barre_bajo(h1_pl)
+        man_c := "bajo H1"
     else if usar_eq and barre_bajo(eql)
         man_c := "EQL"
     else if usar_fvg50 and not na(m15_bb) and low <= (m15_bt + m15_bb) / 2 and close > m15_bb
@@ -219,6 +272,14 @@ if cerrada
         man_v := "alto de Asia"
     else if usar_ses and barre_alto(lon_hv)
         man_v := "alto de Londres"
+    else if usar_ses and barre_alto(ny_hv)
+        man_v := "alto de NY"
+    else if usar_sem and barre_alto(pwh)
+        man_v := "alto semana ant."
+    else if usar_htf and barre_alto(h4_ph)
+        man_v := "alto H4"
+    else if usar_htf and barre_alto(h1_ph)
+        man_v := "alto H1"
     else if usar_eq and barre_alto(eqh)
         man_v := "EQH"
     else if usar_fvg50 and not na(m15_st) and high >= (m15_st + m15_sb) / 2 and close < m15_st
@@ -344,8 +405,8 @@ senal_v = puede and dir_op != "Solo compras" and bias_v and en_horario and man_o
 // Objetivo: la liquidez más cercana en la dirección de la operación que dé el riesgo/beneficio mínimo;
 // si no hay ninguna, 2R
 objetivo(float entrada, float riesgo, bool compra) =>
-    cands = compra ? array.from(pdh, asia_hv, lon_hv, eqh, dh) : array.from(pdl, asia_lv, lon_lv, eql, dl)
-    nombres = array.from(compra ? "PDH" : "PDL", compra ? "alto de Asia" : "bajo de Asia", compra ? "alto de Londres" : "bajo de Londres", compra ? "EQH" : "EQL", compra ? "alto del día" : "bajo del día")
+    cands = compra ? array.from(pdh, asia_hv, lon_hv, ny_hv, eqh, dh, pwh, h1_ph, h4_ph) : array.from(pdl, asia_lv, lon_lv, ny_lv, eql, dl, pwl, h1_pl, h4_pl)
+    nombres = array.from(compra ? "PDH" : "PDL", compra ? "alto de Asia" : "bajo de Asia", compra ? "alto de Londres" : "bajo de Londres", compra ? "alto de NY" : "bajo de NY", compra ? "EQH" : "EQL", compra ? "alto del día" : "bajo del día", compra ? "alto semana ant." : "bajo semana ant.", compra ? "alto H1" : "bajo H1", compra ? "alto H4" : "bajo H4")
     float mejor = na
     string nom = "2R"
     for i = 0 to cands.size() - 1
