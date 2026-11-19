@@ -34,6 +34,8 @@ info_barridos = input.bool(false, "Marcar barridos de niveles (pasa el nivel y c
 ses_asia_h    = input.session("1800-0200", "Sesión de Asia (hora de Nueva York)", group=g_extra)
 ses_lon_h     = input.session("0200-0930", "Sesión de Londres (hora de Nueva York)", group=g_extra)
 ses_ny_h      = input.session("0930-1600", "Sesión de Nueva York (hora de Nueva York)", group=g_extra)
+info_semana   = input.bool(true, "Alto y bajo de la semana anterior", group=g_extra)
+info_aperturas = input.bool(true, "Aperturas de las 00:00 y las 08:30 de Nueva York (06:00 y 14:30 Madrid)", group=g_extra)
 info_ses_lin  = input.bool(true, "Máximos y mínimos de Asia, Londres y Nueva York (los manipulados quedan en gris)", group=g_extra)
 
 // Interruptores de FVG por temporalidad (arriba en Ajustes): solo se ven y se calculan los activados.
@@ -59,7 +61,13 @@ dist_max        = input.float(0.0, "Dibujar solo zonas a menos de este % del pre
 // Ajustes del indicador se entiendan de un vistazo.
 // ─────────────────────────────
 g_est        = "Estructura (CHoCH / BOS)"
-periodo      = input.int(1, "Sensibilidad de los pivotes (velas a cada lado)", minval=1, group=g_est)
+// Dos niveles de estructura: la INTERNA (pivotes pequeños, todo el detalle; es la que usan los CHoCH
+// fallidos/de riesgo, los Order Blocks y el filtro de rangos) se dibuja pequeña y discreta, y la de
+// SWING (pivotes grandes, la tendencia de verdad) se dibuja más visible por encima.
+periodo      = input.int(1, "Estructura interna: sensibilidad (velas a cada lado)", minval=1, group=g_est)
+mostrar_interna = input.bool(true, "Mostrar estructura interna (pequeña y discreta)", group=g_est)
+mostrar_swing   = input.bool(true, "Mostrar estructura de swing (la tendencia principal)", group=g_est)
+swing_len       = input.int(7, "Estructura de swing: sensibilidad (velas a cada lado)", minval=3, maxval=30, group=g_est)
 vol_mult     = 1.1
 vol_top      = 2.0
 vol_len      = 20
@@ -267,12 +275,9 @@ deviation_window  = 10
 cooldown_bars     = 3
 max_range_age     = 0
 
-color_preset      = 'Custom'
 bullish_input     = #00A651
 bearish_input     = #E4002B
 range_input       = input.color(#F9A825, 'Color del rango (neutral)', group = g_rng)
-gradient_steps    = 4
-fill_transparency = 93
 show_equilibrium  = true
 show_quartiles    = true
 show_range_label  = input.bool(true, 'Mostrar etiqueta del rango', group = g_rng)
@@ -282,13 +287,8 @@ label_text_size   = 'Small'
 marcas_sutiles    = true
 tam_marcas_txt    = 'Small'
 
-[bullish_color, bearish_color] = switch color_preset
-    'Classic' => [#00ff00, #ff0000]
-    'Aqua'    => [#00d4ff, #ff8c00]
-    'Cosmic'  => [#49ffce, #9932cc]
-    'Cyber'   => [#00cccc, #ff6600]
-    'Neon'    => [#ffff00, #ff00ff]
-    =>           [bullish_input, bearish_input]
+bullish_color = bullish_input
+bearish_color = bearish_input
 
 var color transparent_fill = color.new(color.black, 100)
 var float contrast_line    = 3.0
@@ -336,31 +336,6 @@ readableOn(color source, color backdrop, float floor_ratio) =>
 
 percentText(float value) =>
     str.tostring(value, '#.##') + '%'
-
-buildShade(array<box> shade, int left_bar, float top_price, float bottom_price) =>
-    array.clear(shade)
-    // Sin solapes, el sombreado del rango lo dibuja el bloque de zonas (aquí no se crea)
-    if not sin_solape
-        for i = 0 to gradient_steps - 1
-            array.push(shade, box.new(left_bar, top_price, bar_index, bottom_price, border_color = na, border_width = 0, bgcolor = na, xloc = xloc.bar_index))
-
-paintShade(array<box> shade, float top_price, float bottom_price, int left_bar, int right_bar, color shade_color) =>
-    slices = array.size(shade)
-    if slices > 0 and top_price > bottom_price
-        slice_height = (top_price - bottom_price) / slices
-        for i = 0 to slices - 1
-            slice_box   = array.get(shade, i)
-            center_dist = math.abs((i + 0.5) / slices - 0.5) * 2.0
-            slice_trans = int(math.min(99, math.max(0, fill_transparency + (1.0 - center_dist) * 10)))
-            box.set_lefttop(slice_box, left_bar, top_price - slice_height * i)
-            box.set_rightbottom(slice_box, right_bar, top_price - slice_height * (i + 1))
-            box.set_bgcolor(slice_box, color.new(shade_color, slice_trans))
-
-deleteShade(array<box> shade) =>
-    if array.size(shade) > 0
-        for i = 0 to array.size(shade) - 1
-            box.delete(array.get(shade, i))
-    array.clear(shade)
 
 anchorSpan(int window, float top_price, float bottom_price, float tolerance) =>
     span = window
@@ -476,7 +451,6 @@ scan_bottom = use_triple ? bottom_c : use_double ? bottom_b : bottom_a
 //              ║          RANGE ENGINE          ║              //
 //              ╚════════════════════════════════╝              //
 
-var array<box> shade_boxes = array.new<box>()
 var box   range_box        = na
 var line  equilibrium_line = na
 var line  lower_quartile   = na
@@ -516,7 +490,6 @@ if bar_ready and not range_active and not range_dormant and cooldown_left <= 0 a
     quartile_low     = range_bottom + (range_top - range_bottom) * 0.25
     quartile_high    = range_bottom + (range_top - range_bottom) * 0.75
     range_box       := box.new(range_left, range_top, bar_index, range_bottom, border_color = color.new(range_line_color, 55), border_width = 2, border_style = line.style_dotted, bgcolor = na, xloc = xloc.bar_index)
-    buildShade(shade_boxes, range_left, range_top, range_bottom)
     if show_equilibrium
         equilibrium_line := line.new(range_left, midpoint, bar_index, midpoint, xloc.bar_index, extend.none, color.new(color.gray, 45), line.style_dotted, 1)
     if show_quartiles
@@ -551,7 +524,6 @@ if range_active and bar_ready
             // Rango terminado: sin fondo; el marco y el letrero toman el color de la ruptura
             box.set_border_color(range_box, color.new(retire_line, 30))
             box.set_border_style(range_box, line.style_dotted)
-            paintShade(shade_boxes, range_top, range_bottom, range_left, bar_index, na)
             rangos_hist.push(Rango.new(range_left, bar_index, range_top, range_bottom, retire_fill))
             if rangos_hist.size() > 8
                 rangos_hist.shift()
@@ -577,7 +549,6 @@ if range_active and bar_ready
                 signal_break_down := true
         else
             box.delete(range_box)
-            deleteShade(shade_boxes)
             line.delete(equilibrium_line)
             line.delete(lower_quartile)
             line.delete(upper_quartile)
@@ -589,7 +560,6 @@ if range_active and bar_ready
             deviation_price := break_direction == 1 ? high : low
             deviation_bar   := bar_index
         else
-            array.clear(shade_boxes)
             range_box        := na
             equilibrium_line := na
             lower_quartile   := na
@@ -624,7 +594,6 @@ if range_dormant and bar_ready
         break_marker := na
         if not na(range_box)
             box.set_border_color(range_box, color.new(range_line_color, 30))
-            paintShade(shade_boxes, range_top, range_bottom, range_left, bar_index, na)
         if not na(range_tag)
             label.set_textcolor(range_tag, color.new(range_line_color, 10))
         range_active     := true
@@ -637,7 +606,6 @@ if range_dormant and bar_ready
         if rangos_hist.size() > 0 and rangos_hist.last().x1 == range_left
             rangos_hist.pop()
     else if expired
-        array.clear(shade_boxes)
         range_dormant    := false
         dormant_dir      := 0
         range_box        := na
@@ -656,8 +624,6 @@ if range_active
     box.set_rightbottom(range_box, bar_index, range_bottom)
     box.set_border_color(range_box, color.new(range_line_color, range_confirmed ? 30 : 55))
     box.set_border_style(range_box, line.style_dotted)
-    // Sin fondo: el rango se distingue por su marco y su letrero, del color de su estado
-    paintShade(shade_boxes, range_top, range_bottom, range_left, bar_index, na)
     if not na(equilibrium_line)
         line.set_xy1(equilibrium_line, range_left, midpoint)
         line.set_xy2(equilibrium_line, bar_index, midpoint)
@@ -778,9 +744,13 @@ borrar_bos_contrario(int dir_choch, int bar_choch) =>
     if borrar_bos_giro and not na(ultimo_bos_bar) and ultimo_bos_dir == -dir_choch and (bos_ventana == 0 or bar_choch - ultimo_bos_bar <= bos_ventana)
         ultimo_bos_lbl.delete()
 
+// Color de la estructura interna: algo transparente para que sea discreta, o invisible si se oculta
+col_interna(color col) =>
+    mostrar_interna ? color.new(col, 30) : color.new(col, 100)
+
 dibujar_choch(int dir, int bar_piv, float nivel, int bar_rotura, string texto, string tip, color col, bool fallido) =>
-    ln = line.new(bar_piv, nivel, bar_rotura, nivel, color=col, width=1, style=fallido ? line.style_dashed : line.style_solid)
-    lb = label.new(bar_rotura - offset_x, nivel, texto, style=dir == 1 ? label.style_label_down : label.style_label_up, color=color.new(color.white, 100), textcolor=col, size=size.small, tooltip=tip)
+    ln = line.new(bar_piv, nivel, bar_rotura, nivel, color=col_interna(col), width=1, style=fallido ? line.style_dashed : line.style_dotted)
+    lb = label.new(bar_rotura - offset_x, nivel, texto, style=dir == 1 ? label.style_label_down : label.style_label_up, color=color.new(color.white, 100), textcolor=col_interna(col), size=size.tiny, tooltip=tip)
     [ln, lb]
 
 // Al detectarse un rango (o volver a él tras una Deviation) se borran los CHoCH/BOS que
@@ -950,7 +920,7 @@ if cruce_arriba and not na(ultimo_pico)
         tend_previa   := tendencia
         tendencia_invalidada := false
     else if mostrar_bos and not tendencia_invalidada
-        ultimo_bos_lbl := label.new(bar_index, high, "BOS", yloc=yloc.abovebar, style=label.style_none, textcolor=color_alcista, size=size.small)
+        ultimo_bos_lbl := label.new(bar_index, high, "BOS", yloc=yloc.abovebar, style=label.style_none, textcolor=col_interna(color_alcista), size=size.tiny)
         ultimo_bos_bar := bar_index
         ultimo_bos_dir := 1
         registrar_marca(ultimo_bos_lbl, na, bar_index)
@@ -975,7 +945,7 @@ if cruce_abajo and not na(ultimo_valle)
         tend_previa   := tendencia
         tendencia_invalidada := false
     else if mostrar_bos and not tendencia_invalidada
-        ultimo_bos_lbl := label.new(bar_index, low, "BOS", yloc=yloc.belowbar, style=label.style_none, textcolor=color_bajista, size=size.small)
+        ultimo_bos_lbl := label.new(bar_index, low, "BOS", yloc=yloc.belowbar, style=label.style_none, textcolor=col_interna(color_bajista), size=size.tiny)
         ultimo_bos_bar := bar_index
         ultimo_bos_dir := -1
         registrar_marca(ultimo_bos_lbl, na, bar_index)
@@ -1478,9 +1448,7 @@ type NivelSes
     line   ln
     label  lb
     float  precio
-    int    desde = na   // (sin uso: antes se trazaba un nivel nuevo tras el barrido)
     int    k = 0        // 0-5: alto/bajo de Asia, Londres y NY
-    int    x_ext = na   // vela del extremo del nivel nuevo
 var array<NivelSes> niv_ses    = array.new<NivelSes>(6)
 var array<NivelSes> niv_viejos = array.new<NivelSes>()
 
@@ -1502,7 +1470,7 @@ nivel_ses(int k, bool en, bool ini, float v, int dir, string ses, color col) =>
                     q.ln.delete()
                     q.lb.delete()
         [ln, lb] = nueva_linea_ses(bar_index, v, nom_act, col)
-        niv_ses.set(k, NivelSes.new(ln, lb, v, na, k, bar_index))
+        niv_ses.set(k, NivelSes.new(ln, lb, v, k))
     else if not na(o)
         if en and not na(o.ln)
             // Durante la sesión la línea sigue al máximo/mínimo según se forma
@@ -2010,6 +1978,105 @@ if barstate.islast
         dib_letreros.pop().delete()
 
 // ─────────────────────────────
+// ESTRUCTURA DE SWING (la tendencia principal)
+// Pivotes de swing_len velas a cada lado. Ruptura por cierre del último alto/bajo de swing: si va en
+// contra de la tendencia de swing es CHoCH, si va a favor es BOS. Línea gruesa y letrero más grande que
+// la estructura interna. Solo con velas cerradas (no repinta).
+// ─────────────────────────────
+sw_ph = ta.pivothigh(high, swing_len, swing_len)
+sw_pl = ta.pivotlow(low, swing_len, swing_len)
+var float sw_h  = na
+var int   sw_hx = na
+var float sw_l  = na
+var int   sw_lx = na
+var int   sw_tend = 0
+var array<line>  sw_lineas = array.new<line>()
+var array<label> sw_textos = array.new<label>()
+if not na(sw_ph)
+    sw_h  := sw_ph
+    sw_hx := bar_index - swing_len
+if not na(sw_pl)
+    sw_l  := sw_pl
+    sw_lx := bar_index - swing_len
+
+marcar_swing(int x1, float nivel, int dir, bool choch) =>
+    col = dir == 1 ? color_alcista : color_bajista
+    sw_lineas.push(line.new(x1, nivel, bar_index, nivel, color=col, width=2))
+    sw_textos.push(label.new(int(math.round((x1 + bar_index) / 2)), nivel, choch ? "CHoCH" : "BOS", style=dir == 1 ? label.style_label_down : label.style_label_up, color=color.new(color.white, 100), textcolor=col, size=size.normal, tooltip=(choch ? "CHoCH" : "BOS") + " de swing (" + str.tostring(swing_len) + " velas a cada lado)"))
+    if sw_lineas.size() > 40
+        sw_lineas.shift().delete()
+    if sw_textos.size() > 40
+        sw_textos.shift().delete()
+
+if cerrada and en_calc
+    if not na(sw_h) and close > sw_h
+        if mostrar_swing
+            marcar_swing(sw_hx, sw_h, 1, sw_tend <= 0)
+        sw_tend := 1
+        sw_h := na
+    else if not na(sw_l) and close < sw_l
+        if mostrar_swing
+            marcar_swing(sw_lx, sw_l, -1, sw_tend >= 0)
+        sw_tend := -1
+        sw_l := na
+
+// ─────────────────────────────
+// ALTO/BAJO DE LA SEMANA ANTERIOR Y APERTURAS DE 00:00 Y 08:30 DE NUEVA YORK
+// ─────────────────────────────
+var line  pwh_ln = na
+var label pwh_lb = na
+var line  pwl_ln = na
+var label pwl_lb = na
+float pwh = na
+float pwl = na
+if info_semana and timeframe.isintraday
+    [ph_w, pl_w, t_w] = request.security(syminfo.tickerid, "W", [high[1], low[1], time], lookahead=barmerge.lookahead_on)
+    pwh := ph_w
+    pwl := pl_w
+    if not na(ph_w)
+        if na(pwh_ln)
+            pwh_ln := line.new(t_w, ph_w, time, ph_w, xloc=xloc.bar_time, color=color.new(#37474F, 10), width=2)
+            pwh_lb := label.new(time, ph_w, "Alto sem. ant.", xloc=xloc.bar_time, style=label.style_label_left, color=color.new(color.white, 100), textcolor=#37474F, size=size.tiny)
+            pwl_ln := line.new(t_w, pl_w, time, pl_w, xloc=xloc.bar_time, color=color.new(#37474F, 10), width=2)
+            pwl_lb := label.new(time, pl_w, "Bajo sem. ant.", xloc=xloc.bar_time, style=label.style_label_left, color=color.new(color.white, 100), textcolor=#37474F, size=size.tiny)
+        else
+            pwh_ln.set_xy1(t_w, ph_w)
+            pwh_ln.set_xy2(time, ph_w)
+            pwh_lb.set_xy(time, ph_w)
+            pwl_ln.set_xy1(t_w, pl_w)
+            pwl_ln.set_xy2(time, pl_w)
+            pwl_lb.set_xy(time, pl_w)
+
+m_ny_ap   = hour(time, "America/New_York") * 60 + minute(time, "America/New_York")
+m_ny_ap1  = nz(m_ny_ap[1], m_ny_ap)
+abre_00   = m_ny_ap < m_ny_ap1                       // primera vela del nuevo día de Nueva York
+abre_830  = m_ny_ap >= 510 and m_ny_ap1 < 510        // primera vela desde las 08:30
+var line  ap00_ln  = na
+var label ap00_lb  = na
+var line  ap830_ln = na
+var label ap830_lb = na
+ap_ok = info_aperturas and timeframe.isintraday and seg_graf <= 1800
+if ap_ok and abre_00
+    if not na(ap00_ln)
+        ap00_ln.delete()
+        ap00_lb.delete()
+    ap00_ln := line.new(time, open, time, open, xloc=xloc.bar_time, color=color.new(#00897B, 10), style=line.style_dashed, width=1)
+    ap00_lb := label.new(time, open, "Apertura 00:00 NY", xloc=xloc.bar_time, style=label.style_label_left, color=color.new(color.white, 100), textcolor=#00897B, size=size.tiny)
+if ap_ok and abre_830
+    if not na(ap830_ln)
+        ap830_ln.delete()
+        ap830_lb.delete()
+    ap830_ln := line.new(time, open, time, open, xloc=xloc.bar_time, color=color.new(#00897B, 10), style=line.style_dotted, width=1)
+    ap830_lb := label.new(time, open, "Apertura 08:30 NY", xloc=xloc.bar_time, style=label.style_label_left, color=color.new(color.white, 100), textcolor=#00897B, size=size.tiny)
+if ap_ok
+    if not na(ap00_ln)
+        ap00_ln.set_x2(time)
+        ap00_lb.set_x(time)
+    if not na(ap830_ln)
+        ap830_ln.set_x2(time)
+        ap830_lb.set_x(time)
+
+// ─────────────────────────────
 // PANEL DE INFORMACIÓN
 // Resumen para decidir de un vistazo: bias de H4 y H1, estructura del gráfico, sesión de Nueva York,
 // FVG más cercano por arriba y por abajo y última SMT. Solo informa: no da señales.
@@ -2087,7 +2154,7 @@ if barstate.islast and mostrar_panel
     // Estructura del gráfico y último CHoCH/BOS
     ev = ult_evento_txt.get(0)
     ev_txt = ev == "" ? "" : " · " + ev + " hace " + str.tostring(bar_index - ult_evento_bar.get(0)) + " velas"
-    fila(panel, f, "Estructura " + tf_graf, txt_bias(tendencia) + ev_txt, col_bias(tendencia), tam)
+    fila(panel, f, "Estructura " + tf_graf, "Swing " + txt_bias(sw_tend) + " · interna " + (tendencia == 1 ? "▲" : tendencia == -1 ? "▼" : "—") + ev_txt, col_bias(sw_tend), tam)
     f += 1
     // Sesión de Nueva York (apertura 9:30 y cierre 16:00 de Nueva York), en hora de Madrid
     tz = "America/New_York"
@@ -2188,6 +2255,10 @@ if barstate.islast and mostrar_panel
         for nv in niveles_h1
             cand_p.push(nv.precio)
             cand_n.push(nv.dir == 1 ? "Alto H1" : "Bajo H1")
+        cand_p.push(pwh)
+        cand_n.push("Alto sem. ant.")
+        cand_p.push(pwl)
+        cand_n.push("Bajo sem. ant.")
         for q in iguales
             cand_p.push(q.precio)
             cand_n.push(q.dir == 1 ? "EQH" : "EQL")
@@ -2276,6 +2347,12 @@ if barstate.islast
     for n in niveles_h1
         etq_htf.push(n.lb)
         lin_htf.push(n.ln)
+    for k = 0 to 3
+        lb = k == 0 ? pwh_lb : k == 1 ? pwl_lb : k == 2 ? ap00_lb : ap830_lb
+        ln = k == 0 ? pwh_ln : k == 1 ? pwl_ln : k == 2 ? ap00_ln : ap830_ln
+        if not na(lb) and not na(ln)
+            etq_htf.push(lb)
+            lin_htf.push(ln)
     // Margen vertical pequeño (los letreros son de texto muy pequeño): solo se apartan a la derecha
     // cuando de verdad se tocarían, así casi siempre quedan todos en la misma vertical
     fin_ses = colocar_letreros(etq_ses, lin_ses, false, 1, sep_letrero * 0.35)
