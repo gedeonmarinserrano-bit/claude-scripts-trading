@@ -22,6 +22,7 @@
 // vez, mete la mecha dentro y la vela cierra fuera, a favor del FVG, se entra a mercado con el SL bajo
 // el FVG (compra) o sobre él (venta) y el TP en la siguiente liquidez. Respeta el bias de H1, los rangos
 // y los límites de riesgo igual que el setup.
+// Tras 2 SL seguidos en el mismo día no se opera más hasta el día siguiente (se puede desactivar).
 // Riesgo diario: ninguna operación queda abierta al terminar la sesión de Nueva York (16:00 NY = 22:00
 // Madrid) y la pérdida del día no puede pasar de 300 $ (no se abre una operación cuyo SL la haría pasar
 // del límite y, si se llega a él, se cierra todo y no se opera más ese día).
@@ -51,6 +52,8 @@ tp_max_r   = input.float(0, "TP máximo (R): si la liquidez está más lejos, el
 be_r       = input.float(1.0, "Mover el SL a la entrada (break even) al ir ganando … R (0 = no)", minval=0, step=0.25, group=g_rg)
 max_velas_op = input.int(0, "Cerrar la operación tras … velas abierta (0 = no)", minval=0, maxval=500, group=g_rg)
 cerrar_ses = input.bool(true, "No dejar nada abierto al terminar la sesión de Nueva York (16:00 NY = 22:00 Madrid)", group=g_rg, tooltip="En la última vela antes de las 16:00 NY se cierra la operación abierta y se cancela la orden pendiente. Esa vela ya no da señales.")
+parar_sl   = input.bool(true, "Dejar de operar hasta el día siguiente tras varios SL seguidos", group=g_rg, inline="psl")
+n_sl_seg   = input.int(2, "SL seguidos", minval=1, maxval=10, group=g_rg, inline="psl", tooltip="Cuenta solo las operaciones que terminan en su SL. Una operación ganadora o cerrada en break even corta la racha. Al empezar el día (18:00 NY) la cuenta vuelve a cero.")
 max_perd_dia = input.float(300, "Pérdida máxima por día ($, 0 = sin límite)", minval=0, step=25, group=g_rg, tooltip="Cuenta lo perdido hoy (operaciones cerradas y la abierta). No se abre una operación si su SL, con comisiones y deslizamiento, haría pasar la pérdida del día de este límite. Si aun así se llega al límite (hueco de precio), se cierra todo y no se opera más ese día.")
 
 g_f        = "Filtros (suman un punto si se cumplen todos los activados)"
@@ -476,6 +479,17 @@ var int ops_hoy = 0
 if nuevo_dia
     ops_hoy := 0
 
+// SL seguidos de hoy: se revisan las operaciones que se acaban de cerrar
+var int sl_seg = 0
+var int n_cerr = 0
+if nuevo_dia
+    sl_seg := 0
+if strategy.closedtrades > n_cerr
+    for i = n_cerr to strategy.closedtrades - 1
+        sl_seg := strategy.closedtrades.exit_comment(i) == "SL" ? sl_seg + 1 : 0
+    n_cerr := strategy.closedtrades
+parado_sl = parar_sl and sl_seg >= n_sl_seg
+
 rango_hoy = dh - dl
 // Rango: las últimas velas (sin contar la actual) caben en poca altura y el precio rota alrededor de
 // su mitad. Mientras la vela actual cierre dentro de esa caja no puede haber señal; al cerrar fuera
@@ -502,7 +516,7 @@ man_ok_v = not na(mv_bar) and bar_index - mv_bar <= vent_manip + 1
 
 punt_c = (bias_c ? 1 : 0) + (en_horario ? 1 : 0) + (man_ok_c ? 1 : 0) + (conf_c ? 1 : 0) + (filtros_c ? 1 : 0) + (smt_c ? 1 : 0)
 punt_v = (bias_v ? 1 : 0) + (en_horario ? 1 : 0) + (man_ok_v ? 1 : 0) + (conf_v ? 1 : 0) + (filtros_v ? 1 : 0) + (smt_v ? 1 : 0)
-puede  = operable and cerrada and strategy.position_size == 0 and ops_hoy < max_dia and not dentro_rango and not (cerrar_ses and fin_ny)
+puede  = operable and cerrada and strategy.position_size == 0 and ops_hoy < max_dia and not dentro_rango and not (cerrar_ses and fin_ny) and not parado_sl
 senal_c = puede and dir_op != "Solo ventas" and bias_c and en_horario and man_ok_c and conf_c and punt_c >= punt_min
 senal_v = puede and dir_op != "Solo compras" and bias_v and en_horario and man_ok_v and conf_v and punt_v >= punt_min and not senal_c
 senal_fc = usar_fr and puede and not senal_c and not senal_v and dir_op != "Solo ventas" and en_horario and fr_c and (not fr_bias or bias_c)
@@ -557,7 +571,7 @@ if senal_c
         tp_nom = tp < tp0 ? str.tostring(tp_max_r) + "R" : tp_nom0
         rr = (tp - ent) / riesgo
         strategy.entry("Compra", strategy.long, limit=na(mc_fvg) ? na : ent, comment="Setup " + str.tostring(punt_c) + "/6")
-        strategy.exit("Salida compra", "Compra", stop=sl, limit=tp)
+        strategy.exit("Salida compra", "Compra", stop=sl, limit=tp, comment_loss="SL", comment_profit="TP")
         op_tp := tp
         op_r  := riesgo
         op_be := false
@@ -578,7 +592,7 @@ if senal_v
         tp_nom = tp > tp0 ? str.tostring(tp_max_r) + "R" : tp_nom0
         rr = (ent - tp) / riesgo
         strategy.entry("Venta", strategy.short, limit=na(mv_fvg) ? na : ent, comment="Setup " + str.tostring(punt_v) + "/6")
-        strategy.exit("Salida venta", "Venta", stop=sl, limit=tp)
+        strategy.exit("Salida venta", "Venta", stop=sl, limit=tp, comment_loss="SL", comment_profit="TP")
         op_tp := tp
         op_r  := riesgo
         op_be := false
@@ -599,7 +613,7 @@ if senal_fc
         tp_nom = tp < tp0 ? str.tostring(tp_max_r) + "R" : tp_nom0
         rr = (tp - ent) / riesgo
         strategy.entry("Compra", strategy.long, comment="FVG respetado")
-        strategy.exit("Salida compra", "Compra", stop=sl, limit=tp)
+        strategy.exit("Salida compra", "Compra", stop=sl, limit=tp, comment_loss="SL", comment_profit="TP")
         op_tp := tp
         op_r  := riesgo
         op_be := false
@@ -618,7 +632,7 @@ if senal_fv
         tp_nom = tp > tp0 ? str.tostring(tp_max_r) + "R" : tp_nom0
         rr = (ent - tp) / riesgo
         strategy.entry("Venta", strategy.short, comment="FVG respetado")
-        strategy.exit("Salida venta", "Venta", stop=sl, limit=tp)
+        strategy.exit("Salida venta", "Venta", stop=sl, limit=tp, comment_loss="SL", comment_profit="TP")
         op_tp := tp
         op_r  := riesgo
         op_be := false
@@ -634,7 +648,7 @@ if strategy.position_size != 0 and cerrada
     entp  = strategy.position_avg_price
     if be_r > 0 and not op_be and not na(op_r) and (largo ? high - entp >= be_r * op_r : entp - low >= be_r * op_r)
         op_be := true
-        strategy.exit(largo ? "Salida compra" : "Salida venta", largo ? "Compra" : "Venta", stop=entp, limit=op_tp)
+        strategy.exit(largo ? "Salida compra" : "Salida venta", largo ? "Compra" : "Venta", stop=entp, limit=op_tp, comment_loss="BE", comment_profit="TP")
     if max_velas_op > 0 and bar_index - strategy.opentrades.entry_bar_index(0) >= max_velas_op
         strategy.close_all(comment="Tiempo máximo")
 
