@@ -14,7 +14,8 @@
 //   4. Confirmación: CHoCH alcista después de la manipulación que no falla en la vela siguiente.
 //   5. Filtros: precio en descuento y rango del día por debajo del ATR diario (y opcionalmente del
 //      movimiento esperado VIX/16).
-//   Nunca hay señal dentro de un rango: solo cuando el precio cierra fuera de él (breakout).
+//   Nunca se opera dentro de un rango (caja lateral recordada o Choppiness alto): ni señales ni órdenes
+//   pendientes; solo se vuelve a operar cuando una vela cierra fuera de la caja con margen.
 //   6. Punto extra: SMT alcista con MES (o el índice que se elija).
 // Entrada en el FVG que deja el impulso (orden límite), SL bajo el mínimo de la manipulación y TP en la
 // siguiente liquidez por arriba con un riesgo/beneficio mínimo. Todo se calcula con velas cerradas.
@@ -67,6 +68,9 @@ g_r        = "Rangos (nunca hay señal dentro de un rango)"
 rango_velas = input.int(30, "Velas que se miran para detectar el rango", minval=10, maxval=200, group=g_r)
 rango_atr   = input.float(3.0, "Es rango si su altura no pasa de (× ATR)", minval=1.0, step=0.5, group=g_r)
 rango_rot   = input.int(4, "Y el precio cruza su mitad al menos (veces)", minval=2, maxval=20, group=g_r)
+rango_marg  = input.float(0.5, "Para salir del rango hay que cerrar fuera de la caja al menos (× ATR)", minval=0, step=0.25, group=g_r, tooltip="Una vez detectado, el rango se recuerda (su caja crece si el precio sigue lateral) y no se opera hasta que una vela cierra fuera de la caja con este margen. Así no se entra en las falsas rupturas del borde.")
+usar_chop   = input.bool(true, "También es rango si el Choppiness Index pasa del límite", group=g_r, inline="chop")
+chop_lim    = input.float(61.8, "", minval=40, maxval=80, step=0.1, group=g_r, inline="chop", tooltip="Choppiness Index de 14 velas: por encima de 61,8 el mercado va lateral; por debajo de 38,2 tiene tendencia.")
 
 g_m        = "Manipulación válida"
 usar_pd    = input.bool(true, "Barrido del alto/bajo del día anterior", group=g_m)
@@ -502,7 +506,20 @@ for i = 1 to rango_velas - 1
     if (close[i] > r_mid) != (close[i + 1] > r_mid)
         cruces += 1
 es_rango = not na(r_alto) and r_alto - r_bajo <= rango_atr * atr and cruces >= rango_rot
-dentro_rango = es_rango and close <= r_alto and close >= r_bajo
+// El rango se recuerda: su caja se amplía mientras se siga detectando y solo se sale de él cuando
+// una vela cierra fuera con margen (ruptura de verdad)
+var float rg_alto = na
+var float rg_bajo = na
+if es_rango
+    solapa = not na(rg_alto) and r_bajo <= rg_alto and r_alto >= rg_bajo
+    rg_alto := solapa ? math.max(rg_alto, r_alto) : r_alto
+    rg_bajo := solapa ? math.min(rg_bajo, r_bajo) : r_bajo
+if not na(rg_alto) and (close > rg_alto + rango_marg * atr or close < rg_bajo - rango_marg * atr)
+    rg_alto := na
+    rg_bajo := na
+// Choppiness Index: mide si el precio se mueve lateral (alto) o con tendencia (bajo)
+chop = 100 * math.log10(math.sum(ta.atr(1), 14) / (ta.highest(high, 14) - ta.lowest(low, 14))) / math.log10(14)
+dentro_rango = not na(rg_alto) or (usar_chop and chop > chop_lim)
 mitad_ant = (pdh + pdl) / 2
 filtros_comunes = (not usar_atr or na(d_atr) or rango_hoy < d_atr) and (not usar_vix or na(vix_ant) or rango_hoy < pdc * vix_ant / 16 / 100)
 filtros_c = filtros_comunes and (not usar_desc or close < mitad_ant or close < d_open)
@@ -652,8 +669,8 @@ if strategy.position_size != 0 and cerrada
     if max_velas_op > 0 and bar_index - strategy.opentrades.entry_bar_index(0) >= max_velas_op
         strategy.close_all(comment="Tiempo máximo")
 
-// Orden límite que no se llena a tiempo: se cancela
-if strategy.position_size == 0 and not na(orden_bar) and bar_index - orden_bar > vence_lim
+// Orden límite que no se llena a tiempo, o pendiente cuando el precio entra en rango: se cancela
+if strategy.position_size == 0 and not na(orden_bar) and (bar_index - orden_bar > vence_lim or (dentro_rango and bar_index > orden_bar))
     strategy.cancel("Compra")
     strategy.cancel("Venta")
     orden_bar := na
