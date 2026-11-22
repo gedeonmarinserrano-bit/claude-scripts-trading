@@ -64,7 +64,8 @@ usar_atr   = input.bool(true, "El rango de hoy no ha pasado el ATR diario", grou
 usar_vix   = input.bool(false, "El rango de hoy no ha pasado el movimiento esperado (VIX / 16)", group=g_f)
 vix_sym    = input.symbol("CBOE:VIX", "Índice de volatilidad (para el Nasdaq también vale CBOE:VXN)", group=g_f)
 
-g_r        = "Rangos (nunca hay señal dentro de un rango)"
+g_r        = "Rangos"
+usar_rango  = input.bool(true, "No operar dentro de un rango", group=g_r, tooltip="Activado: dentro de un rango no hay señales y se cancelan las órdenes pendientes. Desactivado: los rangos no se tienen en cuenta.")
 rango_velas = input.int(30, "Velas que se miran para detectar el rango", minval=10, maxval=200, group=g_r)
 rango_atr   = input.float(3.0, "Es rango si su altura no pasa de (× ATR)", minval=1.0, step=0.5, group=g_r)
 rango_rot   = input.int(4, "Y el precio cruza su mitad al menos (veces)", minval=2, maxval=20, group=g_r)
@@ -519,7 +520,7 @@ if not na(rg_alto) and (close > rg_alto + rango_marg * atr or close < rg_bajo - 
     rg_bajo := na
 // Choppiness Index: mide si el precio se mueve lateral (alto) o con tendencia (bajo)
 chop = 100 * math.log10(math.sum(ta.atr(1), 14) / (ta.highest(high, 14) - ta.lowest(low, 14))) / math.log10(14)
-dentro_rango = not na(rg_alto) or (usar_chop and chop > chop_lim)
+dentro_rango = usar_rango and (not na(rg_alto) or (usar_chop and chop > chop_lim))
 mitad_ant = (pdh + pdl) / 2
 filtros_comunes = (not usar_atr or na(d_atr) or rango_hoy < d_atr) and (not usar_vix or na(vix_ant) or rango_hoy < pdc * vix_ant / 16 / 100)
 filtros_c = filtros_comunes and (not usar_desc or close < mitad_ant or close < d_open)
