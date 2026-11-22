@@ -9,8 +9,7 @@
 //      (09:30-11:00 NY = 15:30-17:00 Madrid).
 //   3. Manipulación: barrido de un bajo relevante (día anterior, semana anterior, Asia, Londres o
 //      Nueva York ya cerradas, bajos iguales, último bajo de H1 o H4) o toque del 50 % de un FVG
-//      alcista de M15 o H1. El barrido puede hacerse en una vela o en varias (el precio cierra unas
-//      velas por debajo del nivel y vuelve a cerrar por encima). Las sesiones son las mismas que en el indicador (Asia 18:00-02:00,
+//      alcista de M15 o H1. Las sesiones son las mismas que en el indicador (Asia 18:00-02:00,
 //      Londres 02:00-09:30 y Nueva York 09:30-16:00, hora de Nueva York).
 //   4. Confirmación: CHoCH alcista después de la manipulación que no falla en la vela siguiente.
 //   5. Filtros: precio en descuento y rango del día por debajo del ATR diario (y opcionalmente del
@@ -42,7 +41,6 @@ punt_min   = input.int(5, "Puntuación mínima (de 6)", minval=4, maxval=6, grou
 piv_len    = input.int(3, "Sensibilidad de los pivotes (velas a cada lado)", minval=2, maxval=10, group=g_s)
 vent_manip = input.int(20, "Velas máximas entre la manipulación y el CHoCH", minval=3, maxval=60, group=g_s)
 min_rr     = input.float(1.5, "Riesgo/beneficio mínimo", minval=0.5, step=0.1, group=g_s)
-tp_sin_liq = input.float(1.0, "TP cuando no hay liquidez como objetivo (R)", minval=0.5, step=0.25, group=g_s, tooltip="Si no hay ningún nivel de liquidez a la distancia mínima, el TP se pone a esta distancia. Antes era 2R y esas operaciones solían acabar en break even; con 1R se cobran en el mismo punto en el que antes saltaba el break even.")
 sl_buf     = input.float(0.1, "Margen del SL más allá de la manipulación (× ATR)", minval=0, step=0.05, group=g_s)
 vence_lim  = input.int(10, "Velas para que el precio vuelva a la entrada (si no, se cancela)", minval=1, maxval=50, group=g_s)
 max_dia    = input.int(2, "Máx. operaciones por día", minval=1, maxval=10, group=g_s)
@@ -85,7 +83,6 @@ ses_asia_h = input.session("1800-0200", "Sesión de Asia (hora de Nueva York)", 
 ses_lon_h  = input.session("0200-0930", "Sesión de Londres (hora de Nueva York)", group=g_m)
 ses_ny_h   = input.session("0930-1600", "Sesión de Nueva York (hora de Nueva York)", group=g_m)
 usar_eq    = input.bool(true, "Barrido de altos/bajos iguales (EQH / EQL)", group=g_m)
-barr_velas = input.int(6, "Velas para recuperar el nivel barrido (0 = solo en la misma vela)", minval=0, maxval=30, group=g_m, tooltip="Un barrido no siempre se hace en una sola vela: el precio puede cerrar unas velas al otro lado del nivel (por ejemplo, del bajo de Londres en la apertura de NY) y después volver. Si vuelve a cerrar dentro antes de estas velas, cuenta como manipulación, con el SL tras el extremo alcanzado.")
 usar_fvg50 = input.bool(true, "Toque del 50 % de un FVG de M15 o H1", group=g_m)
 
 g_fr       = "Entrada por FVG respetado"
@@ -356,75 +353,6 @@ barre_bajo(float nv) =>
     not na(nv) and low < nv and close > nv
 barre_alto(float nv) =>
     not na(nv) and high > nv and close < nv
-// Nivel perforado con cierre al otro lado: barrido que puede completarse en las velas siguientes
-perf_bajo(float nv) =>
-    not na(nv) and low < nv and close <= nv
-perf_alto(float nv) =>
-    not na(nv) and high > nv and close >= nv
-perforado_c() =>
-    float nv = na
-    string nm = ""
-    if usar_pd and perf_bajo(pdl)
-        nv := pdl
-        nm := "PDL"
-    else if usar_ses and perf_bajo(asia_lv)
-        nv := asia_lv
-        nm := "bajo de Asia"
-    else if usar_ses and perf_bajo(lon_lv)
-        nv := lon_lv
-        nm := "bajo de Londres"
-    else if usar_ses and perf_bajo(ny_lv)
-        nv := ny_lv
-        nm := "bajo de NY"
-    else if usar_sem and perf_bajo(pwl)
-        nv := pwl
-        nm := "bajo semana ant."
-    else if usar_htf and perf_bajo(h4_pl)
-        nv := h4_pl
-        nm := "bajo H4"
-    else if usar_htf and perf_bajo(h1_pl)
-        nv := h1_pl
-        nm := "bajo H1"
-    else if usar_eq and perf_bajo(eql)
-        nv := eql
-        nm := "EQL"
-    [nv, nm]
-perforado_v() =>
-    float nv = na
-    string nm = ""
-    if usar_pd and perf_alto(pdh)
-        nv := pdh
-        nm := "PDH"
-    else if usar_ses and perf_alto(asia_hv)
-        nv := asia_hv
-        nm := "alto de Asia"
-    else if usar_ses and perf_alto(lon_hv)
-        nv := lon_hv
-        nm := "alto de Londres"
-    else if usar_ses and perf_alto(ny_hv)
-        nv := ny_hv
-        nm := "alto de NY"
-    else if usar_sem and perf_alto(pwh)
-        nv := pwh
-        nm := "alto semana ant."
-    else if usar_htf and perf_alto(h4_ph)
-        nv := h4_ph
-        nm := "alto H4"
-    else if usar_htf and perf_alto(h1_ph)
-        nv := h1_ph
-        nm := "alto H1"
-    else if usar_eq and perf_alto(eqh)
-        nv := eqh
-        nm := "EQH"
-    [nv, nm]
-var float  pb_niv = na
-var string pb_nom = ""
-var int    pb_bar = na
-var float  pb_ext = na
-var float  pa_niv = na
-var string pa_nom = ""
-var int    pa_bar = na
-var float  pa_ext = na
 
 string man_c = ""
 if cerrada
@@ -470,46 +398,6 @@ if cerrada
         man_v := "50 % FVG M15"
     else if usar_fvg50 and not na(h1_st) and high >= (h1_st + h1_sb) / 2 and close < h1_st
         man_v := "50 % FVG H1"
-// Barrido en varias velas: el nivel se perforó cerrando al otro lado y ahora el precio vuelve a cerrar
-// dentro antes de barr_velas velas
-bool  rec_c = false
-bool  rec_v = false
-float rec_c_ext = na
-float rec_v_ext = na
-if cerrada and barr_velas > 0
-    if not na(pb_niv)
-        pb_ext := math.min(pb_ext, low)
-        if man_c == "" and close > pb_niv and bar_index - pb_bar <= barr_velas
-            man_c := pb_nom
-            rec_c := true
-            rec_c_ext := pb_ext
-            pb_niv := na
-        else if bar_index - pb_bar >= barr_velas
-            pb_niv := na
-    if man_c == "" and na(pb_niv)
-        [nv_, nm_] = perforado_c()
-        if not na(nv_)
-            pb_niv := nv_
-            pb_nom := nm_
-            pb_bar := bar_index
-            pb_ext := low
-    if not na(pa_niv)
-        pa_ext := math.max(pa_ext, high)
-        if man_v == "" and close < pa_niv and bar_index - pa_bar <= barr_velas
-            man_v := pa_nom
-            rec_v := true
-            rec_v_ext := pa_ext
-            pa_niv := na
-        else if bar_index - pa_bar >= barr_velas
-            pa_niv := na
-    if man_v == "" and na(pa_niv)
-        [nv2_, nm2_] = perforado_v()
-        if not na(nv2_)
-            pa_niv := nv2_
-            pa_nom := nm2_
-            pa_bar := bar_index
-            pa_ext := high
-
 // Los altos/bajos iguales dejan de ser liquidez cuando se barren
 if not na(eql) and low < eql
     eql := na
@@ -528,14 +416,14 @@ var string mv_txt = ""
 var float  mv_fvg = na
 if man_c != ""
     mc_bar := bar_index
-    mc_ext := rec_c ? rec_c_ext : low
+    mc_ext := low
     mc_txt := man_c
     mc_fvg := na
 else if not na(mc_bar)
     mc_ext := math.min(mc_ext, low)
 if man_v != ""
     mv_bar := bar_index
-    mv_ext := rec_v ? rec_v_ext : high
+    mv_ext := high
     mv_txt := man_v
     mv_fvg := na
 else if not na(mv_bar)
@@ -653,19 +541,19 @@ senal_fc = usar_fr and puede and not senal_c and not senal_v and dir_op != "Solo
 senal_fv = usar_fr and puede and not senal_c and not senal_v and not senal_fc and dir_op != "Solo compras" and en_horario and fr_v and (not fr_bias or bias_v)
 
 // Objetivo: la liquidez más cercana en la dirección de la operación que dé el riesgo/beneficio mínimo;
-// si no hay ninguna, tp_sin_liq R
+// si no hay ninguna, 2R
 objetivo(float entrada, float riesgo, bool compra) =>
     cands = compra ? array.from(pdh, asia_hv, lon_hv, ny_hv, eqh, dh, pwh, h1_ph, h4_ph) : array.from(pdl, asia_lv, lon_lv, ny_lv, eql, dl, pwl, h1_pl, h4_pl)
     nombres = array.from(compra ? "PDH" : "PDL", compra ? "alto de Asia" : "bajo de Asia", compra ? "alto de Londres" : "bajo de Londres", compra ? "alto de NY" : "bajo de NY", compra ? "EQH" : "EQL", compra ? "alto del día" : "bajo del día", compra ? "alto semana ant." : "bajo semana ant.", compra ? "alto H1" : "bajo H1", compra ? "alto H4" : "bajo H4")
     float mejor = na
-    string nom = str.tostring(tp_sin_liq) + "R"
+    string nom = "2R"
     for i = 0 to cands.size() - 1
         nv = cands.get(i)
         dist = compra ? nv - entrada : entrada - nv
         if not na(nv) and dist >= min_rr * riesgo and (na(mejor) or dist < (compra ? mejor - entrada : entrada - mejor))
             mejor := nv
             nom := nombres.get(i)
-    [na(mejor) ? (compra ? entrada + tp_sin_liq * riesgo : entrada - tp_sin_liq * riesgo) : mejor, nom]
+    [na(mejor) ? (compra ? entrada + 2 * riesgo : entrada - 2 * riesgo) : mejor, nom]
 
 // Extremos de las últimas velas (se calculan en cada vela para que sean correctos)
 bajo10 = ta.lowest(low, 10)
