@@ -41,6 +41,7 @@ punt_min   = input.int(5, "Puntuación mínima (de 6)", minval=4, maxval=6, grou
 piv_len    = input.int(3, "Sensibilidad de los pivotes (velas a cada lado)", minval=2, maxval=10, group=g_s)
 vent_manip = input.int(20, "Velas máximas entre la manipulación y el CHoCH", minval=3, maxval=60, group=g_s)
 min_rr     = input.float(1.5, "Riesgo/beneficio mínimo", minval=0.5, step=0.1, group=g_s)
+tp_sin_liq = input.float(1.0, "TP cuando no hay liquidez como objetivo (R)", minval=0.5, step=0.25, group=g_s, tooltip="Si no hay ningún nivel de liquidez a la distancia mínima, el TP se pone a esta distancia. Antes era 2R y esas operaciones solían acabar en break even; con 1R se cobran en el mismo punto en el que antes saltaba el break even.")
 sl_buf     = input.float(0.1, "Margen del SL más allá de la manipulación (× ATR)", minval=0, step=0.05, group=g_s)
 vence_lim  = input.int(10, "Velas para que el precio vuelva a la entrada (si no, se cancela)", minval=1, maxval=50, group=g_s)
 max_dia    = input.int(2, "Máx. operaciones por día", minval=1, maxval=10, group=g_s)
@@ -541,19 +542,19 @@ senal_fc = usar_fr and puede and not senal_c and not senal_v and dir_op != "Solo
 senal_fv = usar_fr and puede and not senal_c and not senal_v and not senal_fc and dir_op != "Solo compras" and en_horario and fr_v and (not fr_bias or bias_v)
 
 // Objetivo: la liquidez más cercana en la dirección de la operación que dé el riesgo/beneficio mínimo;
-// si no hay ninguna, 2R
+// si no hay ninguna, tp_sin_liq R
 objetivo(float entrada, float riesgo, bool compra) =>
     cands = compra ? array.from(pdh, asia_hv, lon_hv, ny_hv, eqh, dh, pwh, h1_ph, h4_ph) : array.from(pdl, asia_lv, lon_lv, ny_lv, eql, dl, pwl, h1_pl, h4_pl)
     nombres = array.from(compra ? "PDH" : "PDL", compra ? "alto de Asia" : "bajo de Asia", compra ? "alto de Londres" : "bajo de Londres", compra ? "alto de NY" : "bajo de NY", compra ? "EQH" : "EQL", compra ? "alto del día" : "bajo del día", compra ? "alto semana ant." : "bajo semana ant.", compra ? "alto H1" : "bajo H1", compra ? "alto H4" : "bajo H4")
     float mejor = na
-    string nom = "2R"
+    string nom = str.tostring(tp_sin_liq) + "R"
     for i = 0 to cands.size() - 1
         nv = cands.get(i)
         dist = compra ? nv - entrada : entrada - nv
         if not na(nv) and dist >= min_rr * riesgo and (na(mejor) or dist < (compra ? mejor - entrada : entrada - mejor))
             mejor := nv
             nom := nombres.get(i)
-    [na(mejor) ? (compra ? entrada + 2 * riesgo : entrada - 2 * riesgo) : mejor, nom]
+    [na(mejor) ? (compra ? entrada + tp_sin_liq * riesgo : entrada - tp_sin_liq * riesgo) : mejor, nom]
 
 // Extremos de las últimas velas (se calculan en cada vela para que sean correctos)
 bajo10 = ta.lowest(low, 10)
