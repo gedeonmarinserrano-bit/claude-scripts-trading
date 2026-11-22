@@ -15,7 +15,7 @@
 //   5. Filtros: precio en descuento y rango del día por debajo del ATR diario (y opcionalmente del
 //      movimiento esperado VIX/16).
 //   Nunca hay señal dentro de un rango: solo cuando el precio cierra fuera de él (breakout).
-//   6. Punto extra: SMT alcista con ES.
+//   6. Punto extra: SMT alcista con MES (o el índice que se elija).
 // Entrada en el FVG que deja el impulso (orden límite), SL bajo el mínimo de la manipulación y TP en la
 // siguiente liquidez por arriba con un riesgo/beneficio mínimo. Todo se calcula con velas cerradas.
 
