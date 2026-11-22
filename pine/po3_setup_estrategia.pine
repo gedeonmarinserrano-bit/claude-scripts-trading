@@ -684,3 +684,6 @@ if cerrar_ses and fin_ny
     orden_bar := na
     if strategy.position_size != 0
         strategy.close_all(comment="Cierre fin sesión NY", immediately=true)
+
+// ─────────────────────────────
+// Fin del script (si al pegar falta esta línea, el código no se ha copiado entero)
