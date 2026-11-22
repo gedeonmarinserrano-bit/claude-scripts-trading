@@ -24,6 +24,9 @@
 // el FVG (compra) o sobre él (venta) y el TP en la siguiente liquidez. Respeta el bias de H1, los rangos
 // y los límites de riesgo igual que el setup.
 // Tras 2 SL seguidos en el mismo día no se opera más hasta el día siguiente (se puede desactivar).
+// Salida (a elegir): TP en la siguiente liquidez, TP en la 2ª liquidez con el SL siguiendo la
+// estructura, o sin TP siguiendo la estructura. Break even a 1R. Franja sin operar (por defecto
+// 12:00-16:00 Madrid).
 // Riesgo diario: ninguna operación queda abierta al terminar la sesión de Nueva York (16:00 NY = 22:00
 // Madrid) y la pérdida del día no puede pasar de 300 $ (no se abre una operación cuyo SL la haría pasar
 // del límite y, si se llega a él, se cierra todo y no se opera más ese día).
@@ -37,6 +40,8 @@ strategy("Po3 Setup NY (estrategia)", shorttitle="Po3 Setup", overlay=true, init
 g_s        = "Señal"
 dir_op     = input.string("Compras y ventas", "Operar", options=["Compras y ventas", "Solo compras", "Solo ventas"], group=g_s)
 horario    = input.string("Todo el horario de mercado", "Horario de las señales", options=["Todo el horario de mercado", "Solo apertura de Nueva York (15:30-17:00 Madrid)"], group=g_s)
+bloq_on    = input.bool(true, "No abrir operaciones de", group=g_s, inline="bloq")
+bloq_h     = input.session("0600-1000", "", group=g_s, inline="bloq", tooltip="Hora de Nueva York. Por defecto 06:00-10:00 NY = 12:00-16:00 Madrid: mediodía de Londres, datos de las 14:30 y primera media hora de NY. En la prueba de 130 operaciones esa franja perdió 1.091 $ en 26 operaciones.")
 punt_min   = input.int(5, "Puntuación mínima (de 6)", minval=4, maxval=6, group=g_s, tooltip="Bias, horario, manipulación y CHoCH son siempre obligatorios (4 puntos; con todo el horario de mercado, el horario se cumple siempre). Los filtros y la SMT suman uno cada uno. Dentro de un rango nunca hay señal.")
 piv_len    = input.int(3, "Sensibilidad de los pivotes (velas a cada lado)", minval=2, maxval=10, group=g_s)
 vent_manip = input.int(20, "Velas máximas entre la manipulación y el CHoCH", minval=3, maxval=60, group=g_s)
@@ -51,6 +56,7 @@ max_sl_atr = input.float(0, "SL máximo (× ATR): si el SL queda más lejos no s
 max_sl_pts = input.float(0, "SL máximo en puntos (0 = sin límite)", minval=0, step=1, group=g_rg)
 tp_max_r   = input.float(0, "TP máximo (R): si la liquidez está más lejos, el TP se pone aquí (0 = sin límite)", minval=0, step=0.5, group=g_rg)
 be_r       = input.float(1.0, "Mover el SL a la entrada (break even) al ir ganando … R (0 = no)", minval=0, step=0.25, group=g_rg)
+salida_modo = input.string("Seguir la estructura sin TP", "Salida", options=["TP en la siguiente liquidez", "TP en la 2ª liquidez y SL siguiendo la estructura", "Seguir la estructura sin TP"], group=g_rg, tooltip="TP en la siguiente liquidez: como antes. Las otras dos: después del break even el SL sube (compra) o baja (venta) detrás de cada nuevo bajo/alto de swing confirmado, para dejar correr las ganadoras. Con 'sin TP' la operación sigue hasta que salta ese SL o hasta el cierre de la sesión de NY. Si el break even está en 0, el seguimiento empieza a 1R.")
 max_velas_op = input.int(0, "Cerrar la operación tras … velas abierta (0 = no)", minval=0, maxval=500, group=g_rg)
 cerrar_ses = input.bool(true, "No dejar nada abierto al terminar la sesión de Nueva York (16:00 NY = 22:00 Madrid)", group=g_rg, tooltip="En la última vela antes de las 16:00 NY se cierra la operación abierta y se cancela la orden pendiente. Esa vela ya no da señales.")
 parar_sl   = input.bool(true, "Dejar de operar hasta el día siguiente tras varios SL seguidos", group=g_rg, inline="psl")
@@ -86,8 +92,9 @@ usar_eq    = input.bool(true, "Barrido de altos/bajos iguales (EQH / EQL)", grou
 usar_fvg50 = input.bool(true, "Toque del 50 % de un FVG de M15 o H1", group=g_m)
 
 g_fr       = "Entrada por FVG respetado"
-usar_fr    = input.bool(true, "Entrar cuando un FVG se respeta", group=g_fr, tooltip="Primer regreso del precio a un FVG del gráfico: la mecha entra en el hueco y la vela cierra fuera, a favor del FVG (sin cerrar dentro ni al otro lado). Entrada a mercado, SL al otro lado del FVG y TP en la siguiente liquidez.")
+usar_fr    = input.bool(true, "Entrar cuando un FVG se respeta", group=g_fr, tooltip="Primer regreso del precio a un FVG del gráfico: la mecha entra en el hueco y la vela cierra fuera, a favor del FVG (sin cerrar dentro ni al otro lado). SL al otro lado del FVG.")
 fr_bias    = input.bool(true, "Solo a favor del bias de H1 (y que H4 no vaya en contra)", group=g_fr)
+fr_limite  = input.bool(true, "Entrar con orden límite en el borde del FVG (si no, a mercado)", group=g_fr, tooltip="Activado: la orden espera a que el precio vuelva al borde del FVG que se acaba de respetar (mejor precio y SL más corto); si no vuelve en las velas indicadas en 'Velas para que el precio vuelva a la entrada', se cancela. Desactivado: entra a mercado al cierre de la vela.")
 fr_min_atr = input.float(0.15, "Tamaño mínimo del FVG (× ATR)", minval=0, step=0.05, group=g_fr)
 fr_vida    = input.int(100, "El FVG deja de valer tras … velas", minval=5, maxval=500, group=g_fr)
 
@@ -116,6 +123,7 @@ en_asia   = not na(time(timeframe.period, ses_asia_h, tz))
 en_lon    = not na(time(timeframe.period, ses_lon_h, tz))
 en_nys    = not na(time(timeframe.period, ses_ny_h, tz))
 nuevo_dia = timeframe.change("D")
+en_bloq   = bloq_on and not na(time(timeframe.period, bloq_h, tz))
 // Última vela de la sesión de Nueva York: la que termina a las 16:00 NY o después
 min_ny_fin = hour(time_close, tz) * 60 + minute(time_close, tz)
 fin_ny    = min_ny < 960 and (min_ny_fin >= 960 or min_ny_fin < min_ny)
@@ -256,6 +264,8 @@ bool  fr_c = false
 bool  fr_v = false
 float fr_c_bot = na
 float fr_v_top = na
+float fr_c_top = na
+float fr_v_bot = na
 if usar_fr and cerrada
     // Alcistas: si el precio vuelve por primera vez, el FVG se respeta (cierra por encima) o se
     // descarta (cierra dentro o por debajo); también caduca tras fr_vida velas
@@ -268,6 +278,7 @@ if usar_fr and cerrada
             if close > t_ and low >= b_ and not fr_c
                 fr_c := true
                 fr_c_bot := b_
+                fr_c_top := t_
             fa_top.remove(i)
             fa_bot.remove(i)
             fa_bar.remove(i)
@@ -284,6 +295,7 @@ if usar_fr and cerrada
             if close < b_ and high <= t_ and not fr_v
                 fr_v := true
                 fr_v_top := t_
+                fr_v_bot := b_
             fb_top.remove(i)
             fb_bot.remove(i)
             fb_bar.remove(i)
@@ -534,7 +546,7 @@ man_ok_v = not na(mv_bar) and bar_index - mv_bar <= vent_manip + 1
 
 punt_c = (bias_c ? 1 : 0) + (en_horario ? 1 : 0) + (man_ok_c ? 1 : 0) + (conf_c ? 1 : 0) + (filtros_c ? 1 : 0) + (smt_c ? 1 : 0)
 punt_v = (bias_v ? 1 : 0) + (en_horario ? 1 : 0) + (man_ok_v ? 1 : 0) + (conf_v ? 1 : 0) + (filtros_v ? 1 : 0) + (smt_v ? 1 : 0)
-puede  = operable and cerrada and strategy.position_size == 0 and ops_hoy < max_dia and not dentro_rango and not (cerrar_ses and fin_ny) and not parado_sl
+puede  = operable and cerrada and strategy.position_size == 0 and ops_hoy < max_dia and not dentro_rango and not (cerrar_ses and fin_ny) and not parado_sl and not en_bloq
 senal_c = puede and dir_op != "Solo ventas" and bias_c and en_horario and man_ok_c and conf_c and punt_c >= punt_min
 senal_v = puede and dir_op != "Solo compras" and bias_v and en_horario and man_ok_v and conf_v and punt_v >= punt_min and not senal_c
 senal_fc = usar_fr and puede and not senal_c and not senal_v and dir_op != "Solo ventas" and en_horario and fr_c and (not fr_bias or bias_c)
@@ -542,7 +554,7 @@ senal_fv = usar_fr and puede and not senal_c and not senal_v and not senal_fc an
 
 // Objetivo: la liquidez más cercana en la dirección de la operación que dé el riesgo/beneficio mínimo;
 // si no hay ninguna, 2R
-objetivo(float entrada, float riesgo, bool compra) =>
+objetivo(float entrada, float riesgo, bool compra, int cual) =>
     cands = compra ? array.from(pdh, asia_hv, lon_hv, ny_hv, eqh, dh, pwh, h1_ph, h4_ph) : array.from(pdl, asia_lv, lon_lv, ny_lv, eql, dl, pwl, h1_pl, h4_pl)
     nombres = array.from(compra ? "PDH" : "PDL", compra ? "alto de Asia" : "bajo de Asia", compra ? "alto de Londres" : "bajo de Londres", compra ? "alto de NY" : "bajo de NY", compra ? "EQH" : "EQL", compra ? "alto del día" : "bajo del día", compra ? "alto semana ant." : "bajo semana ant.", compra ? "alto H1" : "bajo H1", compra ? "alto H4" : "bajo H4")
     float mejor = na
@@ -553,7 +565,24 @@ objetivo(float entrada, float riesgo, bool compra) =>
         if not na(nv) and dist >= min_rr * riesgo and (na(mejor) or dist < (compra ? mejor - entrada : entrada - mejor))
             mejor := nv
             nom := nombres.get(i)
-    [na(mejor) ? (compra ? entrada + 2 * riesgo : entrada - 2 * riesgo) : mejor, nom]
+    // Segunda liquidez: la más cercana de las que quedan más allá de la primera
+    float seg = na
+    string nom2 = ""
+    if cual == 2 and not na(mejor)
+        for i = 0 to cands.size() - 1
+            nv = cands.get(i)
+            dist = compra ? nv - mejor : mejor - nv
+            if not na(nv) and dist > syminfo.mintick and (na(seg) or dist < (compra ? seg - mejor : mejor - seg))
+                seg := nv
+                nom2 := nombres.get(i)
+    [not na(seg) ? seg : na(mejor) ? (compra ? entrada + 2 * riesgo : entrada - 2 * riesgo) : mejor, not na(seg) ? nom2 : nom]
+n_liq  = salida_modo == "TP en la siguiente liquidez" ? 1 : 2
+sin_tp = salida_modo == "Seguir la estructura sin TP"
+seguir = salida_modo != "TP en la siguiente liquidez"
+txt_tp(float tp, string nom, float rr) =>
+    na(tp) ? "Sin TP: sigue la estructura" : "TP " + nom + " · RR " + str.tostring(rr, "#.#")
+txt_tp_al(float tp, string nom) =>
+    na(tp) ? "sin TP (sigue la estructura)" : "TP " + str.tostring(tp, format.mintick) + " (" + nom + ")"
 
 // Extremos de las últimas velas (se calculan en cada vela para que sean correctos)
 bajo10 = ta.lowest(low, 10)
@@ -570,12 +599,14 @@ dibujar(bool compra, float ent, float sl, float tp, string txt) =>
     if ver_lineas
         line.new(bar_index, ent, bar_index + 20, ent, color=color.new(#1565C0, 0), width=2)
         line.new(bar_index, sl, bar_index + 20, sl, color=color.new(col_v, 0), style=line.style_dashed)
-        line.new(bar_index, tp, bar_index + 20, tp, color=color.new(col_c, 0), style=line.style_dashed)
+        if not na(tp)
+            line.new(bar_index, tp, bar_index + 20, tp, color=color.new(col_c, 0), style=line.style_dashed)
 
 // Datos de la operación en curso, para el break even
 var float op_tp = na
 var float op_r  = na
 var bool  op_be = false
+var float op_stop = na
 
 if senal_c
     ent = na(mc_fvg) ? close : math.min(mc_fvg, close)
@@ -584,19 +615,21 @@ if senal_c
     // Sin operación si el SL queda demasiado lejos (las pérdidas grandes vienen de ahí)
     sl_ok = riesgo > 0 and (max_sl_atr == 0 or riesgo <= max_sl_atr * atr) and (max_sl_pts == 0 or riesgo <= max_sl_pts) and cabe_riesgo(riesgo)
     if sl_ok
-        [tp0, tp_nom0] = objetivo(ent, riesgo, true)
+        [tp0, tp_nom0] = objetivo(ent, riesgo, true, n_liq)
         tp = tp_max_r > 0 ? math.min(tp0, ent + tp_max_r * riesgo) : tp0
         tp_nom = tp < tp0 ? str.tostring(tp_max_r) + "R" : tp_nom0
         rr = (tp - ent) / riesgo
+        tp_ord = sin_tp ? float(na) : tp
         strategy.entry("Compra", strategy.long, limit=na(mc_fvg) ? na : ent, comment="Setup " + str.tostring(punt_c) + "/6")
-        strategy.exit("Salida compra", "Compra", stop=sl, limit=tp, comment_loss="SL", comment_profit="TP")
-        op_tp := tp
+        strategy.exit("Salida compra", "Compra", stop=sl, limit=tp_ord, comment_loss="SL", comment_profit="TP")
+        op_tp := tp_ord
+        op_stop := sl
         op_r  := riesgo
         op_be := false
         orden_bar := bar_index
         ops_hoy += 1
-        dibujar(true, ent, sl, tp, "▲ SETUP " + str.tostring(punt_c) + "/6\nBarrido " + mc_txt + (smt_c ? " + SMT" : "") + "\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
-        alert("▲ Setup de compra " + str.tostring(punt_c) + "/6 en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick) + " (" + tp_nom + ")", alert.freq_once_per_bar_close)
+        dibujar(true, ent, sl, tp_ord, "▲ SETUP " + str.tostring(punt_c) + "/6\nBarrido " + mc_txt + (smt_c ? " + SMT" : "") + "\n" + txt_tp(tp_ord, tp_nom, rr))
+        alert("▲ Setup de compra " + str.tostring(punt_c) + "/6 en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", " + txt_tp_al(tp_ord, tp_nom), alert.freq_once_per_bar_close)
         mc_bar := na
 
 if senal_v
@@ -605,73 +638,89 @@ if senal_v
     riesgo = sl - ent
     sl_ok = riesgo > 0 and (max_sl_atr == 0 or riesgo <= max_sl_atr * atr) and (max_sl_pts == 0 or riesgo <= max_sl_pts) and cabe_riesgo(riesgo)
     if sl_ok
-        [tp0, tp_nom0] = objetivo(ent, riesgo, false)
+        [tp0, tp_nom0] = objetivo(ent, riesgo, false, n_liq)
         tp = tp_max_r > 0 ? math.max(tp0, ent - tp_max_r * riesgo) : tp0
         tp_nom = tp > tp0 ? str.tostring(tp_max_r) + "R" : tp_nom0
         rr = (ent - tp) / riesgo
+        tp_ord = sin_tp ? float(na) : tp
         strategy.entry("Venta", strategy.short, limit=na(mv_fvg) ? na : ent, comment="Setup " + str.tostring(punt_v) + "/6")
-        strategy.exit("Salida venta", "Venta", stop=sl, limit=tp, comment_loss="SL", comment_profit="TP")
-        op_tp := tp
+        strategy.exit("Salida venta", "Venta", stop=sl, limit=tp_ord, comment_loss="SL", comment_profit="TP")
+        op_tp := tp_ord
+        op_stop := sl
         op_r  := riesgo
         op_be := false
         orden_bar := bar_index
         ops_hoy += 1
-        dibujar(false, ent, sl, tp, "▼ SETUP " + str.tostring(punt_v) + "/6\nBarrido " + mv_txt + (smt_v ? " + SMT" : "") + "\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
-        alert("▼ Setup de venta " + str.tostring(punt_v) + "/6 en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick) + " (" + tp_nom + ")", alert.freq_once_per_bar_close)
+        dibujar(false, ent, sl, tp_ord, "▼ SETUP " + str.tostring(punt_v) + "/6\nBarrido " + mv_txt + (smt_v ? " + SMT" : "") + "\n" + txt_tp(tp_ord, tp_nom, rr))
+        alert("▼ Setup de venta " + str.tostring(punt_v) + "/6 en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", " + txt_tp_al(tp_ord, tp_nom), alert.freq_once_per_bar_close)
         mv_bar := na
 
-// Entrada por FVG respetado: a mercado, SL al otro lado del FVG
+// Entrada por FVG respetado: orden límite en el borde del FVG (o a mercado), SL al otro lado del FVG
 if senal_fc
-    ent = close
+    ent = fr_limite ? fr_c_top : close
     sl = fr_c_bot - sl_buf * atr
     riesgo = ent - sl
     if riesgo > 0 and (max_sl_atr == 0 or riesgo <= max_sl_atr * atr) and (max_sl_pts == 0 or riesgo <= max_sl_pts) and cabe_riesgo(riesgo)
-        [tp0, tp_nom0] = objetivo(ent, riesgo, true)
+        [tp0, tp_nom0] = objetivo(ent, riesgo, true, n_liq)
         tp = tp_max_r > 0 ? math.min(tp0, ent + tp_max_r * riesgo) : tp0
         tp_nom = tp < tp0 ? str.tostring(tp_max_r) + "R" : tp_nom0
         rr = (tp - ent) / riesgo
-        strategy.entry("Compra", strategy.long, comment="FVG respetado")
-        strategy.exit("Salida compra", "Compra", stop=sl, limit=tp, comment_loss="SL", comment_profit="TP")
-        op_tp := tp
+        tp_ord = sin_tp ? float(na) : tp
+        strategy.entry("Compra", strategy.long, limit=fr_limite ? ent : na, comment="FVG respetado")
+        strategy.exit("Salida compra", "Compra", stop=sl, limit=tp_ord, comment_loss="SL", comment_profit="TP")
+        op_tp := tp_ord
+        op_stop := sl
         op_r  := riesgo
         op_be := false
         orden_bar := bar_index
         ops_hoy += 1
-        dibujar(true, ent, sl, tp, "▲ FVG RESPETADO\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
-        alert("▲ FVG respetado, compra en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick) + " (" + tp_nom + ")", alert.freq_once_per_bar_close)
+        dibujar(true, ent, sl, tp_ord, "▲ FVG RESPETADO\n" + txt_tp(tp_ord, tp_nom, rr))
+        alert("▲ FVG respetado, compra en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", " + txt_tp_al(tp_ord, tp_nom), alert.freq_once_per_bar_close)
 
 if senal_fv
-    ent = close
+    ent = fr_limite ? fr_v_bot : close
     sl = fr_v_top + sl_buf * atr
     riesgo = sl - ent
     if riesgo > 0 and (max_sl_atr == 0 or riesgo <= max_sl_atr * atr) and (max_sl_pts == 0 or riesgo <= max_sl_pts) and cabe_riesgo(riesgo)
-        [tp0, tp_nom0] = objetivo(ent, riesgo, false)
+        [tp0, tp_nom0] = objetivo(ent, riesgo, false, n_liq)
         tp = tp_max_r > 0 ? math.max(tp0, ent - tp_max_r * riesgo) : tp0
         tp_nom = tp > tp0 ? str.tostring(tp_max_r) + "R" : tp_nom0
         rr = (ent - tp) / riesgo
-        strategy.entry("Venta", strategy.short, comment="FVG respetado")
-        strategy.exit("Salida venta", "Venta", stop=sl, limit=tp, comment_loss="SL", comment_profit="TP")
-        op_tp := tp
+        tp_ord = sin_tp ? float(na) : tp
+        strategy.entry("Venta", strategy.short, limit=fr_limite ? ent : na, comment="FVG respetado")
+        strategy.exit("Salida venta", "Venta", stop=sl, limit=tp_ord, comment_loss="SL", comment_profit="TP")
+        op_tp := tp_ord
+        op_stop := sl
         op_r  := riesgo
         op_be := false
         orden_bar := bar_index
         ops_hoy += 1
-        dibujar(false, ent, sl, tp, "▼ FVG RESPETADO\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
-        alert("▼ FVG respetado, venta en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick) + " (" + tp_nom + ")", alert.freq_once_per_bar_close)
+        dibujar(false, ent, sl, tp_ord, "▼ FVG RESPETADO\n" + txt_tp(tp_ord, tp_nom, rr))
+        alert("▼ FVG respetado, venta en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", " + txt_tp_al(tp_ord, tp_nom), alert.freq_once_per_bar_close)
 
 // Break even: cuando la operación va ganando be_r veces el riesgo, el SL pasa al precio de entrada.
 // Cierre por tiempo: si lleva max_velas_op velas abierta, se cierra.
 if strategy.position_size != 0 and cerrada
     largo = strategy.position_size > 0
     entp  = strategy.position_avg_price
-    if be_r > 0 and not op_be and not na(op_r) and (largo ? high - entp >= be_r * op_r : entp - low >= be_r * op_r)
+    be_ef = be_r > 0 ? be_r : seguir ? 1.0 : 0.0
+    if be_ef > 0 and not op_be and not na(op_r) and (largo ? high - entp >= be_ef * op_r : entp - low >= be_ef * op_r)
         op_be := true
+        op_stop := entp
         strategy.exit(largo ? "Salida compra" : "Salida venta", largo ? "Compra" : "Venta", stop=entp, limit=op_tp, comment_loss="BE", comment_profit="TP")
+    // SL que sigue la estructura: tras el break even se coloca detrás de cada nuevo bajo (compra) o alto
+    // (venta) de swing confirmado, solo a favor
+    else if seguir and op_be
+        cand = largo ? (na(pl) ? na : pl - sl_buf * atr) : (na(ph) ? na : ph + sl_buf * atr)
+        if not na(cand) and (largo ? cand > op_stop and cand < close : cand < op_stop and cand > close)
+            op_stop := cand
+            strategy.exit(largo ? "Salida compra" : "Salida venta", largo ? "Compra" : "Venta", stop=op_stop, limit=op_tp, comment_loss="Trailing", comment_profit="TP")
     if max_velas_op > 0 and bar_index - strategy.opentrades.entry_bar_index(0) >= max_velas_op
         strategy.close_all(comment="Tiempo máximo")
 
-// Orden límite que no se llena a tiempo, o pendiente cuando el precio entra en rango: se cancela
-if strategy.position_size == 0 and not na(orden_bar) and (bar_index - orden_bar > vence_lim or (dentro_rango and bar_index > orden_bar))
+// Orden límite que no se llena a tiempo, o pendiente cuando el precio entra en rango o en la franja sin
+// operar: se cancela
+if strategy.position_size == 0 and not na(orden_bar) and (bar_index - orden_bar > vence_lim or ((dentro_rango or en_bloq) and bar_index > orden_bar))
     strategy.cancel("Compra")
     strategy.cancel("Venta")
     orden_bar := na
