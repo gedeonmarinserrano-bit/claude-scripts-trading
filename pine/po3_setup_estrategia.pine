@@ -57,6 +57,7 @@ tp_max_r   = input.float(0, "TP máximo (R): si la liquidez está más lejos, el
 be_r       = input.float(1.0, "Mover el SL a la entrada (break even) al ir ganando … R (0 = no)", minval=0, step=0.25, group=g_rg)
 max_velas_op = input.int(0, "Cerrar la operación tras … velas abierta (0 = no)", minval=0, maxval=500, group=g_rg)
 cerrar_ses = input.bool(true, "No dejar nada abierto al terminar la sesión de Nueva York (16:00 NY = 22:00 Madrid)", group=g_rg, tooltip="En la última vela antes de las 16:00 NY se cierra la operación abierta y se cancela la orden pendiente. Esa vela ya no da señales.")
+min_fin_ny = input.int(30, "No abrir operaciones en los últimos … minutos de NY (0 = no)", minval=0, maxval=120, group=g_rg, tooltip="Por defecto, de 15:30 a 16:00 NY (21:30-22:00 Madrid) no se abren operaciones nuevas: no les da tiempo a desarrollarse y se cierran solas al final de la sesión.")
 parar_sl   = input.bool(true, "Dejar de operar hasta el día siguiente tras varios SL seguidos", group=g_rg, inline="psl")
 n_sl_seg   = input.int(2, "SL seguidos", minval=1, maxval=10, group=g_rg, inline="psl", tooltip="Cuenta solo las operaciones que terminan en su SL. Una operación ganadora o cerrada en break even corta la racha. Al empezar el día (18:00 NY) la cuenta vuelve a cero.")
 max_perd_dia = input.float(300, "Pérdida máxima por día ($, 0 = sin límite)", minval=0, step=25, group=g_rg, tooltip="Cuenta lo perdido hoy (operaciones cerradas y la abierta). No se abre una operación si su SL, con comisiones y deslizamiento, haría pasar la pérdida del día de este límite. Si aun así se llega al límite (hueco de precio), se cierra todo y no se opera más ese día.")
@@ -126,6 +127,7 @@ en_bloq   = bloq_on and not na(time(timeframe.period, bloq_h, tz))
 // Última vela de la sesión de Nueva York: la que termina a las 16:00 NY o después
 min_ny_fin = hour(time_close, tz) * 60 + minute(time_close, tz)
 fin_ny    = min_ny < 960 and (min_ny_fin >= 960 or min_ny_fin < min_ny)
+ult_ny    = min_fin_ny > 0 and min_ny >= 960 - min_fin_ny and min_ny < 960
 
 // Pérdida máxima por día: la propia de TradingView cierra todo y para el día si se llega al límite
 strategy.risk.max_intraday_loss(max_perd_dia > 0 ? max_perd_dia : 1e12, strategy.cash, "Pérdida máxima del día")
@@ -558,7 +560,7 @@ man_ok_v = not na(mv_bar) and bar_index - mv_bar <= vent_manip + 1
 
 punt_c = (bias_c ? 1 : 0) + (en_horario ? 1 : 0) + (man_ok_c ? 1 : 0) + (conf_c ? 1 : 0) + (filtros_c ? 1 : 0) + (smt_c ? 1 : 0)
 punt_v = (bias_v ? 1 : 0) + (en_horario ? 1 : 0) + (man_ok_v ? 1 : 0) + (conf_v ? 1 : 0) + (filtros_v ? 1 : 0) + (smt_v ? 1 : 0)
-puede  = operable and cerrada and strategy.position_size == 0 and ops_hoy < max_dia and not dentro_rango and not (cerrar_ses and fin_ny) and not parado_sl and not en_bloq
+puede  = operable and cerrada and strategy.position_size == 0 and ops_hoy < max_dia and not dentro_rango and not (cerrar_ses and fin_ny) and not ult_ny and not parado_sl and not en_bloq
 senal_c = puede and dir_op != "Solo ventas" and bias_c and en_horario and man_ok_c and conf_c and punt_c >= punt_min
 senal_v = puede and dir_op != "Solo compras" and bias_v and en_horario and man_ok_v and conf_v and punt_v >= punt_min and not senal_c
 senal_fc = usar_fr and puede and not senal_c and not senal_v and dir_op != "Solo ventas" and en_horario and fr_c and (not fr_bias or bias_c) and (not fr_estr or tend_sw == 1)

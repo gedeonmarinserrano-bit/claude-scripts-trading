@@ -51,6 +51,7 @@ vent_manip = input.int(20, "Velas máximas entre la manipulación y el CHoCH", m
 min_rr     = input.float(1.5, "Riesgo/beneficio mínimo", minval=0.5, step=0.1, group=g_s)
 sl_buf     = input.float(0.1, "Margen del SL más allá de la manipulación (× ATR)", minval=0, step=0.05, group=g_s)
 vence_lim  = input.int(10, "Velas para que el precio vuelva a la entrada (si no, se cancela)", minval=1, maxval=50, group=g_s)
+max_dia_setup = input.int(2, "Máx. operaciones del setup por día (cupo propio)", minval=1, maxval=10, group=g_s, tooltip="El setup tiene su propio cupo: las entradas por FVG/IFVG y por ruptura de rango no se lo quitan. El 'Máx. operaciones por día' de abajo es para esas otras entradas.")
 max_dia    = input.int(2, "Máx. operaciones por día", minval=1, maxval=10, group=g_s)
 
 // Gestión del riesgo: limitar las pérdidas grandes
@@ -61,6 +62,7 @@ tp_max_r   = input.float(0, "TP máximo (R): si la liquidez está más lejos, el
 be_r       = input.float(1.0, "Mover el SL a la entrada (break even) al ir ganando … R (0 = no)", minval=0, step=0.25, group=g_rg)
 max_velas_op = input.int(0, "Cerrar la operación tras … velas abierta (0 = no)", minval=0, maxval=500, group=g_rg)
 cerrar_ses = input.bool(true, "No dejar nada abierto al terminar la sesión de Nueva York (16:00 NY = 22:00 Madrid)", group=g_rg, tooltip="En la última vela antes de las 16:00 NY se cierra la operación abierta y se cancela la orden pendiente. Esa vela ya no da señales.")
+min_fin_ny = input.int(30, "No abrir operaciones en los últimos … minutos de NY (0 = no)", minval=0, maxval=120, group=g_rg, tooltip="Por defecto, de 15:30 a 16:00 NY (21:30-22:00 Madrid) no se abren operaciones nuevas: no les da tiempo a desarrollarse y se cierran solas al final de la sesión.")
 parar_sl   = input.bool(true, "Dejar de operar hasta el día siguiente tras varios SL seguidos", group=g_rg, inline="psl")
 n_sl_seg   = input.int(2, "SL seguidos", minval=1, maxval=10, group=g_rg, inline="psl", tooltip="Cuenta solo las operaciones que terminan en su SL. Una operación ganadora o cerrada en break even corta la racha. Al empezar el día (18:00 NY) la cuenta vuelve a cero.")
 max_perd_dia = input.float(300, "Pérdida máxima por día ($, 0 = sin límite)", minval=0, step=25, group=g_rg, tooltip="Cuenta lo perdido hoy (operaciones cerradas y la abierta). No se abre una operación si su SL, con comisiones y deslizamiento, haría pasar la pérdida del día de este límite. Si aun así se llega al límite (hueco de precio), se cierra todo y no se opera más ese día.")
@@ -102,6 +104,7 @@ fr_vida    = input.int(100, "El FVG deja de valer tras … velas", minval=5, max
 g_rup      = "Entrada por ruptura de rango"
 usar_rup   = input.bool(true, "Entrar cuando se confirma la ruptura de un rango", group=g_rup, tooltip="Cuando una vela cierra fuera de la caja de un rango ya confirmado (la misma ruptura que el indicador marca con la flecha ▲/▼ Breakout), se entra a mercado a favor de la ruptura. SL en la mitad del rango y TP proyectando la altura del rango desde el borde roto (objetivo medido). Si el precio vuelve a meterse en el rango, el break even o el SL lo cierran.")
 rup_conf   = input.string("Al cierre de la vela de ruptura", "Confirmación", options=["Al cierre de la vela de ruptura", "Si la vela siguiente también cierra fuera"], group=g_rup)
+rup_velas  = input.int(30, "Cerrar la ruptura si tras … velas no ha llegado al break even (0 = no)", minval=0, maxval=300, group=g_rup)
 rup_sl     = input.string("Mitad del rango", "SL", options=["Mitad del rango", "Borde contrario del rango"], group=g_rup)
 
 g_smt      = "SMT (punto extra)"
@@ -133,6 +136,7 @@ en_bloq   = bloq_on and not na(time(timeframe.period, bloq_h, tz))
 // Última vela de la sesión de Nueva York: la que termina a las 16:00 NY o después
 min_ny_fin = hour(time_close, tz) * 60 + minute(time_close, tz)
 fin_ny    = min_ny < 960 and (min_ny_fin >= 960 or min_ny_fin < min_ny)
+ult_ny    = min_fin_ny > 0 and min_ny >= 960 - min_fin_ny and min_ny < 960
 
 // Pérdida máxima por día: la propia de TradingView cierra todo y para el día si se llega al límite
 strategy.risk.max_intraday_loss(max_perd_dia > 0 ? max_perd_dia : 1e12, strategy.cash, "Pérdida máxima del día")
@@ -604,8 +608,10 @@ if choch_baj and not na(mv_bar) and bar_index - mv_bar <= vent_manip
 // PUNTUACIÓN Y SEÑAL
 // ─────────────────────────────
 var int ops_hoy = 0
+var int ops_setup = 0
 if nuevo_dia
     ops_hoy := 0
+    ops_setup := 0
 
 // SL seguidos de hoy: se revisan las operaciones que se acaban de cerrar
 var int sl_seg = 0
@@ -771,9 +777,12 @@ man_ok_v = not na(mv_bar) and bar_index - mv_bar <= vent_manip + 1
 
 punt_c = (bias_c ? 1 : 0) + (en_horario ? 1 : 0) + (man_ok_c ? 1 : 0) + (conf_c ? 1 : 0) + (filtros_c ? 1 : 0) + (smt_c ? 1 : 0)
 punt_v = (bias_v ? 1 : 0) + (en_horario ? 1 : 0) + (man_ok_v ? 1 : 0) + (conf_v ? 1 : 0) + (filtros_v ? 1 : 0) + (smt_v ? 1 : 0)
-puede  = operable and cerrada and strategy.position_size == 0 and ops_hoy < max_dia and not dentro_rango and not (cerrar_ses and fin_ny) and not parado_sl and not en_bloq
-senal_c = puede and dir_op != "Solo ventas" and bias_c and en_horario and man_ok_c and conf_c and punt_c >= punt_min
-senal_v = puede and dir_op != "Solo compras" and bias_v and en_horario and man_ok_v and conf_v and punt_v >= punt_min and not senal_c
+puede_b = operable and cerrada and strategy.position_size == 0 and not dentro_rango and not (cerrar_ses and fin_ny) and not ult_ny and not parado_sl and not en_bloq
+// El setup tiene su propio cupo diario: las demás entradas no se lo quitan
+puede_s = puede_b and ops_setup < max_dia_setup
+puede   = puede_b and ops_hoy < max_dia
+senal_c = puede_s and dir_op != "Solo ventas" and bias_c and en_horario and man_ok_c and conf_c and punt_c >= punt_min
+senal_v = puede_s and dir_op != "Solo compras" and bias_v and en_horario and man_ok_v and conf_v and punt_v >= punt_min and not senal_c
 dir15_ok_c = fr_dir == "FVG de M15" ? d15 == 1 : fr_dir == "Bias de H1" ? bias_c : true
 dir15_ok_v = fr_dir == "FVG de M15" ? d15 == -1 : fr_dir == "Bias de H1" ? bias_v : true
 senal_rc = usar_rup and puede and not senal_c and not senal_v and dir_op != "Solo ventas" and rup_ok == 1
@@ -817,6 +826,7 @@ dibujar(bool compra, float ent, float sl, float tp, string txt) =>
 var float op_tp = na
 var float op_r  = na
 var bool  op_be = false
+var bool  op_rup = false   // la operación abierta es una ruptura de rango
 
 if senal_c
     ent = na(mc_fvg) ? close : math.min(mc_fvg, close)
@@ -834,8 +844,9 @@ if senal_c
         op_tp := tp
         op_r  := riesgo
         op_be := false
+        op_rup := false
         orden_bar := bar_index
-        ops_hoy += 1
+        ops_setup += 1
         dibujar(true, ent, sl, tp, "▲ SETUP " + str.tostring(punt_c) + "/6\nBarrido " + mc_txt + (smt_c ? " + SMT" : "") + "\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
         alert("▲ Setup de compra " + str.tostring(punt_c) + "/6 en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick) + " (" + tp_nom + ")", alert.freq_once_per_bar_close)
         mc_bar := na
@@ -855,8 +866,9 @@ if senal_v
         op_tp := tp
         op_r  := riesgo
         op_be := false
+        op_rup := false
         orden_bar := bar_index
-        ops_hoy += 1
+        ops_setup += 1
         dibujar(false, ent, sl, tp, "▼ SETUP " + str.tostring(punt_v) + "/6\nBarrido " + mv_txt + (smt_v ? " + SMT" : "") + "\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
         alert("▼ Setup de venta " + str.tostring(punt_v) + "/6 en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick) + " (" + tp_nom + ")", alert.freq_once_per_bar_close)
         mv_bar := na
@@ -876,6 +888,7 @@ if senal_fc
         op_tp := tp
         op_r  := riesgo
         op_be := false
+        op_rup := false
         orden_bar := bar_index
         ops_hoy += 1
         dibujar(true, ent, sl, tp, (fr_c_inv ? "▲ IFVG RESPETADO" : "▲ FVG RESPETADO") + "\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
@@ -895,6 +908,7 @@ if senal_fv
         op_tp := tp
         op_r  := riesgo
         op_be := false
+        op_rup := false
         orden_bar := bar_index
         ops_hoy += 1
         dibujar(false, ent, sl, tp, (fr_v_inv ? "▼ IFVG RESPETADO" : "▼ FVG RESPETADO") + "\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
@@ -925,6 +939,7 @@ if senal_rc or senal_rv
         op_tp := tp
         op_r  := riesgo
         op_be := false
+        op_rup := true
         orden_bar := bar_index
         ops_hoy += 1
         dibujar(compra, ent, sl, tp, (compra ? "▲ RUPTURA DE RANGO" : "▼ RUPTURA DE RANGO") + "\nTP objetivo medido · RR " + str.tostring(rr, "#.#"))
@@ -938,6 +953,8 @@ if strategy.position_size != 0 and cerrada
     if be_r > 0 and not op_be and not na(op_r) and (largo ? high - entp >= be_r * op_r : entp - low >= be_r * op_r)
         op_be := true
         strategy.exit(largo ? "Salida compra" : "Salida venta", largo ? "Compra" : "Venta", stop=entp, limit=op_tp, comment_loss="BE", comment_profit="TP")
+    if op_rup and rup_velas > 0 and not op_be and bar_index - strategy.opentrades.entry_bar_index(0) >= rup_velas
+        strategy.close_all(comment="Ruptura sin avance")
     if max_velas_op > 0 and bar_index - strategy.opentrades.entry_bar_index(0) >= max_velas_op
         strategy.close_all(comment="Tiempo máximo")
 
