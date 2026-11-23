@@ -41,7 +41,7 @@ dir_op     = input.string("Compras y ventas", "Operar", options=["Compras y vent
 horario    = input.string("Todo el horario de mercado", "Horario de las señales", options=["Todo el horario de mercado", "Solo apertura de Nueva York (15:30-17:00 Madrid)"], group=g_s)
 bloq_on    = input.bool(true, "No abrir operaciones de", group=g_s, inline="bloq")
 bloq_h     = input.session("0600-1000", "", group=g_s, inline="bloq", tooltip="Hora de Nueva York. Por defecto 06:00-10:00 NY = 12:00-16:00 Madrid: mediodía de Londres, datos de las 14:30 y primera media hora de NY. En la prueba de 130 operaciones esa franja perdió 1.091 $ en 26 operaciones. Las operaciones ya abiertas siguen con su gestión; las órdenes pendientes se cancelan.")
-punt_min   = input.int(5, "Puntuación mínima (de 6)", minval=4, maxval=6, group=g_s, tooltip="Bias, horario, manipulación y CHoCH son siempre obligatorios (4 puntos; con todo el horario de mercado, el horario se cumple siempre). Los filtros y la SMT suman uno cada uno. Dentro de un rango nunca hay señal.")
+punt_min   = input.int(4, "Puntuación mínima (de 6)", minval=4, maxval=6, group=g_s, tooltip="Bias, horario, manipulación y CHoCH son siempre obligatorios (4 puntos; con todo el horario de mercado, el horario se cumple siempre). Los filtros y la SMT suman uno cada uno. Dentro de un rango nunca hay señal.")
 piv_len    = input.int(3, "Sensibilidad de los pivotes (velas a cada lado)", minval=2, maxval=10, group=g_s)
 vent_manip = input.int(20, "Velas máximas entre la manipulación y el CHoCH", minval=3, maxval=60, group=g_s)
 min_rr     = input.float(1.5, "Riesgo/beneficio mínimo", minval=0.5, step=0.1, group=g_s)
