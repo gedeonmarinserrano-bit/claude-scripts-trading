@@ -25,9 +25,6 @@
 // del gráfico (opcional). Respeta el bias de H1, los rangos
 // y los límites de riesgo igual que el setup.
 // Franja sin operar (por defecto 12:00-16:00 Madrid = 06:00-10:00 NY), con botón para quitarla.
-// Tercera entrada (opcional): tendencia intradía. Con las EMAs 9/20/200 alineadas y la estructura swing
-// a favor, tras un impulso reciente, se entra en el primer retroceso a la EMA 20 que cierra con fuerza
-// más allá de la EMA 9, en la apertura de Londres o la tarde de NY; SL tras el último swing, TP a 2R.
 // Tras 2 SL seguidos en el mismo día no se opera más hasta el día siguiente (se puede desactivar).
 // Riesgo diario: ninguna operación queda abierta al terminar la sesión de Nueva York (16:00 NY = 22:00
 // Madrid) y la pérdida del día no puede pasar de 300 $ (no se abre una operación cuyo SL la haría pasar
@@ -102,13 +99,6 @@ fr_estr    = input.bool(true, "Solo a favor de la estructura swing del gráfico"
 estr_len   = input.int(10, "Velas", minval=3, maxval=30, group=g_fr, inline="estr")
 fr_min_atr = input.float(0.15, "Tamaño mínimo del FVG (× ATR)", minval=0, step=0.05, group=g_fr)
 fr_vida    = input.int(100, "El FVG deja de valer tras … velas", minval=5, maxval=500, group=g_fr)
-
-g_td       = "Entrada de tendencia intradía"
-usar_tend  = input.bool(true, "Entrar en los retrocesos de una tendencia", group=g_td, tooltip="Tendencia alcista: precio por encima de la EMA 200, EMA 9 por encima de la EMA 20 y subiendo, y estructura swing alcista. Entrada: retroceso de verdad tras un impulso que ha hecho un máximo reciente; el precio toca la EMA 20 y la vela cierra alcista por encima de la EMA 9. SL tras el último bajo de swing. Solo en las horas de más volumen. La venta es el espejo. Son las mismas EMAs 9/20/200 del indicador.")
-tend_ses1  = input.session("0200-0500", "Horas de la tendencia (hora de NY): apertura de Londres", group=g_td)
-tend_ses2  = input.session("1000-1530", "y tarde de Nueva York", group=g_td, tooltip="02:00-05:00 NY = 08:00-11:00 Madrid; 10:00-15:30 NY = 16:00-21:30 Madrid (en las semanas de cambio de hora puede variar una hora).")
-tend_h1    = input.bool(true, "Solo a favor del bias de H1", group=g_td)
-tend_tp_r  = input.float(2.0, "TP de la tendencia (R, 0 = siguiente liquidez)", minval=0, step=0.5, group=g_td, tooltip="En tendencia el precio suele ir más lejos que la liquidez más cercana: por defecto el TP se pone a 2 veces el riesgo. El break even a 1R se aplica igual.")
 
 g_smt      = "SMT (punto extra)"
 usar_smt   = input.bool(true, "Sumar un punto si hay SMT con el otro índice", group=g_smt)
@@ -584,31 +574,8 @@ puede  = puede_b and strategy.position_size == 0 and ops_hoy < max_dia and not s
 puede_s = prio_setup ? puede_b and (strategy.position_size == 0 or not op_setup) and ops_setup < max_dia_setup : puede
 senal_c = puede_s and dir_op != "Solo ventas" and bias_c and en_horario and man_ok_c and conf_c and punt_c >= punt_min
 senal_v = puede_s and dir_op != "Solo compras" and bias_v and en_horario and man_ok_v and conf_v and punt_v >= punt_min and not senal_c
-// Tendencia intradía: EMAs 9/20/200 alineadas y estructura swing a favor; entrada en el primer
-// retroceso a la EMA 20 que cierra a favor
-ema9   = ta.ema(close, 9)
-ema20  = ta.ema(close, 20)
-ema200 = ta.ema(close, 200)
-td_alc = close > ema200 and ema9 > ema20 and ema20 > ema20[3] and tend_sw == 1 and (not tend_h1 or b1 == 1)
-td_baj = close < ema200 and ema9 < ema20 and ema20 < ema20[3] and tend_sw == -1 and (not tend_h1 or b1 == -1)
-// Retroceso de verdad: el impulso previo ha hecho el máximo (mínimo) de las últimas 30 velas hace poco,
-// el precio vuelve a la EMA 20 por primera vez y la vela de entrada cierra con fuerza más allá de la EMA 9
-td_imp_c = ta.highest(high, 10)[1] >= ta.highest(high, 30)[1]
-td_imp_v = ta.lowest(low, 10)[1] <= ta.lowest(low, 30)[1]
-td_pull_c = td_imp_c and low <= ema20 and close > ema9 and close > open and low[1] > ema20[1]
-td_pull_v = td_imp_v and high >= ema20 and close < ema9 and close < open and high[1] < ema20[1]
-td_hora = not na(time(timeframe.period, tend_ses1, tz)) or not na(time(timeframe.period, tend_ses2, tz))
-// SL tras el último bajo (alto) de swing; si no vale, el extremo de las últimas 5 velas
-ult_pl = ta.valuewhen(not na(pl), pl, 0)
-ult_ph = ta.valuewhen(not na(ph), ph, 0)
-bajo5 = ta.lowest(low, 5)
-alto5 = ta.highest(high, 5)
-td_sl_c = not na(ult_pl) and ult_pl < close ? math.min(ult_pl, bajo5) : bajo5
-td_sl_v = not na(ult_ph) and ult_ph > close ? math.max(ult_ph, alto5) : alto5
-senal_tc = usar_tend and puede and not senal_c and not senal_v and dir_op != "Solo ventas" and en_horario and td_hora and td_alc and td_pull_c
-senal_tv = usar_tend and puede and not senal_c and not senal_v and not senal_tc and dir_op != "Solo compras" and en_horario and td_hora and td_baj and td_pull_v
-senal_fc = usar_fr and puede and not senal_c and not senal_v and not senal_tc and not senal_tv and dir_op != "Solo ventas" and en_horario and fr_c and (not fr_bias or bias_c) and (not fr_estr or tend_sw == 1)
-senal_fv = usar_fr and puede and not senal_c and not senal_v and not senal_tc and not senal_tv and not senal_fc and dir_op != "Solo compras" and en_horario and fr_v and (not fr_bias or bias_v) and (not fr_estr or tend_sw == -1)
+senal_fc = usar_fr and puede and not senal_c and not senal_v and dir_op != "Solo ventas" and en_horario and fr_c and (not fr_bias or bias_c) and (not fr_estr or tend_sw == 1)
+senal_fv = usar_fr and puede and not senal_c and not senal_v and not senal_fc and dir_op != "Solo compras" and en_horario and fr_v and (not fr_bias or bias_v) and (not fr_estr or tend_sw == -1)
 
 // Objetivo: la liquidez más cercana en la dirección de la operación que dé el riesgo/beneficio mínimo;
 // si no hay ninguna, 2R
@@ -700,33 +667,6 @@ if senal_v
         dibujar(false, ent, sl, tp, "▼ SETUP " + str.tostring(punt_v) + "/6\nBarrido " + mv_txt + (smt_v ? " + SMT" : "") + "\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
         alert("▼ Setup de venta " + str.tostring(punt_v) + "/6 en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick) + " (" + tp_nom + ")", alert.freq_once_per_bar_close)
         mv_bar := na
-
-// Entrada de tendencia: a mercado al cierre del retroceso, SL tras el último bajo/alto de swing
-if senal_tc or senal_tv
-    compra = senal_tc
-    ent = close
-    sl = compra ? td_sl_c - sl_buf * atr : td_sl_v + sl_buf * atr
-    riesgo = compra ? ent - sl : sl - ent
-    // Riesgo razonable: ni tan pequeño que el ruido lo saque, ni más de 3 ATR
-    if riesgo >= 0.5 * atr and riesgo <= 3 * atr and (max_sl_atr == 0 or riesgo <= max_sl_atr * atr) and (max_sl_pts == 0 or riesgo <= max_sl_pts) and cabe_riesgo(riesgo)
-        [tp0, tp_nom0] = objetivo(ent, riesgo, compra)
-        tp = tend_tp_r > 0 ? (compra ? ent + tend_tp_r * riesgo : ent - tend_tp_r * riesgo) : tp0
-        tp_nom = tend_tp_r > 0 ? str.tostring(tend_tp_r) + "R" : tp_nom0
-        rr = math.abs(tp - ent) / riesgo
-        if compra
-            strategy.entry("Compra", strategy.long, comment="Tendencia")
-            strategy.exit("Salida compra", "Compra", stop=sl, limit=tp, comment_loss="SL", comment_profit="TP")
-        else
-            strategy.entry("Venta", strategy.short, comment="Tendencia")
-            strategy.exit("Salida venta", "Venta", stop=sl, limit=tp, comment_loss="SL", comment_profit="TP")
-        op_tp := tp
-        op_r  := riesgo
-        op_be := false
-        orden_bar := bar_index
-        ops_hoy += 1
-        op_setup := false
-        dibujar(compra, ent, sl, tp, (compra ? "▲ TENDENCIA" : "▼ TENDENCIA") + "\nRetroceso a la EMA 20\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
-        alert((compra ? "▲ Tendencia alcista" : "▼ Tendencia bajista") + ": retroceso a la EMA 20 en " + syminfo.ticker + ", entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick), alert.freq_once_per_bar_close)
 
 // Entrada por FVG respetado: a mercado, SL al otro lado del FVG
 if senal_fc
