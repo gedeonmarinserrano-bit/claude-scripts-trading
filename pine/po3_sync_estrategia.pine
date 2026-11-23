@@ -21,6 +21,8 @@
 //   6. Punto extra: SMT alcista con MES (o el índice que se elija).
 // Entrada en el FVG que deja el impulso (orden límite), SL bajo el mínimo de la manipulación y TP en la
 // siguiente liquidez por arriba con un riesgo/beneficio mínimo. Todo se calcula con velas cerradas.
+// Tercera entrada (opcional): ruptura confirmada de un rango (el mismo que dibuja el indicador), con SL
+// en la mitad del rango y TP en el objetivo medido.
 // Segunda entrada (opcional): FVG o IFVG respetado. Cuando el precio vuelve a un FVG del gráfico por primera
 // vez, mete la mecha dentro y la vela cierra fuera, a favor del FVG, se entra a mercado con el SL bajo
 // el FVG (compra) o sobre él (venta) y el TP en la siguiente liquidez. Dirección según los FVG de M15 (o el
@@ -96,6 +98,11 @@ estr_len   = input.int(7, "Velas", minval=3, maxval=30, group=g_fr, inline="estr
 usar_ifvg  = input.bool(true, "Incluir IFVG (FVG roto que pasa a soporte/resistencia)", group=g_fr, tooltip="Un FVG alcista que el precio rompe con un cierre por debajo pasa a ser IFVG bajista; si el precio vuelve a él y lo respeta (mecha dentro y cierre por debajo), es entrada de venta. Al revés para las compras. Vale en la temporalidad del gráfico: M1, M5 o M15. También cuenta para la dirección de M15.")
 fr_min_atr = input.float(0.15, "Tamaño mínimo del FVG (× ATR)", minval=0, step=0.05, group=g_fr)
 fr_vida    = input.int(100, "El FVG deja de valer tras … velas", minval=5, maxval=500, group=g_fr)
+
+g_rup      = "Entrada por ruptura de rango"
+usar_rup   = input.bool(true, "Entrar cuando se confirma la ruptura de un rango", group=g_rup, tooltip="Cuando una vela cierra fuera de la caja de un rango ya confirmado (la misma ruptura que el indicador marca con la flecha ▲/▼ Breakout), se entra a mercado a favor de la ruptura. SL en la mitad del rango y TP proyectando la altura del rango desde el borde roto (objetivo medido). Si el precio vuelve a meterse en el rango, el break even o el SL lo cierran.")
+rup_conf   = input.string("Al cierre de la vela de ruptura", "Confirmación", options=["Al cierre de la vela de ruptura", "Si la vela siguiente también cierra fuera"], group=g_rup)
+rup_sl     = input.string("Mitad del rango", "SL", options=["Mitad del rango", "Borde contrario del rango"], group=g_rup)
 
 g_smt      = "SMT (punto extra)"
 usar_smt   = input.bool(true, "Sumar un punto si hay SMT con el otro índice", group=g_smt)
@@ -687,6 +694,9 @@ if cerrada and not rg_activo and not rg_dorm and rg_cool <= 0 and rq_ok
     rg_bot    := rq_bot
     rg_activo := true
     rg_conf   := false
+int   ruptura = 0
+float rup_top = na
+float rup_bot = na
 if rg_activo and cerrada
     if close <= rg_top and close >= rg_bot
         if high > rg_top and high <= rg_top + 0.25 * atr_r
@@ -696,6 +706,11 @@ if rg_activo and cerrada
     rup_alc = close > rg_top + 0.15 * atr_r
     rup_baj = close < rg_bot - 0.15 * atr_r
     if rup_alc or rup_baj
+        // Ruptura de un rango confirmado: posible entrada
+        if rg_conf
+            ruptura := rup_alc ? 1 : -1
+            rup_top := rg_top
+            rup_bot := rg_bot
         if rg_conf
             rg_dorm   := true
             rg_dsince := bar_index
@@ -717,6 +732,32 @@ if rg_dorm and cerrada
         rg_dorm := false
         rg_ddir := 0
 dentro_rango = usar_rango and rg_activo
+// Ruptura confirmada: al cierre de la vela de ruptura, o si la vela siguiente también cierra fuera
+var int   rp_dir = 0
+var int   rp_bar = na
+var float rp_top = na
+var float rp_bot = na
+int   rup_ok  = 0
+float rup_ok_top = na
+float rup_ok_bot = na
+if cerrada
+    if rup_conf == "Al cierre de la vela de ruptura"
+        if ruptura != 0
+            rup_ok := ruptura
+            rup_ok_top := rup_top
+            rup_ok_bot := rup_bot
+    else
+        if rp_dir != 0 and bar_index == rp_bar + 1
+            if rp_dir == 1 ? close > rp_top : close < rp_bot
+                rup_ok := rp_dir
+                rup_ok_top := rp_top
+                rup_ok_bot := rp_bot
+            rp_dir := 0
+        if ruptura != 0
+            rp_dir := ruptura
+            rp_bar := bar_index
+            rp_top := rup_top
+            rp_bot := rup_bot
 mitad_ant = (pdh + pdl) / 2
 filtros_comunes = (not usar_atr or na(d_atr) or rango_hoy < d_atr) and (not usar_vix or na(vix_ant) or rango_hoy < pdc * vix_ant / 16 / 100)
 filtros_c = filtros_comunes and (not usar_desc or close < mitad_ant or close < d_open)
@@ -735,8 +776,10 @@ senal_c = puede and dir_op != "Solo ventas" and bias_c and en_horario and man_ok
 senal_v = puede and dir_op != "Solo compras" and bias_v and en_horario and man_ok_v and conf_v and punt_v >= punt_min and not senal_c
 dir15_ok_c = fr_dir == "FVG de M15" ? d15 == 1 : fr_dir == "Bias de H1" ? bias_c : true
 dir15_ok_v = fr_dir == "FVG de M15" ? d15 == -1 : fr_dir == "Bias de H1" ? bias_v : true
-senal_fc = usar_fr and puede and not senal_c and not senal_v and dir_op != "Solo ventas" and en_horario and fr_c and dir15_ok_c and (not fr_estr or tend_sw == 1)
-senal_fv = usar_fr and puede and not senal_c and not senal_v and not senal_fc and dir_op != "Solo compras" and en_horario and fr_v and dir15_ok_v and (not fr_estr or tend_sw == -1)
+senal_rc = usar_rup and puede and not senal_c and not senal_v and dir_op != "Solo ventas" and rup_ok == 1
+senal_rv = usar_rup and puede and not senal_c and not senal_v and dir_op != "Solo compras" and rup_ok == -1
+senal_fc = usar_fr and puede and not senal_c and not senal_v and not senal_rc and not senal_rv and dir_op != "Solo ventas" and en_horario and fr_c and dir15_ok_c and (not fr_estr or tend_sw == 1)
+senal_fv = usar_fr and puede and not senal_c and not senal_v and not senal_rc and not senal_rv and not senal_fc and dir_op != "Solo compras" and en_horario and fr_v and dir15_ok_v and (not fr_estr or tend_sw == -1)
 
 // Objetivo: la liquidez más cercana en la dirección de la operación que dé el riesgo/beneficio mínimo;
 // si no hay ninguna, 2R
@@ -856,6 +899,36 @@ if senal_fv
         ops_hoy += 1
         dibujar(false, ent, sl, tp, (fr_v_inv ? "▼ IFVG RESPETADO" : "▼ FVG RESPETADO") + "\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
         alert((fr_v_inv ? "▼ IFVG" : "▼ FVG") + " respetado, venta en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick) + " (" + tp_nom + ")", alert.freq_once_per_bar_close)
+
+// Entrada por ruptura de rango: a mercado, SL en la mitad (o el borde contrario) del rango y TP en el
+// objetivo medido (altura del rango proyectada desde el borde roto)
+if senal_rc or senal_rv
+    compra = senal_rc
+    alto_r = rup_ok_top
+    bajo_r = rup_ok_bot
+    altura = alto_r - bajo_r
+    ent = close
+    sl = rup_sl == "Mitad del rango" ? (alto_r + bajo_r) / 2 : (compra ? bajo_r : alto_r)
+    sl := compra ? sl - sl_buf * atr : sl + sl_buf * atr
+    tp = compra ? alto_r + altura : bajo_r - altura
+    riesgo = compra ? ent - sl : sl - ent
+    if tp_max_r > 0
+        tp := compra ? math.min(tp, ent + tp_max_r * riesgo) : math.max(tp, ent - tp_max_r * riesgo)
+    if riesgo > 0 and (compra ? tp > ent : tp < ent) and (max_sl_atr == 0 or riesgo <= max_sl_atr * atr) and (max_sl_pts == 0 or riesgo <= max_sl_pts) and cabe_riesgo(riesgo)
+        rr = math.abs(tp - ent) / riesgo
+        if compra
+            strategy.entry("Compra", strategy.long, comment="Ruptura rango")
+            strategy.exit("Salida compra", "Compra", stop=sl, limit=tp, comment_loss="SL", comment_profit="TP")
+        else
+            strategy.entry("Venta", strategy.short, comment="Ruptura rango")
+            strategy.exit("Salida venta", "Venta", stop=sl, limit=tp, comment_loss="SL", comment_profit="TP")
+        op_tp := tp
+        op_r  := riesgo
+        op_be := false
+        orden_bar := bar_index
+        ops_hoy += 1
+        dibujar(compra, ent, sl, tp, (compra ? "▲ RUPTURA DE RANGO" : "▼ RUPTURA DE RANGO") + "\nTP objetivo medido · RR " + str.tostring(rr, "#.#"))
+        alert((compra ? "▲ Ruptura alcista" : "▼ Ruptura bajista") + " de rango en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick), alert.freq_once_per_bar_close)
 
 // Break even: cuando la operación va ganando be_r veces el riesgo, el SL pasa al precio de entrada.
 // Cierre por tiempo: si lleva max_velas_op velas abierta, se cierra.
