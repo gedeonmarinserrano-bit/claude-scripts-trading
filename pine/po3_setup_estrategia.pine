@@ -21,7 +21,8 @@
 // siguiente liquidez por arriba con un riesgo/beneficio mínimo. Todo se calcula con velas cerradas.
 // Segunda entrada (opcional): FVG respetado. Cuando el precio vuelve a un FVG del gráfico por primera
 // vez, mete la mecha dentro y la vela cierra fuera, a favor del FVG, se entra a mercado con el SL bajo
-// el FVG (compra) o sobre él (venta) y el TP en la siguiente liquidez. Respeta el bias de H1, los rangos
+// el FVG (compra) o sobre él (venta) y el TP en la siguiente liquidez. Solo a favor del último CHoCH del
+// gráfico (opcional). Respeta el bias de H1, los rangos
 // y los límites de riesgo igual que el setup.
 // Franja sin operar (por defecto 12:00-16:00 Madrid = 06:00-10:00 NY), con botón para quitarla.
 // Tras 2 SL seguidos en el mismo día no se opera más hasta el día siguiente (se puede desactivar).
@@ -91,6 +92,7 @@ usar_fvg50 = input.bool(true, "Toque del 50 % de un FVG de M15 o H1", group=g_m)
 g_fr       = "Entrada por FVG respetado"
 usar_fr    = input.bool(true, "Entrar cuando un FVG se respeta", group=g_fr, tooltip="Primer regreso del precio a un FVG del gráfico: la mecha entra en el hueco y la vela cierra fuera, a favor del FVG (sin cerrar dentro ni al otro lado). Entrada a mercado, SL al otro lado del FVG y TP en la siguiente liquidez.")
 fr_bias    = input.bool(true, "Solo a favor del bias de H1 (y que H4 no vaya en contra)", group=g_fr)
+fr_estr    = input.bool(true, "Solo a favor de la estructura del gráfico (último CHoCH)", group=g_fr, tooltip="El bias de H1 tarda en girar. Si en el gráfico ya hay un CHoCH alcista (el precio ha roto estructura al alza), no se vende en FVG bajistas aunque H1 siga bajista, y al revés con las compras.")
 fr_min_atr = input.float(0.15, "Tamaño mínimo del FVG (× ATR)", minval=0, step=0.05, group=g_fr)
 fr_vida    = input.int(100, "El FVG deja de valer tras … velas", minval=5, maxval=500, group=g_fr)
 
@@ -541,8 +543,8 @@ punt_v = (bias_v ? 1 : 0) + (en_horario ? 1 : 0) + (man_ok_v ? 1 : 0) + (conf_v 
 puede  = operable and cerrada and strategy.position_size == 0 and ops_hoy < max_dia and not dentro_rango and not (cerrar_ses and fin_ny) and not parado_sl and not en_bloq
 senal_c = puede and dir_op != "Solo ventas" and bias_c and en_horario and man_ok_c and conf_c and punt_c >= punt_min
 senal_v = puede and dir_op != "Solo compras" and bias_v and en_horario and man_ok_v and conf_v and punt_v >= punt_min and not senal_c
-senal_fc = usar_fr and puede and not senal_c and not senal_v and dir_op != "Solo ventas" and en_horario and fr_c and (not fr_bias or bias_c)
-senal_fv = usar_fr and puede and not senal_c and not senal_v and not senal_fc and dir_op != "Solo compras" and en_horario and fr_v and (not fr_bias or bias_v)
+senal_fc = usar_fr and puede and not senal_c and not senal_v and dir_op != "Solo ventas" and en_horario and fr_c and (not fr_bias or bias_c) and (not fr_estr or tend == 1)
+senal_fv = usar_fr and puede and not senal_c and not senal_v and not senal_fc and dir_op != "Solo compras" and en_horario and fr_v and (not fr_bias or bias_v) and (not fr_estr or tend == -1)
 
 // Objetivo: la liquidez más cercana en la dirección de la operación que dé el riesgo/beneficio mínimo;
 // si no hay ninguna, 2R
