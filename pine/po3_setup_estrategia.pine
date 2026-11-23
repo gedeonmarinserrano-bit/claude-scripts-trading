@@ -118,11 +118,30 @@ col_v      = input.color(#E4002B, "Venta", group=g_v)
 ver_lineas = input.bool(true, "Dibujar entrada, SL y TP de cada señal", group=g_v)
 sep_etq    = input.float(2.0, "Separación de la etiqueta respecto a las velas (× ATR)", minval=0.5, step=0.5, group=g_v)
 
+g_ct       = "Automatización CrossTrade (Tradovate)"
+ct_on      = input.bool(false, "Mandar las órdenes a CrossTrade", group=g_ct, tooltip="Activado: los mensajes de alert() salen en el formato de CrossTrade (entrada con su SL y TP en el bróker, cierre y cancelación). Desactivado: salen los avisos de texto normales. La alerta de TradingView debe tener la condición 'Solo llamadas a la función alert()' y el webhook de CrossTrade; el cuadro de mensaje de la alerta no se usa.")
+ct_key     = input.string("", "Clave (key) de CrossTrade", group=g_ct, tooltip="La clave secreta de tu webhook de CrossTrade. No hagas capturas de esta ventana: quien tenga la clave puede mandar órdenes a tu cuenta.")
+ct_cuenta  = input.string("", "Cuenta", group=g_ct)
+ct_instr   = input.string("MNQ1!", "Instrumento", group=g_ct)
+ct_qty     = input.int(1, "Contratos", minval=1, maxval=50, group=g_ct)
+ct_cierre  = input.string("flatten", "Comando para cerrar la posición", group=g_ct, tooltip="Se manda al salir en break even, por tiempo, por pérdida máxima, al cerrar a las 22:00 y al cancelar una orden límite pendiente. Pruébalo sin posición abierta y mira el Signals feed de CrossTrade: si sale como comando desconocido, cámbialo aquí.")
+
 // ─────────────────────────────
 // DATOS BASE
 // ─────────────────────────────
 tz        = "America/New_York"
 atr       = ta.atr(14)
+// Mensajes para CrossTrade (formato clave=valor;)
+ct_px(float x) => str.tostring(math.round_to_mintick(x), format.mintick)
+ct_base() => "key=" + ct_key + ";account=" + ct_cuenta + ";instrument=" + ct_instr + ";destination=tradovate;"
+ct_entrada(bool largo, float lim, float sl, float tp, int cancel_min) =>
+    m = ct_base() + "command=place;action=" + (largo ? "buy" : "sell") + ";qty=" + str.tostring(ct_qty) + ";"
+    m += na(lim) ? "order_type=market;" : "order_type=limit;limit_price=" + ct_px(lim) + ";cancel_after=" + str.tostring(cancel_min) + ";"
+    m += "tif=day;flatten_first=true;stop_loss=" + ct_px(sl) + ";"
+    m += na(tp) ? "" : "take_profit=" + ct_px(tp) + ";"
+    m
+ct_cerrar() => ct_base() + "command=" + ct_cierre + ";"
+
 operable  = timeframe.isintraday and timeframe.in_seconds() <= 900   // M1 a M15
 cerrada   = barstate.isconfirmed
 min_ny    = hour(time, tz) * 60 + minute(time, tz)
@@ -564,9 +583,14 @@ var int sl_seg = 0
 var int n_cerr = 0
 if nuevo_dia
     sl_seg := 0
+// En CrossTrade el SL y el TP del bróker se quedan donde se pusieron al entrar. Si la estrategia sale por
+// otra vía (break even, tiempo, pérdida máxima del día…), al cierre de esa vela se manda cerrar también allí.
+var bool ct_flat_pend = false
 if strategy.closedtrades > n_cerr
     for i = n_cerr to strategy.closedtrades - 1
         sl_seg := strategy.closedtrades.exit_comment(i) == "SL" ? sl_seg + 1 : 0
+        if strategy.closedtrades.exit_comment(i) != "Cede al setup" and strategy.closedtrades.exit_comment(i) != "Cierre fin sesión NY"
+            ct_flat_pend := true
     n_cerr := strategy.closedtrades
 parado_sl = parar_sl and sl_seg >= n_sl_seg
 
@@ -762,6 +786,12 @@ var float op_tp = na
 var float op_r  = na
 var bool  op_be = false
 var float op_ber = na   // break even de la operación en curso (setup o FVG)
+// CrossTrade: orden mandada en esta vela, orden límite esperando en el bróker y minutos para cancelarla
+var bool ct_lim_pend = false
+ct_enviada = false
+ct_cancel_min = math.max(1, math.round((vence_lim + 1) * timeframe.in_seconds() / 60))
+if strategy.position_size != 0
+    ct_lim_pend := false
 
 if senal_c
     ent = na(mc_fvg) ? close : math.min(mc_fvg, close)
@@ -789,7 +819,12 @@ if senal_c
             ops_hoy += 1
         op_setup := true
         dibujar(true, ent, sl, tp, "▲ SETUP " + str.tostring(punt_c) + "/6\nBarrido " + mc_txt + (smt_c ? " + SMT" : "") + "\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
-        alert("▲ Setup de compra " + str.tostring(punt_c) + "/6 en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick) + " (" + tp_nom + ")", alert.freq_once_per_bar_close)
+        if ct_on
+            alert(ct_entrada(true, na(mc_fvg) ? na : ent, sl, tp, ct_cancel_min), alert.freq_once_per_bar_close)
+            ct_enviada := true
+            ct_lim_pend := not na(mc_fvg)
+        else
+            alert("▲ Setup de compra " + str.tostring(punt_c) + "/6 en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick) + " (" + tp_nom + ")", alert.freq_once_per_bar_close)
         mc_bar := na
 
 if senal_v
@@ -817,7 +852,12 @@ if senal_v
             ops_hoy += 1
         op_setup := true
         dibujar(false, ent, sl, tp, "▼ SETUP " + str.tostring(punt_v) + "/6\nBarrido " + mv_txt + (smt_v ? " + SMT" : "") + "\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
-        alert("▼ Setup de venta " + str.tostring(punt_v) + "/6 en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick) + " (" + tp_nom + ")", alert.freq_once_per_bar_close)
+        if ct_on
+            alert(ct_entrada(false, na(mv_fvg) ? na : ent, sl, tp, ct_cancel_min), alert.freq_once_per_bar_close)
+            ct_enviada := true
+            ct_lim_pend := not na(mv_fvg)
+        else
+            alert("▼ Setup de venta " + str.tostring(punt_v) + "/6 en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick) + " (" + tp_nom + ")", alert.freq_once_per_bar_close)
         mv_bar := na
 
 // Entrada por FVG respetado: a mercado, SL al otro lado del FVG
@@ -840,7 +880,12 @@ if senal_fc
         ops_hoy += 1
         op_setup := false
         dibujar(true, ent, sl, tp, "▲ FVG RESPETADO\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
-        alert("▲ FVG respetado, compra en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick) + " (" + tp_nom + ")", alert.freq_once_per_bar_close)
+        if ct_on
+            alert(ct_entrada(true, na, sl, tp, ct_cancel_min), alert.freq_once_per_bar_close)
+            ct_enviada := true
+            ct_lim_pend := false
+        else
+            alert("▲ FVG respetado, compra en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick) + " (" + tp_nom + ")", alert.freq_once_per_bar_close)
 
 if senal_fv
     ent = close
@@ -861,7 +906,12 @@ if senal_fv
         ops_hoy += 1
         op_setup := false
         dibujar(false, ent, sl, tp, "▼ FVG RESPETADO\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
-        alert("▼ FVG respetado, venta en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick) + " (" + tp_nom + ")", alert.freq_once_per_bar_close)
+        if ct_on
+            alert(ct_entrada(false, na, sl, tp, ct_cancel_min), alert.freq_once_per_bar_close)
+            ct_enviada := true
+            ct_lim_pend := false
+        else
+            alert("▼ FVG respetado, venta en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick) + " (" + tp_nom + ")", alert.freq_once_per_bar_close)
 
 // Break even: cuando la operación va ganando be_r veces el riesgo, el SL pasa al precio de entrada.
 // Cierre por tiempo: si lleva max_velas_op velas abierta, se cierra.
@@ -881,6 +931,10 @@ if strategy.position_size != 0 and cerrada
 if strategy.position_size == 0 and not na(orden_bar) and (bar_index - orden_bar > vence_lim or ((dentro_rango or en_bloq) and bar_index > orden_bar))
     strategy.cancel("Compra")
     strategy.cancel("Venta")
+    // En CrossTrade la caducidad la hace cancel_after; si se cancela antes (rango, franja sin operar), se manda cerrar
+    if ct_lim_pend and bar_index - orden_bar <= vence_lim
+        ct_flat_pend := true
+    ct_lim_pend := false
     orden_bar := na
 
 // Fin de la sesión de Nueva York: en su última vela se cierra lo abierto al cierre de esa misma vela
@@ -888,9 +942,19 @@ if strategy.position_size == 0 and not na(orden_bar) and (bar_index - orden_bar 
 if cerrar_ses and fin_ny
     strategy.cancel("Compra")
     strategy.cancel("Venta")
+    if strategy.position_size != 0 or ct_lim_pend
+        ct_flat_pend := true
+    ct_lim_pend := false
     orden_bar := na
     if strategy.position_size != 0
         strategy.close_all(comment="Cierre fin sesión NY", immediately=true)
+
+// CrossTrade: una sola orden de cierre por vela, y nunca en la vela en la que se manda una entrada
+// (la entrada ya lleva flatten_first=true, que cierra lo anterior antes de abrir)
+if ct_flat_pend and cerrada
+    if ct_on and not ct_enviada
+        alert(ct_cerrar(), alert.freq_once_per_bar_close)
+    ct_flat_pend := false
 
 // ─────────────────────────────
 // Fin del script (si al pegar falta esta línea, el código no se ha copiado entero)
