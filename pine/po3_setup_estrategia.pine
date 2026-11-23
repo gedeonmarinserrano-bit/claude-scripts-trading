@@ -80,6 +80,11 @@ rango_rot   = input.int(4, "Y el precio cruza su mitad al menos (veces)", minval
 rango_marg  = input.float(0.5, "Para salir del rango hay que cerrar fuera de la caja al menos (× ATR)", minval=0, step=0.25, group=g_r, tooltip="Una vez detectado, el rango se recuerda (su caja crece si el precio sigue lateral) y no se opera hasta que una vela cierra fuera de la caja con este margen. Así no se entra en las falsas rupturas del borde.")
 usar_chop   = input.bool(true, "También es rango si el Choppiness Index pasa del límite", group=g_r, inline="chop")
 chop_lim    = input.float(61.8, "", minval=40, maxval=80, step=0.1, group=g_r, inline="chop", tooltip="Choppiness Index de 14 velas: por encima de 61,8 el mercado va lateral; por debajo de 38,2 tiene tendencia.")
+usar_rq     = input.bool(true, "No operar las entradas de FVG dentro del rango del indicador", group=g_r, tooltip="Usa el mismo detector de rangos que dibuja el indicador (la caja de puntos 'RANGE … BARS', Auto Range Detector de QuantAlgo con sus mismos valores). Mientras la caja está activa no se abren entradas por FVG respetado; al romperse se vuelve a operar. Ojo: el indicador alarga la caja hacia atrás al detectarla; la estrategia solo puede saberlo desde que se detecta.")
+rq_setup    = input.bool(false, "Aplicarlo también al setup", group=g_r, tooltip="Desactivado por defecto: el setup ya tiene su propia confirmación (manipulación + CHoCH) y este detector lo bloquearía muchas veces.")
+rq_base     = input.int(20, "Velas mínimas para buscar un rango (igual que en el indicador)", minval=8, maxval=100, group=g_r)
+rq_toques   = input.int(2, "Toques mínimos en cada borde del rango (igual que en el indicador)", minval=1, maxval=10, group=g_r)
+rq_min      = input.int(10, "Duración mínima del rango en velas (igual que en el indicador)", minval=2, maxval=200, group=g_r)
 
 g_m        = "Manipulación válida"
 usar_pd    = input.bool(true, "Barrido del alto/bajo del día anterior", group=g_m)
@@ -554,6 +559,112 @@ if not na(rg_alto) and (close > rg_alto + rango_marg * atr or close < rg_bajo - 
 // Choppiness Index: mide si el precio se mueve lateral (alto) o con tendencia (bajo)
 chop = 100 * math.log10(math.sum(ta.atr(1), 14) / (ta.highest(high, 14) - ta.lowest(low, 14))) / math.log10(14)
 dentro_rango = usar_rango and (not na(rg_alto) or (usar_chop and chop > chop_lim))
+// Rangos: el mismo detector que el indicador (Auto Range Detector [QuantAlgo] © QuantAlgo, CC BY-NC-SA
+// 4.0, con sus mismos valores fijos). Busca ventanas de rq_base, 2× y 3× velas con poca altura para su
+// volatilidad, que rotan alrededor de su mitad, tocan los dos bordes y apenas tienen pendiente. Mientras
+// el rango está activo no se opera; se sale con un cierre fuera de la caja (0,15 ATR de 200); si el
+// precio vuelve a entrar en las 10 velas siguientes (ruptura fallida) el rango sigue activo.
+atr_r  = ta.atr(200)
+ctx_ok = not na(atr_r) and atr_r > 0
+scan_rng(simple int len) =>
+    top    = ta.percentile_linear_interpolation(high, len, 90.0)
+    bottom = ta.percentile_linear_interpolation(low, len, 10.0)
+    band   = top - bottom
+    compression = ctx_ok and band > 0 ? band / (atr_r * math.sqrt(len)) : 99.0
+    span_cap = bar_index < 1 ? 500 : int(math.max(1, math.min(500, bar_index - 200)))
+    rank   = ta.percentrank(compression, span_cap)
+    slope  = ta.linreg(close, len, 0) - ta.linreg(close, len, 1)
+    drift  = band > 0 ? math.abs(slope) * len / band : 99.0
+    mid    = math.avg(top, bottom)
+    tol    = 0.10 * nz(atr_r)
+    crossings = 0
+    hits_top = 0
+    hits_bottom = 0
+    contained = 0
+    for i = 0 to len - 1
+        if (close[i] > mid) != (close[i + 1] > mid)
+            crossings += 1
+        if high[i] >= top - tol
+            hits_top += 1
+        if low[i] <= bottom + tol
+            hits_bottom += 1
+        if close[i] <= top and close[i] >= bottom
+            contained += 1
+    containment = contained / float(len)
+    q = ctx_ok and not na(rank) and bar_index > len + 5 and rank <= 40.0 and crossings >= math.max(3, math.round(0.18 * len)) and hits_top >= rq_toques and hits_bottom >= rq_toques and drift <= 0.45 and containment >= 0.70
+    [q, top, bottom]
+anclar_rng(int window, float top_price, float bottom_price, float tolerance) =>
+    span = window
+    limit = math.min(300, bar_index)
+    allowed = math.max(2, math.round(0.30 * window))
+    outside = 0
+    offset = 0
+    while offset < limit and outside <= allowed
+        closed_in = close[offset] <= top_price and close[offset] >= bottom_price
+        fully_in = closed_in and high[offset] <= top_price + tolerance and low[offset] >= bottom_price - tolerance
+        if closed_in
+            outside := math.max(0, outside - 1)
+            if fully_in and offset + 1 >= window
+                span := offset + 1
+        else
+            outside += 1
+        offset += 1
+    span
+[rq_a, rt_a, rb_a] = scan_rng(rq_base)
+[rq_b, rt_b, rb_b] = scan_rng(rq_base * 2)
+[rq_c, rt_c, rb_c] = scan_rng(rq_base * 3)
+rq_ok   = rq_a or rq_b or rq_c
+rq_len  = rq_c ? rq_base * 3 : rq_b ? rq_base * 2 : rq_base
+rq_top  = rq_c ? rt_c : rq_b ? rt_b : rt_a
+rq_bot  = rq_c ? rb_c : rq_b ? rb_b : rb_a
+var bool  rg_activo = false
+var bool  rg_conf   = false
+var bool  rg_dorm   = false
+var float rg_top    = na
+var float rg_bot    = na
+var int   rg_left   = na
+var int   rg_dsince = na
+var int   rg_ddir   = 0
+var int   rg_cool   = 0
+if cerrada and rg_cool > 0
+    rg_cool -= 1
+if cerrada and not rg_activo and not rg_dorm and rg_cool <= 0 and rq_ok
+    rg_left   := bar_index - anclar_rng(rq_len, rq_top, rq_bot, 0.10 * atr_r) + 1
+    rg_top    := rq_top
+    rg_bot    := rq_bot
+    rg_activo := true
+    rg_conf   := false
+if rg_activo and cerrada
+    if close <= rg_top and close >= rg_bot
+        if high > rg_top and high <= rg_top + 0.25 * atr_r
+            rg_top := high
+        if low < rg_bot and low >= rg_bot - 0.25 * atr_r
+            rg_bot := low
+    rup_alc = close > rg_top + 0.15 * atr_r
+    rup_baj = close < rg_bot - 0.15 * atr_r
+    if rup_alc or rup_baj
+        if rg_conf
+            rg_dorm   := true
+            rg_dsince := bar_index
+            rg_ddir   := rup_alc ? 1 : -1
+        rg_activo := false
+        rg_conf   := false
+        rg_cool   := 3
+    else
+        rg_conf := bar_index - rg_left + 1 >= rq_min
+if rg_dorm and cerrada
+    vuelve = rg_ddir == 1 ? close <= rg_top : close >= rg_bot
+    if vuelve and bar_index > rg_dsince
+        rg_activo := true
+        rg_conf   := true
+        rg_dorm   := false
+        rg_ddir   := 0
+        rg_cool   := 0
+    else if bar_index - rg_dsince >= 10
+        rg_dorm := false
+        rg_ddir := 0
+// Rango del indicador: bloquea las entradas por FVG (y el setup si se elige)
+en_rango_ind = usar_rq and rg_activo
 mitad_ant = (pdh + pdl) / 2
 filtros_comunes = (not usar_atr or na(d_atr) or rango_hoy < d_atr) and (not usar_vix or na(vix_ant) or rango_hoy < pdc * vix_ant / 16 / 100)
 filtros_c = filtros_comunes and (not usar_desc or close < mitad_ant or close < d_open)
@@ -570,9 +681,9 @@ punt_v = (bias_v ? 1 : 0) + (en_horario ? 1 : 0) + (man_ok_v ? 1 : 0) + (conf_v 
 puede_b = operable and cerrada and not dentro_rango and not (cerrar_ses and fin_ny) and not ult_ny and not parado_sl and not en_bloq
 // Orden del setup esperando a llenarse: con prioridad, no se pisa con una entrada por FVG
 setup_pend = prio_setup and op_setup and strategy.position_size == 0 and not na(orden_bar)
-puede  = puede_b and strategy.position_size == 0 and ops_hoy < max_dia and not setup_pend
+puede  = puede_b and strategy.position_size == 0 and ops_hoy < max_dia and not setup_pend and not en_rango_ind
 // El setup: con prioridad tiene su cupo y puede entrar aunque haya una operación de FVG abierta
-puede_s = prio_setup ? puede_b and (strategy.position_size == 0 or not op_setup) and ops_setup < max_dia_setup : puede
+puede_s = (prio_setup ? puede_b and (strategy.position_size == 0 or not op_setup) and ops_setup < max_dia_setup : puede_b and strategy.position_size == 0 and ops_hoy < max_dia and not setup_pend) and not (rq_setup and en_rango_ind)
 senal_c = puede_s and dir_op != "Solo ventas" and bias_c and en_horario and man_ok_c and conf_c and punt_c >= punt_min
 senal_v = puede_s and dir_op != "Solo compras" and bias_v and en_horario and man_ok_v and conf_v and punt_v >= punt_min and not senal_c
 senal_fc = usar_fr and puede and not senal_c and not senal_v and dir_op != "Solo ventas" and en_horario and fr_c and (not fr_bias or bias_c) and (not fr_estr or tend_sw == 1)
