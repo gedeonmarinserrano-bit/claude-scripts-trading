@@ -56,7 +56,8 @@ g_rg       = "Gestión del riesgo"
 max_sl_atr = input.float(0, "SL máximo (× ATR): si el SL queda más lejos no se opera (0 = sin límite)", minval=0, step=0.25, group=g_rg)
 max_sl_pts = input.float(0, "SL máximo en puntos (0 = sin límite)", minval=0, step=1, group=g_rg)
 tp_max_r   = input.float(0, "TP máximo (R): si la liquidez está más lejos, el TP se pone aquí (0 = sin límite)", minval=0, step=0.5, group=g_rg)
-be_r       = input.float(1.0, "Mover el SL a la entrada (break even) al ir ganando … R (0 = no)", minval=0, step=0.25, group=g_rg)
+be_r       = input.float(1.0, "Mover el SL a la entrada (break even) al ir ganando … R (0 = no)", minval=0, step=0.25, group=g_rg, tooltip="Para las entradas por FVG respetado. El setup tiene su propio valor justo debajo.")
+be_setup   = input.float(1.0, "Break even del setup (R, 0 = no)", minval=0, step=0.1, group=g_rg, tooltip="El SL del setup va detrás del extremo de la manipulación y suele ser más ancho, así que muchas operaciones que acaban en SL llegan antes a ir ganando 0,5-0,8R. Con un valor menor que 1 (por ejemplo 0,7) el SL pasa antes a la entrada.")
 max_velas_op = input.int(0, "Cerrar la operación tras … velas abierta (0 = no)", minval=0, maxval=500, group=g_rg)
 cerrar_ses = input.bool(true, "No dejar nada abierto al terminar la sesión de Nueva York (16:00 NY = 22:00 Madrid)", group=g_rg, tooltip="En la última vela antes de las 16:00 NY se cierra la operación abierta y se cancela la orden pendiente. Esa vela ya no da señales.")
 min_fin_ny = input.int(30, "No abrir operaciones en los últimos … minutos de NY (0 = no)", minval=0, maxval=120, group=g_rg, tooltip="Por defecto, de 15:30 a 16:00 NY (21:30-22:00 Madrid) no se abren operaciones nuevas: no les da tiempo a desarrollarse y se cierran solas al final de la sesión.")
@@ -612,6 +613,7 @@ dibujar(bool compra, float ent, float sl, float tp, string txt) =>
 var float op_tp = na
 var float op_r  = na
 var bool  op_be = false
+var float op_ber = na   // break even de la operación en curso (setup o FVG)
 
 if senal_c
     ent = na(mc_fvg) ? close : math.min(mc_fvg, close)
@@ -631,6 +633,7 @@ if senal_c
         op_tp := tp
         op_r  := riesgo
         op_be := false
+        op_ber := be_setup
         orden_bar := bar_index
         if prio_setup
             ops_setup += 1
@@ -658,6 +661,7 @@ if senal_v
         op_tp := tp
         op_r  := riesgo
         op_be := false
+        op_ber := be_setup
         orden_bar := bar_index
         if prio_setup
             ops_setup += 1
@@ -683,6 +687,7 @@ if senal_fc
         op_tp := tp
         op_r  := riesgo
         op_be := false
+        op_ber := be_r
         orden_bar := bar_index
         ops_hoy += 1
         op_setup := false
@@ -703,6 +708,7 @@ if senal_fv
         op_tp := tp
         op_r  := riesgo
         op_be := false
+        op_ber := be_r
         orden_bar := bar_index
         ops_hoy += 1
         op_setup := false
@@ -714,7 +720,8 @@ if senal_fv
 if strategy.position_size != 0 and cerrada
     largo = strategy.position_size > 0
     entp  = strategy.position_avg_price
-    if be_r > 0 and not op_be and not na(op_r) and (largo ? high - entp >= be_r * op_r : entp - low >= be_r * op_r)
+    ber = na(op_ber) ? be_r : op_ber
+    if ber > 0 and not op_be and not na(op_r) and (largo ? high - entp >= ber * op_r : entp - low >= ber * op_r)
         op_be := true
         strategy.exit(largo ? "Salida compra" : "Salida venta", largo ? "Compra" : "Venta", stop=entp, limit=op_tp, comment_loss="BE", comment_profit="TP")
     if max_velas_op > 0 and bar_index - strategy.opentrades.entry_bar_index(0) >= max_velas_op
