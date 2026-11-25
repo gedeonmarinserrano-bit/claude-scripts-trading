@@ -41,6 +41,12 @@ dir_op     = input.string("Compras y ventas", "Operar", options=["Compras y vent
 horario    = input.string("Todo el horario de mercado", "Horario de las señales", options=["Todo el horario de mercado", "Solo apertura de Nueva York (15:30-17:00 Madrid)"], group=g_s)
 bloq_on    = input.bool(true, "No abrir operaciones de", group=g_s, inline="bloq")
 bloq_h     = input.session("0600-1000", "", group=g_s, inline="bloq", tooltip="Hora de Nueva York. Por defecto 06:00-10:00 NY = 12:00-16:00 Madrid: mediodía de Londres, datos de las 14:30 y primera media hora de NY. En la prueba de 130 operaciones esa franja perdió 1.091 $ en 26 operaciones. Las operaciones ya abiertas siguen con su gestión; las órdenes pendientes se cancelan.")
+bloq2_on   = input.bool(false, "Tampoco de", group=g_s, inline="bloq2")
+bloq2_h    = input.session("1400-1600", "", group=g_s, inline="bloq2", tooltip="Hora de Nueva York. 14:00-16:00 NY = 20:00-22:00 Madrid, la tarde de Nueva York: en la prueba de 110 operaciones (28 sep-23 nov) perdió 571 $ en 11 operaciones. Igual que la franja de arriba: no se abren operaciones y se cancelan las órdenes pendientes.")
+bloq3_on   = input.bool(false, "Tampoco de", group=g_s, inline="bloq3")
+bloq3_h    = input.session("0200-0300", "", group=g_s, inline="bloq3", tooltip="Hora de Nueva York. 02:00-03:00 NY = 08:00-09:00 Madrid: en la prueba perdió 165 $ en 10 operaciones (40 % de acierto).")
+bloq4_on   = input.bool(false, "Tampoco de", group=g_s, inline="bloq4")
+bloq4_h    = input.session("1800-1900", "", group=g_s, inline="bloq4", tooltip="Hora de Nueva York. 18:00-19:00 NY = 00:00-01:00 Madrid, apertura de Asia: en la prueba perdió 240 $ en 5 operaciones. Ojo: durante las semanas de cambio de hora de marzo y octubre-noviembre la diferencia con Madrid es de 5 horas, no 6.")
 punt_min   = input.int(4, "Puntuación mínima (de 6)", minval=4, maxval=6, group=g_s, tooltip="Bias, horario, manipulación y CHoCH son siempre obligatorios (4 puntos; con todo el horario de mercado, el horario se cumple siempre). Los filtros y la SMT suman uno cada uno. Dentro de un rango nunca hay señal.")
 piv_len    = input.int(3, "Sensibilidad de los pivotes (velas a cada lado)", minval=2, maxval=10, group=g_s)
 vent_manip = input.int(20, "Velas máximas entre la manipulación y el CHoCH", minval=3, maxval=60, group=g_s)
@@ -64,6 +70,8 @@ cerrar_ses = input.bool(true, "No dejar nada abierto al terminar la sesión de N
 min_fin_ny = input.int(30, "No abrir operaciones en los últimos … minutos de NY (0 = no)", minval=0, maxval=120, group=g_rg, tooltip="Por defecto, de 15:30 a 16:00 NY (21:30-22:00 Madrid) no se abren operaciones nuevas: no les da tiempo a desarrollarse y se cierran solas al final de la sesión.")
 parar_sl   = input.bool(true, "Dejar de operar hasta el día siguiente tras varios SL seguidos", group=g_rg, inline="psl")
 n_sl_seg   = input.int(2, "SL seguidos", minval=1, maxval=10, group=g_rg, inline="psl", tooltip="Cuenta solo las operaciones que terminan en su SL. Una operación ganadora o cerrada en break even corta la racha. Al empezar el día (18:00 NY) la cuenta vuelve a cero.")
+fondeo     = input.bool(false, "Evaluación de fondeo: ganancia máxima por día", group=g_rg, inline="fondeo")
+max_gan_dia = input.float(450, "$", minval=50, step=25, group=g_rg, inline="fondeo", tooltip="Para las reglas de consistencia de las cuentas de fondeo. El TP de cada operación se acerca lo necesario para que, si se cumple, la ganancia del día (operaciones cerradas, con comisiones) no pase de esta cifra. Cuando a la ganancia del día le quedan menos de 25 $ para el tope, no se abren más operaciones hasta el día siguiente. Las pérdidas no cambian.")
 max_perd_dia = input.float(300, "Pérdida máxima por día ($, 0 = sin límite)", minval=0, step=25, group=g_rg, tooltip="Cuenta lo perdido hoy (operaciones cerradas y la abierta). No se abre una operación si su SL, con comisiones y deslizamiento, haría pasar la pérdida del día de este límite. Si aun así se llega al límite (hueco de precio), se cierra todo y no se opera más ese día.")
 
 g_f        = "Filtros (suman un punto si se cumplen todos los activados)"
@@ -147,7 +155,7 @@ en_asia   = not na(time(timeframe.period, ses_asia_h, tz))
 en_lon    = not na(time(timeframe.period, ses_lon_h, tz))
 en_nys    = not na(time(timeframe.period, ses_ny_h, tz))
 nuevo_dia = timeframe.change("D")
-en_bloq   = bloq_on and not na(time(timeframe.period, bloq_h, tz))
+en_bloq   = (bloq_on and not na(time(timeframe.period, bloq_h, tz))) or (bloq2_on and not na(time(timeframe.period, bloq2_h, tz))) or (bloq3_on and not na(time(timeframe.period, bloq3_h, tz))) or (bloq4_on and not na(time(timeframe.period, bloq4_h, tz)))
 // Última vela de la sesión de Nueva York: la que termina a las 16:00 NY o después
 min_ny_fin = hour(time_close, tz) * 60 + minute(time_close, tz)
 fin_ny    = min_ny < 960 and (min_ny_fin >= 960 or min_ny_fin < min_ny)
@@ -167,6 +175,16 @@ coste_sl(float riesgo) =>
     riesgo * syminfo.pointvalue * cts + 2 * 0.5 * cts + 2 * syminfo.mintick * syminfo.pointvalue * cts
 cabe_riesgo(float riesgo) =>
     max_perd_dia == 0 or -math.min(res_hoy, 0) + coste_sl(riesgo) <= max_perd_dia
+// Evaluación de fondeo: lo que aún se puede ganar hoy (con comisión y deslizamiento de la operación)
+gan_libre = max_gan_dia - (strategy.netprofit - neto_ini_dia) - 2 * 0.5 * cts - 2 * syminfo.mintick * syminfo.pointvalue * cts
+tope_dia  = fondeo and gan_libre < 25
+// TP acercado para que la operación, si llega al TP, no haga pasar la ganancia del día del tope
+tope_tp(bool largo, float ent, float tp) =>
+    float r = tp
+    if fondeo
+        dist = math.floor(gan_libre / (syminfo.pointvalue * cts) / syminfo.mintick) * syminfo.mintick
+        r := largo ? math.min(tp, ent + dist) : math.max(tp, ent - dist)
+    r
 
 // Bias de una temporalidad superior: dirección de la última ruptura de estructura, con su vela ya
 // cerrada (no repinta)
@@ -729,7 +747,7 @@ man_ok_v = not na(mv_bar) and bar_index - mv_bar <= vent_manip + 1
 
 punt_c = (bias_c ? 1 : 0) + (en_horario ? 1 : 0) + (man_ok_c ? 1 : 0) + (conf_c ? 1 : 0) + (filtros_c ? 1 : 0) + (smt_c ? 1 : 0)
 punt_v = (bias_v ? 1 : 0) + (en_horario ? 1 : 0) + (man_ok_v ? 1 : 0) + (conf_v ? 1 : 0) + (filtros_v ? 1 : 0) + (smt_v ? 1 : 0)
-puede_b = operable and cerrada and not dentro_rango and not (cerrar_ses and fin_ny) and not ult_ny and not parado_sl and not en_bloq
+puede_b = operable and cerrada and not dentro_rango and not (cerrar_ses and fin_ny) and not ult_ny and not parado_sl and not en_bloq and not tope_dia
 // Orden del setup esperando a llenarse: con prioridad, no se pisa con una entrada por FVG
 setup_pend = prio_setup and op_setup and strategy.position_size == 0 and not na(orden_bar)
 puede  = puede_b and strategy.position_size == 0 and ops_hoy < max_dia and not setup_pend and not en_rango_ind
@@ -787,6 +805,9 @@ if senal_c
         [tp0, tp_nom0] = objetivo(ent, riesgo, true)
         tp = tp_max_r > 0 ? math.min(tp0, ent + tp_max_r * riesgo) : tp0
         tp_nom = tp < tp0 ? str.tostring(tp_max_r) + "R" : tp_nom0
+        tp_f = tope_tp(true, ent, tp)
+        tp_nom := tp_f != tp ? "tope del día" : tp_nom
+        tp := tp_f
         rr = (tp - ent) / riesgo
         if prio_setup and strategy.position_size != 0
             strategy.close_all(comment="Cede al setup", immediately=true, alert_message=ct_cerrar)
@@ -815,6 +836,9 @@ if senal_v
         [tp0, tp_nom0] = objetivo(ent, riesgo, false)
         tp = tp_max_r > 0 ? math.max(tp0, ent - tp_max_r * riesgo) : tp0
         tp_nom = tp > tp0 ? str.tostring(tp_max_r) + "R" : tp_nom0
+        tp_f = tope_tp(false, ent, tp)
+        tp_nom := tp_f != tp ? "tope del día" : tp_nom
+        tp := tp_f
         rr = (ent - tp) / riesgo
         if prio_setup and strategy.position_size != 0
             strategy.close_all(comment="Cede al setup", immediately=true, alert_message=ct_cerrar)
@@ -843,6 +867,9 @@ if senal_fc
         [tp0, tp_nom0] = objetivo(ent, riesgo, true)
         tp = tp_max_r > 0 ? math.min(tp0, ent + tp_max_r * riesgo) : tp0
         tp_nom = tp < tp0 ? str.tostring(tp_max_r) + "R" : tp_nom0
+        tp_f = tope_tp(true, ent, tp)
+        tp_nom := tp_f != tp ? "tope del día" : tp_nom
+        tp := tp_f
         rr = (tp - ent) / riesgo
         strategy.entry("Compra", strategy.long, comment="FVG respetado", alert_message=ct_entrada(true, sl, tp))
         strategy.exit("Salida compra", "Compra", stop=sl, limit=tp, comment_loss="SL", comment_profit="TP", alert_message=ct_cerrar)
@@ -864,6 +891,9 @@ if senal_fv
         [tp0, tp_nom0] = objetivo(ent, riesgo, false)
         tp = tp_max_r > 0 ? math.max(tp0, ent - tp_max_r * riesgo) : tp0
         tp_nom = tp > tp0 ? str.tostring(tp_max_r) + "R" : tp_nom0
+        tp_f = tope_tp(false, ent, tp)
+        tp_nom := tp_f != tp ? "tope del día" : tp_nom
+        tp := tp_f
         rr = (ent - tp) / riesgo
         strategy.entry("Venta", strategy.short, comment="FVG respetado", alert_message=ct_entrada(false, sl, tp))
         strategy.exit("Salida venta", "Venta", stop=sl, limit=tp, comment_loss="SL", comment_profit="TP", alert_message=ct_cerrar)
