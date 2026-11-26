@@ -110,7 +110,7 @@ usar_fvg50 = input.bool(true, "Toque del 50 % de un FVG de M15 o H1", group=g_m)
 g_fr       = "Entrada por FVG respetado"
 usar_fr    = input.bool(true, "Entrar cuando un FVG se respeta", group=g_fr, tooltip="Primer regreso del precio a un FVG del gráfico: la mecha entra en el hueco y la vela cierra fuera, a favor del FVG (sin cerrar dentro ni al otro lado). Entrada a mercado, SL al otro lado del FVG y TP en la siguiente liquidez.")
 fr_bias    = input.bool(true, "Solo a favor del bias de H1 (y que H4 no vaya en contra)", group=g_fr)
-fr_estr    = input.bool(true, "Solo a favor de la estructura swing del gráfico", group=g_fr, inline="estr", tooltip="El bias de H1 tarda en girar. Si en el gráfico el precio ya ha roto un alto de swing (estructura alcista), no se vende en FVG bajistas aunque H1 siga bajista, y al revés con las compras. Se usan pivotes swing (por defecto 10 velas a cada lado), no los internos, para que un pequeño retroceso no cambie la estructura.")
+fr_estr    = input.bool(false, "Solo a favor de la estructura swing del gráfico", group=g_fr, inline="estr", tooltip="El bias de H1 tarda en girar. Si en el gráfico el precio ya ha roto un alto de swing (estructura alcista), no se vende en FVG bajistas aunque H1 siga bajista, y al revés con las compras. Se usan pivotes swing (por defecto 10 velas a cada lado), no los internos, para que un pequeño retroceso no cambie la estructura.")
 estr_len   = input.int(10, "Velas", minval=3, maxval=30, group=g_fr, inline="estr")
 fr_min_atr = input.float(0.15, "Tamaño mínimo del FVG (× ATR)", minval=0, step=0.05, group=g_fr)
 fr_vida    = input.int(50, "El FVG deja de valer tras … velas", minval=5, maxval=500, group=g_fr)
