@@ -123,7 +123,8 @@ imp_atr    = input.float(2.5, "Recorrido mínimo del impulso (× ATR)", minval=1
 imp_cierre = input.float(0.3, "La última vela cierra en su … final (0,3 = en el 30 % más cercano al extremo)", minval=0.1, maxval=0.5, step=0.05, group=g_imp)
 imp_vol    = input.float(1.5, "Volumen mínimo (× la media de 20 velas, 0 = no mirar)", minval=0, step=0.1, group=g_imp)
 imp_rot    = input.int(20, "Tiene que romper el alto/bajo de las últimas … velas (0 = no)", minval=0, maxval=200, group=g_imp)
-imp_modo   = input.string("Retroceso al 50 %", "Entrada", options=["Retroceso al 50 %", "A mercado"], group=g_imp, tooltip="Retroceso al 50 %: orden límite en la mitad del impulso (si no vuelve en las velas de 'Velas para que el precio vuelva a la entrada', se cancela). A mercado: al cierre de la vela del impulso; entra siempre, pero con el SL más lejos.")
+imp_modo   = input.string("Retroceso", "Entrada", options=["Retroceso", "A mercado"], group=g_imp, inline="impent", tooltip="Retroceso: orden límite en el % del impulso que pongas al lado, medido desde su cierre (30 % = poco retroceso, se llena más; 50 % = la mitad, mejor precio pero muchas no se llenan). Si no se llena en las velas de 'Velas para que el precio vuelva a la entrada', se cancela. A mercado: al cierre de la vela del impulso; entra siempre, pero con el SL más lejos.")
+imp_ret    = input.float(30, "%", minval=5, maxval=80, step=5, group=g_imp, inline="impent")
 imp_tp     = input.float(2.0, "TP (R)", minval=0.5, step=0.25, group=g_imp)
 imp_bias   = input.bool(false, "Solo a favor del bias de H1", group=g_imp)
 
@@ -828,17 +829,22 @@ dibujar(bool compra, float ent, float sl, float tp, string txt) =>
     extremo = compra ? bajo10 : alto10
     y = compra ? extremo - sep_etq * atr : extremo + sep_etq * atr
     line.new(bar_index, compra ? low : high, bar_index, y, color=color.new(col, 40), style=line.style_dotted)
-    label.new(bar_index, y, txt, style=compra ? label.style_label_up : label.style_label_down, color=col, textcolor=color.white, size=size.small)
+    lbl = label.new(bar_index, y, txt, style=compra ? label.style_label_up : label.style_label_down, color=col, textcolor=color.white, size=size.small)
     if ver_lineas
         line.new(bar_index, ent, bar_index + 20, ent, color=color.new(#1565C0, 0), width=2)
         line.new(bar_index, sl, bar_index + 20, sl, color=color.new(col_v, 0), style=line.style_dashed)
         line.new(bar_index, tp, bar_index + 20, tp, color=color.new(col_c, 0), style=line.style_dashed)
+    lbl
 
 // Datos de la operación en curso, para el break even
 var float op_tp = na
 var float op_r  = na
 var bool  op_be = false
 var float op_ber = na   // break even de la operación en curso (setup o FVG)
+// Etiqueta de la última señal y operaciones cerradas en ese momento: si su orden se cancela sin llenarse,
+// la etiqueta se pone gris con "no entró"
+var label ult_lbl = na
+var int   ult_ct  = 0
 
 if senal_c
     ent = na(mc_fvg) ? close : math.min(mc_fvg, close)
@@ -868,7 +874,8 @@ if senal_c
         else
             ops_hoy += 1
         op_setup := true
-        dibujar(true, ent, sl, tp, "▲ SETUP " + str.tostring(punt_c) + "/6\nBarrido " + mc_txt + (smt_c ? " + SMT" : "") + "\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
+        ult_lbl := dibujar(true, ent, sl, tp, "▲ SETUP " + str.tostring(punt_c) + "/6\nBarrido " + mc_txt + (smt_c ? " + SMT" : "") + "\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
+        ult_ct := strategy.closedtrades
         alert("▲ Setup de compra " + str.tostring(punt_c) + "/6 en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick) + " (" + tp_nom + ")", alert.freq_once_per_bar_close)
         mc_bar := na
 
@@ -899,7 +906,8 @@ if senal_v
         else
             ops_hoy += 1
         op_setup := true
-        dibujar(false, ent, sl, tp, "▼ SETUP " + str.tostring(punt_v) + "/6\nBarrido " + mv_txt + (smt_v ? " + SMT" : "") + "\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
+        ult_lbl := dibujar(false, ent, sl, tp, "▼ SETUP " + str.tostring(punt_v) + "/6\nBarrido " + mv_txt + (smt_v ? " + SMT" : "") + "\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
+        ult_ct := strategy.closedtrades
         alert("▼ Setup de venta " + str.tostring(punt_v) + "/6 en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick) + " (" + tp_nom + ")", alert.freq_once_per_bar_close)
         mv_bar := na
 
@@ -925,7 +933,8 @@ if senal_fc
         orden_bar := bar_index
         ops_hoy += 1
         op_setup := false
-        dibujar(true, ent, sl, tp, "▲ FVG RESPETADO\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
+        ult_lbl := dibujar(true, ent, sl, tp, "▲ FVG RESPETADO\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
+        ult_ct := strategy.closedtrades
         alert("▲ FVG respetado, compra en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick) + " (" + tp_nom + ")", alert.freq_once_per_bar_close)
 
 if senal_fv
@@ -949,14 +958,15 @@ if senal_fv
         orden_bar := bar_index
         ops_hoy += 1
         op_setup := false
-        dibujar(false, ent, sl, tp, "▼ FVG RESPETADO\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
+        ult_lbl := dibujar(false, ent, sl, tp, "▼ FVG RESPETADO\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
+        ult_ct := strategy.closedtrades
         alert("▼ FVG respetado, venta en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick) + " (" + tp_nom + ")", alert.freq_once_per_bar_close)
 
-// Entrada por impulso: a favor del movimiento brusco, en su 50 % (orden límite) o a mercado; SL al otro
+// Entrada por impulso: a favor del movimiento brusco, en un retroceso (orden límite) o a mercado; SL al otro
 // lado del impulso y TP a imp_tp R
 if senal_ic
     a_merc = imp_modo == "A mercado"
-    ent = a_merc ? close : math.round_to_mintick((close + imp_ext_c) / 2)
+    ent = a_merc ? close : math.round_to_mintick(close - imp_ret / 100 * (close - imp_ext_c))
     sl = imp_ext_c - sl_buf * atr
     riesgo = ent - sl
     if riesgo > 0 and (max_sl_atr == 0 or riesgo <= max_sl_atr * atr) and (max_sl_pts == 0 or riesgo <= max_sl_pts) and cabe_riesgo(riesgo)
@@ -971,12 +981,13 @@ if senal_ic
         orden_bar := bar_index
         ops_hoy += 1
         op_setup := false
-        dibujar(true, ent, sl, tp, "▲ IMPULSO\nTP " + str.tostring(rr, "#.#") + "R")
+        ult_lbl := dibujar(true, ent, sl, tp, "▲ IMPULSO\nTP " + str.tostring(rr, "#.#") + "R")
+        ult_ct := strategy.closedtrades
         alert("▲ Impulso, compra en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick), alert.freq_once_per_bar_close)
 
 if senal_iv
     a_merc = imp_modo == "A mercado"
-    ent = a_merc ? close : math.round_to_mintick((close + imp_ext_v) / 2)
+    ent = a_merc ? close : math.round_to_mintick(close + imp_ret / 100 * (imp_ext_v - close))
     sl = imp_ext_v + sl_buf * atr
     riesgo = sl - ent
     if riesgo > 0 and (max_sl_atr == 0 or riesgo <= max_sl_atr * atr) and (max_sl_pts == 0 or riesgo <= max_sl_pts) and cabe_riesgo(riesgo)
@@ -991,7 +1002,8 @@ if senal_iv
         orden_bar := bar_index
         ops_hoy += 1
         op_setup := false
-        dibujar(false, ent, sl, tp, "▼ IMPULSO\nTP " + str.tostring(rr, "#.#") + "R")
+        ult_lbl := dibujar(false, ent, sl, tp, "▼ IMPULSO\nTP " + str.tostring(rr, "#.#") + "R")
+        ult_ct := strategy.closedtrades
         alert("▼ Impulso, venta en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick), alert.freq_once_per_bar_close)
 
 // Break even: cuando la operación va ganando be_r veces el riesgo, el SL pasa al precio de entrada.
@@ -1012,6 +1024,10 @@ if strategy.position_size != 0 and cerrada
 if strategy.position_size == 0 and not na(orden_bar) and (bar_index - orden_bar > vence_lim or ((dentro_rango or en_bloq) and bar_index > orden_bar))
     strategy.cancel("Compra")
     strategy.cancel("Venta")
+    if not na(ult_lbl) and strategy.opentrades == 0 and strategy.closedtrades == ult_ct
+        label.set_text(ult_lbl, label.get_text(ult_lbl) + "\n✕ no entró")
+        label.set_color(ult_lbl, color.gray)
+    ult_lbl := na
     orden_bar := na
 
 // Fin de la sesión de Nueva York: en su última vela se cierra lo abierto al cierre de esa misma vela
@@ -1019,6 +1035,10 @@ if strategy.position_size == 0 and not na(orden_bar) and (bar_index - orden_bar 
 if cerrar_ses and fin_ny
     strategy.cancel("Compra")
     strategy.cancel("Venta")
+    if not na(ult_lbl) and strategy.opentrades == 0 and strategy.closedtrades == ult_ct
+        label.set_text(ult_lbl, label.get_text(ult_lbl) + "\n✕ no entró")
+        label.set_color(ult_lbl, color.gray)
+    ult_lbl := na
     orden_bar := na
     if strategy.position_size != 0
         strategy.close_all(comment="Cierre fin sesión NY", immediately=true, alert_message=ct_cerrar)
