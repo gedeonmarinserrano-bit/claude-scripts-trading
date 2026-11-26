@@ -31,7 +31,7 @@
 // del límite y, si se llega a él, se cierra todo y no se opera más ese día).
 
 //@version=6
-strategy("Po3 Setup NY (pruebas)", shorttitle="Po3 Pruebas", overlay=true, initial_capital=10000, default_qty_type=strategy.fixed, default_qty_value=1, commission_type=strategy.commission.cash_per_contract, commission_value=0.5, slippage=1, pyramiding=0, calc_on_every_tick=false, process_orders_on_close=false, max_labels_count=500, max_lines_count=500)
+strategy("Po3 Setup NY (pruebas)", shorttitle="Po3 Pruebas", overlay=true, initial_capital=100000, default_qty_type=strategy.fixed, default_qty_value=1, commission_type=strategy.commission.cash_per_contract, commission_value=0.5, slippage=1, pyramiding=0, calc_on_every_tick=false, process_orders_on_close=false, max_labels_count=500, max_lines_count=500)
 
 // ─────────────────────────────
 // AJUSTES
@@ -41,27 +41,27 @@ dir_op     = input.string("Compras y ventas", "Operar", options=["Compras y vent
 horario    = input.string("Todo el horario de mercado", "Horario de las señales", options=["Todo el horario de mercado", "Solo apertura de Nueva York (15:30-17:00 Madrid)"], group=g_s)
 bloq_on    = input.bool(true, "No abrir operaciones de", group=g_s, inline="bloq")
 bloq_h     = input.session("0600-1000", "", group=g_s, inline="bloq", tooltip="Hora de Nueva York. Por defecto 06:00-10:00 NY = 12:00-16:00 Madrid: mediodía de Londres, datos de las 14:30 y primera media hora de NY. En la prueba de 130 operaciones esa franja perdió 1.091 $ en 26 operaciones. Las operaciones ya abiertas siguen con su gestión; las órdenes pendientes se cancelan.")
-bloq2_on   = input.bool(false, "Tampoco de", group=g_s, inline="bloq2")
-bloq2_h    = input.session("1400-1600", "", group=g_s, inline="bloq2", tooltip="Hora de Nueva York. 14:00-16:00 NY = 20:00-22:00 Madrid, la tarde de Nueva York: en la prueba de 110 operaciones (28 sep-23 nov) perdió 571 $ en 11 operaciones. Igual que la franja de arriba: no se abren operaciones y se cancelan las órdenes pendientes.")
+bloq2_on   = input.bool(true, "Tampoco de", group=g_s, inline="bloq2")
+bloq2_h    = input.session("1500-1900", "", group=g_s, inline="bloq2", tooltip="Hora de Nueva York. Por defecto 15:00-19:00 NY = 21:00-01:00 Madrid: no se abren operaciones de noche, después del cierre de NY (lo abierto a las 22:00 ya se cierra con la regla de fin de sesión). Para la tarde de NY (20:00-22:00 Madrid) se puede usar 14:00-16:00.")
 bloq3_on   = input.bool(false, "Tampoco de", group=g_s, inline="bloq3")
 bloq3_h    = input.session("0200-0300", "", group=g_s, inline="bloq3", tooltip="Hora de Nueva York. 02:00-03:00 NY = 08:00-09:00 Madrid: en la prueba perdió 165 $ en 10 operaciones (40 % de acierto).")
 bloq4_on   = input.bool(false, "Tampoco de", group=g_s, inline="bloq4")
 bloq4_h    = input.session("1800-1900", "", group=g_s, inline="bloq4", tooltip="Hora de Nueva York. 18:00-19:00 NY = 00:00-01:00 Madrid, apertura de Asia: en la prueba perdió 240 $ en 5 operaciones. Ojo: durante las semanas de cambio de hora de marzo y octubre-noviembre la diferencia con Madrid es de 5 horas, no 6.")
 punt_min   = input.int(4, "Puntuación mínima (de 6)", minval=4, maxval=6, group=g_s, tooltip="Bias, horario, manipulación y CHoCH son siempre obligatorios (4 puntos; con todo el horario de mercado, el horario se cumple siempre). Los filtros y la SMT suman uno cada uno. Dentro de un rango nunca hay señal.")
-piv_len    = input.int(3, "Sensibilidad de los pivotes (velas a cada lado)", minval=2, maxval=10, group=g_s)
-vent_manip = input.int(20, "Velas máximas entre la manipulación y el CHoCH", minval=3, maxval=60, group=g_s)
+piv_len    = input.int(5, "Sensibilidad de los pivotes (velas a cada lado)", minval=2, maxval=10, group=g_s)
+vent_manip = input.int(50, "Velas máximas entre la manipulación y el CHoCH", minval=3, maxval=60, group=g_s)
 min_rr     = input.float(1.5, "Riesgo/beneficio mínimo", minval=0.5, step=0.1, group=g_s)
 sl_buf     = input.float(0.1, "Margen del SL más allá de la manipulación (× ATR)", minval=0, step=0.05, group=g_s)
-vence_lim  = input.int(10, "Velas para que el precio vuelva a la entrada (si no, se cancela)", minval=1, maxval=50, group=g_s)
-max_dia    = input.int(2, "Máx. operaciones por día", minval=1, maxval=10, group=g_s, tooltip="Con 'Prioridad al setup' activada, este máximo es solo para las entradas por FVG respetado; el setup tiene su propio cupo.")
+vence_lim  = input.int(5, "Velas para que el precio vuelva a la entrada (si no, se cancela)", minval=1, maxval=50, group=g_s)
+max_dia    = input.int(11, "Máx. operaciones por día", minval=1, maxval=30, group=g_s, tooltip="Con 'Prioridad al setup' activada, este máximo es solo para las entradas por FVG respetado; el setup tiene su propio cupo.")
 prio_setup = input.bool(true, "Prioridad al setup", group=g_s, inline="prio", tooltip="El setup tiene su propio cupo diario (las entradas por FVG no se lo quitan) y, si cuando salta un setup hay abierta una operación de FVG, esta se cierra ('Cede al setup') y se entra en el setup. Mientras una orden del setup espera a llenarse no se abren entradas por FVG.")
-max_dia_setup = input.int(2, "Setups por día", minval=1, maxval=10, group=g_s, inline="prio")
+max_dia_setup = input.int(10, "Setups por día", minval=1, maxval=30, group=g_s, inline="prio")
 
 // Gestión del riesgo: limitar las pérdidas grandes
 g_rg       = "Gestión del riesgo"
 max_sl_atr = input.float(0, "SL máximo (× ATR): si el SL queda más lejos no se opera (0 = sin límite)", minval=0, step=0.25, group=g_rg)
 max_sl_pts = input.float(0, "SL máximo en puntos (0 = sin límite)", minval=0, step=1, group=g_rg)
-tp_max_r   = input.float(0, "TP máximo (R): si la liquidez está más lejos, el TP se pone aquí (0 = sin límite)", minval=0, step=0.5, group=g_rg)
+tp_max_r   = input.float(3, "TP máximo (R): si la liquidez está más lejos, el TP se pone aquí (0 = sin límite)", minval=0, step=0.5, group=g_rg)
 be_r       = input.float(1.0, "Mover el SL a la entrada (break even) al ir ganando … R (0 = no)", minval=0, step=0.25, group=g_rg, tooltip="Para las entradas por FVG respetado. El setup tiene su propio valor justo debajo.")
 be_setup   = input.float(0.5, "Break even del setup (R, 0 = no)", minval=0, step=0.1, group=g_rg, tooltip="El SL del setup va detrás del extremo de la manipulación y suele ser más ancho, así que muchas operaciones que acaban en SL llegan antes a ir ganando 0,5-0,8R. Con un valor menor que 1 (por ejemplo 0,7) el SL pasa antes a la entrada.")
 be_ticks   = input.int(20, "Break even con beneficio (ticks por encima de la entrada, 0 = en la entrada)", minval=0, maxval=40, group=g_rg, tooltip="Al pasar a break even el SL no se pone justo en la entrada sino unos ticks a favor, para cubrir comisión y deslizamiento y cerrar con una pequeña ganancia. En el MNQ 1 tick = 0,25 puntos = 0,50 $; 8 ticks = 2 puntos = 4 $. Las operaciones que hoy salen en BE con -1,5 $ pasarían a ser pequeñas ganadoras.")
@@ -71,18 +71,18 @@ min_fin_ny = input.int(30, "No abrir operaciones en los últimos … minutos de 
 parar_sl   = input.bool(true, "Dejar de operar hasta el día siguiente tras varios SL seguidos", group=g_rg, inline="psl")
 n_sl_seg   = input.int(2, "SL seguidos", minval=1, maxval=10, group=g_rg, inline="psl", tooltip="Cuenta solo las operaciones que terminan en su SL. Una operación ganadora o cerrada en break even corta la racha. Al empezar el día (18:00 NY) la cuenta vuelve a cero.")
 fondeo     = input.bool(false, "Evaluación de fondeo: ganancia máxima por día", group=g_rg, inline="fondeo")
-max_gan_dia = input.float(450, "$", minval=50, step=25, group=g_rg, inline="fondeo", tooltip="Para las reglas de consistencia de las cuentas de fondeo. El TP de cada operación se acerca lo necesario para que, si se cumple, la ganancia del día (operaciones cerradas, con comisiones) no pase de esta cifra. Cuando a la ganancia del día le quedan menos de 25 $ para el tope, no se abren más operaciones hasta el día siguiente. Las pérdidas no cambian.")
+max_gan_dia = input.float(425, "$", minval=50, step=25, group=g_rg, inline="fondeo", tooltip="Para las reglas de consistencia de las cuentas de fondeo. El TP de cada operación se acerca lo necesario para que, si se cumple, la ganancia del día (operaciones cerradas, con comisiones) no pase de esta cifra. Cuando a la ganancia del día le quedan menos de 25 $ para el tope, no se abren más operaciones hasta el día siguiente. Las pérdidas no cambian.")
 max_perd_dia = input.float(300, "Pérdida máxima por día ($, 0 = sin límite)", minval=0, step=25, group=g_rg, tooltip="Cuenta lo perdido hoy (operaciones cerradas y la abierta). No se abre una operación si su SL, con comisiones y deslizamiento, haría pasar la pérdida del día de este límite. Si aun así se llega al límite (hueco de precio), se cierra todo y no se opera más ese día.")
 
 g_f        = "Filtros (suman un punto si se cumplen todos los activados)"
 usar_h4    = input.bool(true, "H4 no puede ir en contra", group=g_f)
 usar_desc  = input.bool(true, "Comprar en descuento y vender en premium", group=g_f)
 usar_atr   = input.bool(true, "El rango de hoy no ha pasado el ATR diario", group=g_f)
-usar_vix   = input.bool(false, "El rango de hoy no ha pasado el movimiento esperado (VIX / 16)", group=g_f)
+usar_vix   = input.bool(true, "El rango de hoy no ha pasado el movimiento esperado (VIX / 16)", group=g_f)
 vix_sym    = input.symbol("CBOE:VIX", "Índice de volatilidad (para el Nasdaq también vale CBOE:VXN)", group=g_f)
 
 g_r        = "Rangos"
-usar_rango  = input.bool(true, "No operar dentro de un rango", group=g_r, tooltip="Activado: dentro de un rango no hay señales y se cancelan las órdenes pendientes. Desactivado: los rangos no se tienen en cuenta.")
+usar_rango  = input.bool(false, "No operar dentro de un rango", group=g_r, tooltip="Activado: dentro de un rango no hay señales y se cancelan las órdenes pendientes. Desactivado: los rangos no se tienen en cuenta.")
 rango_velas = input.int(30, "Velas que se miran para detectar el rango", minval=10, maxval=200, group=g_r)
 rango_atr   = input.float(3.0, "Es rango si su altura no pasa de (× ATR)", minval=1.0, step=0.5, group=g_r)
 rango_rot   = input.int(4, "Y el precio cruza su mitad al menos (veces)", minval=2, maxval=20, group=g_r)
@@ -113,7 +113,7 @@ fr_bias    = input.bool(true, "Solo a favor del bias de H1 (y que H4 no vaya en 
 fr_estr    = input.bool(true, "Solo a favor de la estructura swing del gráfico", group=g_fr, inline="estr", tooltip="El bias de H1 tarda en girar. Si en el gráfico el precio ya ha roto un alto de swing (estructura alcista), no se vende en FVG bajistas aunque H1 siga bajista, y al revés con las compras. Se usan pivotes swing (por defecto 10 velas a cada lado), no los internos, para que un pequeño retroceso no cambie la estructura.")
 estr_len   = input.int(10, "Velas", minval=3, maxval=30, group=g_fr, inline="estr")
 fr_min_atr = input.float(0.15, "Tamaño mínimo del FVG (× ATR)", minval=0, step=0.05, group=g_fr)
-fr_vida    = input.int(100, "El FVG deja de valer tras … velas", minval=5, maxval=500, group=g_fr)
+fr_vida    = input.int(50, "El FVG deja de valer tras … velas", minval=5, maxval=500, group=g_fr)
 fr_conf    = input.bool(false, "Esperar una vela de confirmación", group=g_fr, tooltip="No se entra en la vela que respeta el FVG sino en la siguiente, y solo si esta cierra a favor (por encima del cierre anterior en compras, por debajo en ventas) sin volver a meterse en el FVG. Filtra las entradas que se dan la vuelta al momento y saltan el SL en la misma vela o en la siguiente.")
 
 g_imp      = "Entrada por impulso (subidas y bajadas bruscas)"
@@ -129,8 +129,8 @@ imp_tp     = input.float(5.75, "TP (R)", minval=0.5, step=0.25, group=g_imp)
 imp_bias   = input.bool(true, "Solo a favor del bias de H1", group=g_imp)
 imp_estr   = input.bool(false, "Solo a favor de la estructura swing del gráfico", group=g_imp, tooltip="La misma estructura swing que usa el FVG respetado (ajuste 'Velas' de ese apartado): no se compra un impulso alcista si la estructura es bajista ni al revés. Quita muchas rupturas falsas que se dan la vuelta en una o dos velas.")
 imp_h_on   = input.bool(true, "Solo en estos horarios (hora de Madrid)", group=g_imp, tooltip="En la prueba de M5 (oct-nov) los impulsos de 03:00-08:00 y 15:00-19:00 de Madrid dieron casi todo el beneficio con pocos SL; los de 00:00-03:00 y 08:00-12:00 acumularon la mayoría de los SL.")
-imp_h1     = input.session("0300-0800", "Horario 1", group=g_imp, inline="imph")
-imp_h2     = input.session("1500-1900", "Horario 2", group=g_imp, inline="imph")
+imp_h1     = input.session("0200-0800", "Horario 1", group=g_imp, inline="imph")
+imp_h2     = input.session("1400-1700", "Horario 2", group=g_imp, inline="imph")
 imp_max_sl = input.int(1, "Sin más impulsos ese día tras … SL de impulso (0 = sin límite)", minval=0, maxval=10, group=g_imp)
 
 g_smt      = "SMT (punto extra)"
