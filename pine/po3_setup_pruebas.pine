@@ -618,7 +618,7 @@ if nuevo_dia
 if strategy.closedtrades > n_cerr
     for i = n_cerr to strategy.closedtrades - 1
         sl_seg := strategy.closedtrades.exit_comment(i) == "SL" ? sl_seg + 1 : 0
-        if strategy.closedtrades.entry_comment(i) == "Impulso" and strategy.closedtrades.exit_comment(i) == "SL"
+        if str.startswith(strategy.closedtrades.entry_comment(i), "Impulso") and strategy.closedtrades.exit_comment(i) == "SL"
             imp_sl_hoy += 1
     n_cerr := strategy.closedtrades
 parado_sl = parar_sl and sl_seg >= n_sl_seg
@@ -773,6 +773,10 @@ punt_v = (bias_v ? 1 : 0) + (en_horario ? 1 : 0) + (man_ok_v ? 1 : 0) + (conf_v 
 // volumen alto, y se rompe el alto/bajo de las imp_rot velas anteriores
 imp_atr_ref = atr[imp_n]
 imp_vol_ref = ta.sma(volume, 20)[imp_n]
+// Volumen relativo de la vela de la señal (volumen / media de las 20 anteriores). Se apunta en el nombre de
+// cada entrada (" · V1.4") para poder estudiar en el CSV con qué volumen salen los SL
+vol_rel  = volume / ta.sma(volume, 20)[1]
+vol_txt  = " · V" + str.tostring(vol_rel, "0.0")
 imp_rot_h   = ta.highest(high, math.max(imp_rot, 1))[imp_n]
 imp_rot_l   = ta.lowest(low, math.max(imp_rot, 1))[imp_n]
 // Busca, de 1 a imp_n velas hacia atrás, un tramo de velas todas del mismo color que recorra lo suficiente.
@@ -874,7 +878,7 @@ if senal_c
         rr = (tp - ent) / riesgo
         if prio_setup and strategy.position_size != 0
             strategy.close_all(comment="Cede al setup", immediately=true, alert_message=ct_cerrar)
-        strategy.entry("Compra", strategy.long, limit=na(mc_fvg) ? na : ent, comment="Setup " + str.tostring(punt_c) + "/6", alert_message=ct_entrada(true, sl, tp))
+        strategy.entry("Compra", strategy.long, limit=na(mc_fvg) ? na : ent, comment="Setup " + str.tostring(punt_c) + "/6" + vol_txt, alert_message=ct_entrada(true, sl, tp))
         strategy.exit("Salida compra", "Compra", stop=sl, limit=tp, comment_loss="SL", comment_profit="TP", alert_message=ct_cerrar)
         op_tp := tp
         op_r  := riesgo
@@ -906,7 +910,7 @@ if senal_v
         rr = (ent - tp) / riesgo
         if prio_setup and strategy.position_size != 0
             strategy.close_all(comment="Cede al setup", immediately=true, alert_message=ct_cerrar)
-        strategy.entry("Venta", strategy.short, limit=na(mv_fvg) ? na : ent, comment="Setup " + str.tostring(punt_v) + "/6", alert_message=ct_entrada(false, sl, tp))
+        strategy.entry("Venta", strategy.short, limit=na(mv_fvg) ? na : ent, comment="Setup " + str.tostring(punt_v) + "/6" + vol_txt, alert_message=ct_entrada(false, sl, tp))
         strategy.exit("Salida venta", "Venta", stop=sl, limit=tp, comment_loss="SL", comment_profit="TP", alert_message=ct_cerrar)
         op_tp := tp
         op_r  := riesgo
@@ -936,7 +940,7 @@ if senal_fc
         tp_nom := tp_f != tp ? "tope del día" : tp_nom
         tp := tp_f
         rr = (tp - ent) / riesgo
-        strategy.entry("Compra", strategy.long, comment="FVG respetado", alert_message=ct_entrada(true, sl, tp))
+        strategy.entry("Compra", strategy.long, comment="FVG respetado" + vol_txt, alert_message=ct_entrada(true, sl, tp))
         strategy.exit("Salida compra", "Compra", stop=sl, limit=tp, comment_loss="SL", comment_profit="TP", alert_message=ct_cerrar)
         op_tp := tp
         op_r  := riesgo
@@ -961,7 +965,7 @@ if senal_fv
         tp_nom := tp_f != tp ? "tope del día" : tp_nom
         tp := tp_f
         rr = (ent - tp) / riesgo
-        strategy.entry("Venta", strategy.short, comment="FVG respetado", alert_message=ct_entrada(false, sl, tp))
+        strategy.entry("Venta", strategy.short, comment="FVG respetado" + vol_txt, alert_message=ct_entrada(false, sl, tp))
         strategy.exit("Salida venta", "Venta", stop=sl, limit=tp, comment_loss="SL", comment_profit="TP", alert_message=ct_cerrar)
         op_tp := tp
         op_r  := riesgo
@@ -984,7 +988,7 @@ if senal_ic
     if riesgo > 0 and (max_sl_atr == 0 or riesgo <= max_sl_atr * atr) and (max_sl_pts == 0 or riesgo <= max_sl_pts) and cabe_riesgo(riesgo)
         tp = tope_tp(true, ent, ent + imp_tp * riesgo)
         rr = (tp - ent) / riesgo
-        strategy.entry("Compra", strategy.long, limit=a_merc ? na : ent, comment="Impulso", alert_message=ct_entrada(true, sl, tp))
+        strategy.entry("Compra", strategy.long, limit=a_merc ? na : ent, comment="Impulso" + vol_txt, alert_message=ct_entrada(true, sl, tp))
         strategy.exit("Salida compra", "Compra", stop=sl, limit=tp, comment_loss="SL", comment_profit="TP", alert_message=ct_cerrar)
         op_tp := tp
         op_r  := riesgo
@@ -1005,7 +1009,7 @@ if senal_iv
     if riesgo > 0 and (max_sl_atr == 0 or riesgo <= max_sl_atr * atr) and (max_sl_pts == 0 or riesgo <= max_sl_pts) and cabe_riesgo(riesgo)
         tp = tope_tp(false, ent, ent - imp_tp * riesgo)
         rr = (ent - tp) / riesgo
-        strategy.entry("Venta", strategy.short, limit=a_merc ? na : ent, comment="Impulso", alert_message=ct_entrada(false, sl, tp))
+        strategy.entry("Venta", strategy.short, limit=a_merc ? na : ent, comment="Impulso" + vol_txt, alert_message=ct_entrada(false, sl, tp))
         strategy.exit("Salida venta", "Venta", stop=sl, limit=tp, comment_loss="SL", comment_profit="TP", alert_message=ct_cerrar)
         op_tp := tp
         op_r  := riesgo
