@@ -115,6 +115,7 @@ estr_len   = input.int(10, "Velas", minval=3, maxval=30, group=g_fr, inline="est
 fr_min_atr = input.float(0.15, "Tamaño mínimo del FVG (× ATR)", minval=0, step=0.05, group=g_fr)
 fr_vida    = input.int(50, "El FVG deja de valer tras … velas", minval=5, maxval=500, group=g_fr)
 fr_conf    = input.bool(false, "Esperar una vela de confirmación", group=g_fr, tooltip="No se entra en la vela que respeta el FVG sino en la siguiente, y solo si esta cierra a favor (por encima del cierre anterior en compras, por debajo en ventas) sin volver a meterse en el FVG. Filtra las entradas que se dan la vuelta al momento y saltan el SL en la misma vela o en la siguiente.")
+fr_vol_min = input.float(0.65, "Volumen mínimo de la vela de entrada (× media de 20 velas, 0 = no mirar)", minval=0, step=0.05, group=g_fr, tooltip="En la prueba de M5 (5 oct-27 nov) los FVG respetados con la vela de entrada por debajo de 0,65 veces el volumen medio (V0.5-V0.6 en la lista de operaciones) dieron 11 operaciones, 7 SL y -472 $. Con volumen bajo el rechazo del FVG no tiene fuerza. El número V de cada entrada en la lista de operaciones es este mismo volumen relativo.")
 
 g_imp      = "Entrada por impulso (subidas y bajadas bruscas)"
 usar_imp   = input.bool(true, "Entrar en los impulsos", group=g_imp, tooltip="Movimientos bruscos que no son tendencia: una o pocas velas grandes, todas del mismo color, que recorren mucho más que el ATR, cierran cerca de su extremo, con volumen alto y rompiendo el alto o bajo de las últimas velas. Se entra a favor del impulso (por defecto en el retroceso al 50 %), con el SL al otro lado del impulso y el TP a un número fijo de R. No hace falta bias, manipulación ni estructura; sí se respetan las franjas sin operar, los rangos, la pérdida máxima, los SL seguidos y el cupo diario (el mismo que las entradas por FVG).")
@@ -811,8 +812,8 @@ puede  = puede_b and strategy.position_size == 0 and ops_hoy < max_dia and not s
 puede_s = (prio_setup ? puede_b and (strategy.position_size == 0 or not op_setup) and ops_setup < max_dia_setup : puede_b and strategy.position_size == 0 and ops_hoy < max_dia and not setup_pend) and not (rq_setup and en_rango_ind)
 senal_c = puede_s and dir_op != "Solo ventas" and bias_c and en_horario and man_ok_c and conf_c and punt_c >= punt_min
 senal_v = puede_s and dir_op != "Solo compras" and bias_v and en_horario and man_ok_v and conf_v and punt_v >= punt_min and not senal_c
-senal_fc = usar_fr and puede and not senal_c and not senal_v and dir_op != "Solo ventas" and en_horario and fc_ok and (not fr_bias or bias_c) and (not fr_estr or tend_sw == 1)
-senal_fv = usar_fr and puede and not senal_c and not senal_v and not senal_fc and dir_op != "Solo compras" and en_horario and fv_ok and (not fr_bias or bias_v) and (not fr_estr or tend_sw == -1)
+senal_fc = usar_fr and puede and not senal_c and not senal_v and dir_op != "Solo ventas" and en_horario and (fr_vol_min == 0 or vol_rel >= fr_vol_min) and fc_ok and (not fr_bias or bias_c) and (not fr_estr or tend_sw == 1)
+senal_fv = usar_fr and puede and not senal_c and not senal_v and not senal_fc and dir_op != "Solo compras" and en_horario and (fr_vol_min == 0 or vol_rel >= fr_vol_min) and fv_ok and (not fr_bias or bias_v) and (not fr_estr or tend_sw == -1)
 // Impulso: solo si en esa vela no hay setup ni FVG respetado, en su horario, a favor de la estructura y
 // sin haber llegado a los SL de impulso del día
 imp_hora_ok = not imp_h_on or not na(time(timeframe.period, imp_h1, "Europe/Madrid")) or not na(time(timeframe.period, imp_h2, "Europe/Madrid"))
