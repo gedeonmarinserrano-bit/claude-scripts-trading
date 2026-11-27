@@ -134,6 +134,7 @@ imp_h_on   = input.bool(true, "Solo en estos horarios (hora de Madrid)", group=g
 imp_h1     = input.session("0200-0800", "Horario 1", group=g_imp, inline="imph")
 imp_h2     = input.session("1400-1900", "Horario 2", group=g_imp, inline="imph")
 imp_max_sl = input.int(1, "Sin más impulsos ese día tras … SL de impulso (0 = sin límite)", minval=0, maxval=10, group=g_imp)
+imp_sin_bloq = input.bool(false, "Los impulsos pueden entrar en la franja 'No abrir operaciones de' (la de 12:00-16:00 Madrid)", group=g_imp, tooltip="La franja principal sin operar (por defecto 06:00-10:00 NY = 12:00-16:00 Madrid) se puso porque los setups y FVG perdían ahí, pero tapa el horario 2 de los impulsos (14:00-19:00) hasta las 16:00 y la apertura de NY (15:30), que es cuando hay más impulsos. Marcado: los impulsos no la respetan (las demás franjas 'Tampoco de' sí).")
 
 g_smt      = "SMT (punto extra)"
 usar_smt   = input.bool(true, "Sumar un punto si hay SMT con el otro índice", group=g_smt)
@@ -143,7 +144,7 @@ g_v        = "Visual"
 col_c      = input.color(#00A651, "Compra", group=g_v)
 col_v      = input.color(#E4002B, "Venta", group=g_v)
 ver_lineas = input.bool(true, "Dibujar entrada, SL y TP de cada señal", group=g_v)
-ver_imp_no = input.bool(true, "Explicar por qué no entra un impulso", group=g_v, tooltip="Cuando hay un movimiento brusco (velas del mismo color que recorren al menos el recorrido mínimo del impulso) y la estrategia no entra, se pone una etiqueta gris pequeña con los motivos: horario, bias H1, volumen, cierre, no rompe, operación abierta, ya hubo SL de impulso, cupo diario, franja bloqueada, etc. Solo es visual, no cambia las operaciones.")
+ver_imp_no = input.string("Solo impulsos válidos", "Explicar por qué no entra un impulso", options=["Solo impulsos válidos", "Todos los movimientos bruscos", "No"], group=g_v, tooltip="Etiqueta gris con los motivos cuando no entra un impulso. Solo impulsos válidos: el movimiento cumple todo lo del impulso (recorrido, cierre, volumen y rotura) y lo frena algún filtro (horario, bias, operación abierta, franja…). Todos los movimientos bruscos: también los que no llegan a ser impulso (salen muchas etiquetas). Solo es visual.")
 sep_etq    = input.float(2.0, "Separación de la etiqueta respecto a las velas (× ATR)", minval=0.5, step=0.5, group=g_v)
 
 g_ct       = "Automatización CrossTrade (Tradovate)"
@@ -175,7 +176,9 @@ en_asia   = not na(time(timeframe.period, ses_asia_h, tz))
 en_lon    = not na(time(timeframe.period, ses_lon_h, tz))
 en_nys    = not na(time(timeframe.period, ses_ny_h, tz))
 nuevo_dia = timeframe.change("D")
-en_bloq   = (bloq_on and not na(time(timeframe.period, bloq_h, tz))) or (bloq2_on and not na(time(timeframe.period, bloq2_h, tz))) or (bloq3_on and not na(time(timeframe.period, bloq3_h, tz))) or (bloq4_on and not na(time(timeframe.period, bloq4_h, tz)))
+en_bloq1  = bloq_on and not na(time(timeframe.period, bloq_h, tz))
+en_bloq   = en_bloq1 or (bloq2_on and not na(time(timeframe.period, bloq2_h, tz))) or (bloq3_on and not na(time(timeframe.period, bloq3_h, tz))) or (bloq4_on and not na(time(timeframe.period, bloq4_h, tz)))
+en_bloq_x = false or (bloq2_on and not na(time(timeframe.period, bloq2_h, tz))) or (bloq3_on and not na(time(timeframe.period, bloq3_h, tz))) or (bloq4_on and not na(time(timeframe.period, bloq4_h, tz)))   // solo las franjas "Tampoco de"
 // Última vela de la sesión de Nueva York: la que termina a las 16:00 NY o después
 min_ny_fin = hour(time_close, tz) * 60 + minute(time_close, tz)
 fin_ny    = min_ny < 960 and (min_ny_fin >= 960 or min_ny_fin < min_ny)
@@ -827,6 +830,9 @@ puede_b = operable and cerrada and not dentro_rango and not (cerrar_ses and fin_
 // Orden del setup esperando a llenarse: con prioridad, no se pisa con una entrada por FVG
 setup_pend = prio_setup and op_setup and strategy.position_size == 0 and not na(orden_bar)
 puede  = puede_b and strategy.position_size == 0 and ops_hoy < max_dia and not setup_pend and not en_rango_ind
+// Impulsos: como "puede", pero con la opción de no respetar la franja principal sin operar
+en_bloq_i = imp_sin_bloq ? en_bloq_x : en_bloq
+puede_i = operable and cerrada and not dentro_rango and not (cerrar_ses and fin_ny) and not ult_ny and not parado_sl and not en_bloq_i and not tope_dia and strategy.position_size == 0 and ops_hoy < max_dia and not setup_pend and not en_rango_ind
 // El setup: con prioridad tiene su cupo y puede entrar aunque haya una operación de FVG abierta
 puede_s = (prio_setup ? puede_b and (strategy.position_size == 0 or not op_setup) and ops_setup < max_dia_setup : puede_b and strategy.position_size == 0 and ops_hoy < max_dia and not setup_pend) and not (rq_setup and en_rango_ind)
 senal_c = puede_s and dir_op != "Solo ventas" and bias_c and en_horario and man_ok_c and conf_c and punt_c >= punt_min
@@ -837,8 +843,8 @@ senal_fv = usar_fr and puede and not senal_c and not senal_v and not senal_fc an
 // sin haber llegado a los SL de impulso del día
 imp_hora_ok = not imp_h_on or not na(time(timeframe.period, imp_h1, "Europe/Madrid")) or not na(time(timeframe.period, imp_h2, "Europe/Madrid"))
 imp_dia_ok  = imp_max_sl == 0 or imp_sl_hoy < imp_max_sl
-senal_ic = usar_imp and puede and not senal_c and not senal_v and not senal_fc and not senal_fv and dir_op != "Solo ventas" and en_horario and imp_c and (not imp_bias or bias_c or imp_fuerte_c) and (not imp_estr or tend_sw == 1) and imp_hora_ok and imp_dia_ok
-senal_iv = usar_imp and puede and not senal_c and not senal_v and not senal_fc and not senal_fv and not senal_ic and dir_op != "Solo compras" and en_horario and imp_v and (not imp_bias or bias_v or imp_fuerte_v) and (not imp_estr or tend_sw == -1) and imp_hora_ok and imp_dia_ok
+senal_ic = usar_imp and puede_i and not senal_c and not senal_v and not senal_fc and not senal_fv and dir_op != "Solo ventas" and en_horario and imp_c and (not imp_bias or bias_c or imp_fuerte_c) and (not imp_estr or tend_sw == 1) and imp_hora_ok and imp_dia_ok
+senal_iv = usar_imp and puede_i and not senal_c and not senal_v and not senal_fc and not senal_fv and not senal_ic and dir_op != "Solo compras" and en_horario and imp_v and (not imp_bias or bias_v or imp_fuerte_v) and (not imp_estr or tend_sw == -1) and imp_hora_ok and imp_dia_ok
 // Por qué no entra un impulso (solo visual)
 imp_motivos(bool compra) =>
     string r = ""
@@ -862,7 +868,7 @@ imp_motivos(bool compra) =>
         r += ", operación abierta"
     if ops_hoy >= max_dia
         r += ", cupo diario"
-    if en_bloq
+    if en_bloq_i
         r += ", franja bloqueada"
     if parado_sl
         r += ", SL seguidos"
@@ -879,10 +885,10 @@ imp_motivos(bool compra) =>
     if dir_op == (compra ? "Solo ventas" : "Solo compras") or not en_horario
         r += ", dirección/horario de señales"
     str.length(r) > 2 ? str.substring(r, 2) : "?"
-if ver_imp_no and usar_imp and cerrada and operable
-    if imp_cand_c and not imp_cand_c[1] and not senal_ic
+if ver_imp_no != "No" and usar_imp and cerrada and operable
+    if (ver_imp_no == "Todos los movimientos bruscos" ? imp_cand_c and not imp_cand_c[1] : imp_c and not imp_c[1]) and not senal_ic
         label.new(bar_index, low - 0.5 * atr, "✕ impulso ▲: " + imp_motivos(true), style=label.style_label_up, color=color.new(color.gray, 30), textcolor=color.white, size=size.tiny)
-    if imp_cand_v and not imp_cand_v[1] and not senal_iv
+    if (ver_imp_no == "Todos los movimientos bruscos" ? imp_cand_v and not imp_cand_v[1] : imp_v and not imp_v[1]) and not senal_iv
         label.new(bar_index, high + 0.5 * atr, "✕ impulso ▼: " + imp_motivos(false), style=label.style_label_down, color=color.new(color.gray, 30), textcolor=color.white, size=size.tiny)
 
 // Objetivo: la liquidez más cercana en la dirección de la operación que dé el riesgo/beneficio mínimo;
@@ -921,6 +927,7 @@ dibujar(bool compra, float ent, float sl, float tp, string txt) =>
 var float op_tp = na
 var float op_r  = na
 var bool  op_be = false
+var bool  imp_pend = false   // la orden pendiente es de un impulso
 var float op_ber = na   // break even de la operación en curso (setup o FVG)
 // Etiqueta de la última señal y operaciones cerradas en ese momento: si su orden se cancela sin llenarse,
 // la etiqueta se pone gris con "no entró"
@@ -955,6 +962,7 @@ if senal_c
         else
             ops_hoy += 1
         op_setup := true
+        imp_pend := false
         ult_lbl := dibujar(true, ent, sl, tp, "▲ SETUP " + str.tostring(punt_c) + "/6\nBarrido " + mc_txt + (smt_c ? " + SMT" : "") + "\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
         ult_ct := strategy.closedtrades
         alert("▲ Setup de compra " + str.tostring(punt_c) + "/6 en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick) + " (" + tp_nom + ")", alert.freq_once_per_bar_close)
@@ -987,6 +995,7 @@ if senal_v
         else
             ops_hoy += 1
         op_setup := true
+        imp_pend := false
         ult_lbl := dibujar(false, ent, sl, tp, "▼ SETUP " + str.tostring(punt_v) + "/6\nBarrido " + mv_txt + (smt_v ? " + SMT" : "") + "\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
         ult_ct := strategy.closedtrades
         alert("▼ Setup de venta " + str.tostring(punt_v) + "/6 en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick) + " (" + tp_nom + ")", alert.freq_once_per_bar_close)
@@ -1014,6 +1023,7 @@ if senal_fc
         orden_bar := bar_index
         ops_hoy += 1
         op_setup := false
+        imp_pend := false
         ult_lbl := dibujar(true, ent, sl, tp, "▲ FVG RESPETADO\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
         ult_ct := strategy.closedtrades
         alert("▲ FVG respetado, compra en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick) + " (" + tp_nom + ")", alert.freq_once_per_bar_close)
@@ -1039,6 +1049,7 @@ if senal_fv
         orden_bar := bar_index
         ops_hoy += 1
         op_setup := false
+        imp_pend := false
         ult_lbl := dibujar(false, ent, sl, tp, "▼ FVG RESPETADO\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
         ult_ct := strategy.closedtrades
         alert("▼ FVG respetado, venta en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick) + " (" + tp_nom + ")", alert.freq_once_per_bar_close)
@@ -1062,6 +1073,7 @@ if senal_ic
         orden_bar := bar_index
         ops_hoy += 1
         op_setup := false
+        imp_pend := true
         ult_lbl := dibujar(true, ent, sl, tp, "▲ IMPULSO\nTP " + str.tostring(rr, "#.#") + "R")
         ult_ct := strategy.closedtrades
         alert("▲ Impulso, compra en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick), alert.freq_once_per_bar_close)
@@ -1083,6 +1095,7 @@ if senal_iv
         orden_bar := bar_index
         ops_hoy += 1
         op_setup := false
+        imp_pend := true
         ult_lbl := dibujar(false, ent, sl, tp, "▼ IMPULSO\nTP " + str.tostring(rr, "#.#") + "R")
         ult_ct := strategy.closedtrades
         alert("▼ Impulso, venta en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick), alert.freq_once_per_bar_close)
@@ -1102,7 +1115,7 @@ if strategy.position_size != 0 and cerrada
 
 // Orden límite que no se llena a tiempo, o pendiente cuando el precio entra en rango o en la franja sin
 // operar: se cancela
-if strategy.position_size == 0 and not na(orden_bar) and (bar_index - orden_bar > vence_lim or ((dentro_rango or en_bloq) and bar_index > orden_bar))
+if strategy.position_size == 0 and not na(orden_bar) and (bar_index - orden_bar > vence_lim or ((dentro_rango or (imp_pend ? en_bloq_i : en_bloq)) and bar_index > orden_bar))
     strategy.cancel("Compra")
     strategy.cancel("Venta")
     if not na(ult_lbl) and strategy.opentrades == 0 and strategy.closedtrades == ult_ct
