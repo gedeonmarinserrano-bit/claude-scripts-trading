@@ -113,7 +113,6 @@ fr_bias    = input.bool(true, "Solo a favor del bias de H1 (y que H4 no vaya en 
 fr_estr    = input.bool(false, "Solo a favor de la estructura swing del gráfico", group=g_fr, inline="estr", tooltip="El bias de H1 tarda en girar. Si en el gráfico el precio ya ha roto un alto de swing (estructura alcista), no se vende en FVG bajistas aunque H1 siga bajista, y al revés con las compras. Se usan pivotes swing (por defecto 10 velas a cada lado), no los internos, para que un pequeño retroceso no cambie la estructura.")
 estr_len   = input.int(10, "Velas", minval=3, maxval=30, group=g_fr, inline="estr")
 fr_min_atr = input.float(0.15, "Tamaño mínimo del FVG (× ATR)", minval=0, step=0.05, group=g_fr)
-fr_toques  = input.int(1, "Toques que tiene que respetar el FVG para entrar", minval=1, maxval=3, group=g_fr, tooltip="1: se entra en el primer regreso que respeta el FVG (como siempre). 2: el primer toque que lo respeta solo lo confirma y se entra en el segundo, también respetándolo. Cada toque tiene que cerrar fuera del hueco a favor sin atravesarlo; si alguno cierra dentro o lo atraviesa, el FVG se descarta. Las velas seguidas que tocan el hueco cuentan como un solo toque: entre un toque y otro alguna vela tiene que salir del hueco.")
 fr_vida    = input.int(50, "El FVG deja de valer tras … velas", minval=5, maxval=500, group=g_fr)
 fr_conf    = input.bool(false, "Esperar una vela de confirmación", group=g_fr, tooltip="No se entra en la vela que respeta el FVG sino en la siguiente, y solo si esta cierra a favor (por encima del cierre anterior en compras, por debajo en ventas) sin volver a meterse en el FVG. Filtra las entradas que se dan la vuelta al momento y saltan el SL en la misma vela o en la siguiente.")
 fr_vol_min = input.float(0.65, "Volumen mínimo de la vela de entrada (× media de 20 velas, 0 = no mirar)", minval=0, step=0.05, group=g_fr, tooltip="En la prueba de M5 (5 oct-27 nov) los FVG respetados con la vela de entrada por debajo de 0,65 veces el volumen medio (V0.5-V0.6 en la lista de operaciones) dieron 11 operaciones, 7 SL y -472 $. Con volumen bajo el rechazo del FVG no tiene fuerza. El número V de cada entrada en la lista de operaciones es este mismo volumen relativo.")
@@ -321,94 +320,65 @@ fvg_ult() =>
 var array<float> fa_top = array.new<float>()
 var array<float> fa_bot = array.new<float>()
 var array<int>   fa_bar = array.new<int>()
-var array<int>   fa_n   = array.new<int>()   // toques que lo han respetado
-var array<int>   fa_ult = array.new<int>()   // vela del último toque
 var array<float> fb_top = array.new<float>()
 var array<float> fb_bot = array.new<float>()
 var array<int>   fb_bar = array.new<int>()
-var array<int>   fb_n   = array.new<int>()   // toques que lo han respetado
-var array<int>   fb_ult = array.new<int>()   // vela del último toque
 bool  fr_c = false
 bool  fr_v = false
 float fr_c_bot = na
 float fr_v_top = na
 if usar_fr and cerrada
-    // Alcistas: cada vez que el precio vuelve, el FVG se respeta (cierra por encima) o se
+    // Alcistas: si el precio vuelve por primera vez, el FVG se respeta (cierra por encima) o se
     // descarta (cierra dentro o por debajo); también caduca tras fr_vida velas
     for i = fa_top.size() - 1 to 0
         if fa_top.size() == 0
             break
         t_ = fa_top.get(i)
         b_ = fa_bot.get(i)
-        if low <= t_ and close > t_ and low >= b_ and (fr_toques > 1 and (fa_n.get(i) + 1 < fr_toques or fr_c) or bar_index - fa_ult.get(i) == 1)
-            // toque que lo respeta pero aún no es el de entrar (o vela seguida del mismo toque): sigue vivo
-            if bar_index - fa_ult.get(i) > 1
-                fa_n.set(i, fa_n.get(i) + 1)
-            fa_ult.set(i, bar_index)
-        else if low <= t_
+        if low <= t_
             if close > t_ and low >= b_ and not fr_c
                 fr_c := true
                 fr_c_bot := b_
             fa_top.remove(i)
             fa_bot.remove(i)
             fa_bar.remove(i)
-            fa_n.remove(i)
-            fa_ult.remove(i)
         else if bar_index - fa_bar.get(i) > fr_vida
             fa_top.remove(i)
             fa_bot.remove(i)
             fa_bar.remove(i)
-            fa_n.remove(i)
-            fa_ult.remove(i)
     for i = fb_top.size() - 1 to 0
         if fb_top.size() == 0
             break
         t_ = fb_top.get(i)
         b_ = fb_bot.get(i)
-        if high >= b_ and close < b_ and high <= t_ and (fr_toques > 1 and (fb_n.get(i) + 1 < fr_toques or fr_v) or bar_index - fb_ult.get(i) == 1)
-            if bar_index - fb_ult.get(i) > 1
-                fb_n.set(i, fb_n.get(i) + 1)
-            fb_ult.set(i, bar_index)
-        else if high >= b_
+        if high >= b_
             if close < b_ and high <= t_ and not fr_v
                 fr_v := true
                 fr_v_top := t_
             fb_top.remove(i)
             fb_bot.remove(i)
             fb_bar.remove(i)
-            fb_n.remove(i)
-            fb_ult.remove(i)
         else if bar_index - fb_bar.get(i) > fr_vida
             fb_top.remove(i)
             fb_bot.remove(i)
             fb_bar.remove(i)
-            fb_n.remove(i)
-            fb_ult.remove(i)
     // FVG nuevos (la vela actual cierra el hueco de tres velas)
     if low > high[2] and low - high[2] >= fr_min_atr * atr
         fa_top.push(low)
         fa_bot.push(high[2])
         fa_bar.push(bar_index)
-        fa_n.push(0)
-        fa_ult.push(-10)
         if fa_top.size() > 20
             fa_top.shift()
             fa_bot.shift()
             fa_bar.shift()
-            fa_n.shift()
-            fa_ult.shift()
     if high < low[2] and low[2] - high >= fr_min_atr * atr
         fb_top.push(low[2])
         fb_bot.push(high)
         fb_bar.push(bar_index)
-        fb_n.push(0)
-        fb_ult.push(-10)
         if fb_top.size() > 20
             fb_top.shift()
             fb_bot.shift()
             fb_bar.shift()
-            fb_n.shift()
-            fb_ult.shift()
 
 // Confirmación del FVG respetado: la vela siguiente tiene que cerrar a favor sin volver al FVG
 var int   frp_dir = 0
