@@ -143,6 +143,7 @@ g_v        = "Visual"
 col_c      = input.color(#00A651, "Compra", group=g_v)
 col_v      = input.color(#E4002B, "Venta", group=g_v)
 ver_lineas = input.bool(true, "Dibujar entrada, SL y TP de cada señal", group=g_v)
+ver_imp_no = input.bool(true, "Explicar por qué no entra un impulso", group=g_v, tooltip="Cuando hay un movimiento brusco (velas del mismo color que recorren al menos el recorrido mínimo del impulso) y la estrategia no entra, se pone una etiqueta gris pequeña con los motivos: horario, bias H1, volumen, cierre, no rompe, operación abierta, ya hubo SL de impulso, cupo diario, franja bloqueada, etc. Solo es visual, no cambia las operaciones.")
 sep_etq    = input.float(2.0, "Separación de la etiqueta respecto a las velas (× ATR)", minval=0.5, step=0.5, group=g_v)
 
 g_ct       = "Automatización CrossTrade (Tradovate)"
@@ -804,6 +805,20 @@ imp_detect(bool compra) =>
     rot_ok = imp_rot == 0 or (compra ? close > imp_rot_h : close < imp_rot_l)
     [ok and cierre_ok and rot_ok, ext]
 [imp_c, imp_ext_c] = imp_detect(true)
+// Candidato "geométrico" (solo velas del mismo color y recorrido), para explicar por qué no entra
+imp_cand(bool compra) =>
+    bool ok = false
+    bool mismo = true
+    float e = compra ? low : high
+    for k = 1 to imp_n
+        j = k - 1
+        mismo := mismo and (compra ? close[j] > open[j] : close[j] < open[j])
+        e := compra ? math.min(e, low[j]) : math.max(e, high[j])
+        if mismo and (compra ? close - e : e - close) >= imp_atr * imp_atr_ref
+            ok := true
+    ok
+imp_cand_c = imp_cand(true)
+imp_cand_v = imp_cand(false)
 [imp_v, imp_ext_v] = imp_detect(false)
 // Impulso muy fuerte: no necesita el bias de H1
 imp_fuerte_c = imp_fuerte > 0 and imp_c and close - imp_ext_c >= imp_fuerte * imp_atr_ref
@@ -824,6 +839,51 @@ imp_hora_ok = not imp_h_on or not na(time(timeframe.period, imp_h1, "Europe/Madr
 imp_dia_ok  = imp_max_sl == 0 or imp_sl_hoy < imp_max_sl
 senal_ic = usar_imp and puede and not senal_c and not senal_v and not senal_fc and not senal_fv and dir_op != "Solo ventas" and en_horario and imp_c and (not imp_bias or bias_c or imp_fuerte_c) and (not imp_estr or tend_sw == 1) and imp_hora_ok and imp_dia_ok
 senal_iv = usar_imp and puede and not senal_c and not senal_v and not senal_fc and not senal_fv and not senal_ic and dir_op != "Solo compras" and en_horario and imp_v and (not imp_bias or bias_v or imp_fuerte_v) and (not imp_estr or tend_sw == -1) and imp_hora_ok and imp_dia_ok
+// Por qué no entra un impulso (solo visual)
+imp_motivos(bool compra) =>
+    string r = ""
+    rango_v = high - low
+    if not (compra ? imp_c : imp_v)
+        if rango_v > 0 and (compra ? high - close > imp_cierre * rango_v : close - low > imp_cierre * rango_v)
+            r += ", cierre"
+        if imp_rot > 0 and (compra ? close <= imp_rot_h : close >= imp_rot_l)
+            r += ", no rompe " + str.tostring(imp_rot) + " velas"
+        if imp_vol > 0 and vol_rel < imp_vol
+            r += ", volumen V" + str.tostring(vol_rel, "0.0")
+    if not imp_hora_ok
+        r += ", horario"
+    if imp_bias and not (compra ? bias_c or imp_fuerte_c : bias_v or imp_fuerte_v)
+        r += ", bias H1"
+    if imp_estr and tend_sw != (compra ? 1 : -1)
+        r += ", estructura"
+    if not imp_dia_ok
+        r += ", ya hubo SL de impulso"
+    if strategy.position_size != 0
+        r += ", operación abierta"
+    if ops_hoy >= max_dia
+        r += ", cupo diario"
+    if en_bloq
+        r += ", franja bloqueada"
+    if parado_sl
+        r += ", SL seguidos"
+    if tope_dia
+        r += ", tope fondeo"
+    if dentro_rango or en_rango_ind
+        r += ", rango"
+    if (cerrar_ses and fin_ny) or ult_ny
+        r += ", fin de sesión"
+    if setup_pend
+        r += ", setup pendiente"
+    if senal_c or senal_v or senal_fc or senal_fv
+        r += ", otra entrada"
+    if dir_op == (compra ? "Solo ventas" : "Solo compras") or not en_horario
+        r += ", dirección/horario de señales"
+    str.length(r) > 2 ? str.substring(r, 2) : "?"
+if ver_imp_no and usar_imp and cerrada and operable
+    if imp_cand_c and not imp_cand_c[1] and not senal_ic
+        label.new(bar_index, low - 0.5 * atr, "✕ impulso ▲: " + imp_motivos(true), style=label.style_label_up, color=color.new(color.gray, 30), textcolor=color.white, size=size.tiny)
+    if imp_cand_v and not imp_cand_v[1] and not senal_iv
+        label.new(bar_index, high + 0.5 * atr, "✕ impulso ▼: " + imp_motivos(false), style=label.style_label_down, color=color.new(color.gray, 30), textcolor=color.white, size=size.tiny)
 
 // Objetivo: la liquidez más cercana en la dirección de la operación que dé el riesgo/beneficio mínimo;
 // si no hay ninguna, 2R
