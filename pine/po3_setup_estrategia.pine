@@ -25,7 +25,7 @@
 // del gráfico (opcional). Respeta el bias de H1, los rangos
 // y los límites de riesgo igual que el setup.
 // Franja sin operar (por defecto 12:00-16:00 Madrid = 06:00-10:00 NY), con botón para quitarla.
-// Tras 2 SL seguidos en el mismo día no se opera más hasta el día siguiente (se puede desactivar).
+// Tras 3 SL seguidos en el mismo día no se opera más hasta el día siguiente (se puede desactivar).
 // Riesgo diario: ninguna operación queda abierta al terminar la sesión de Nueva York (16:00 NY = 22:00
 // Madrid) y la pérdida del día no puede pasar de 300 $ (no se abre una operación cuyo SL la haría pasar
 // del límite y, si se llega a él, se cierra todo y no se opera más ese día).
@@ -42,7 +42,7 @@ horario    = input.string("Todo el horario de mercado", "Horario de las señales
 bloq_on    = input.bool(true, "No abrir operaciones de", group=g_s, inline="bloq")
 bloq_h     = input.session("0600-1000", "", group=g_s, inline="bloq", tooltip="Hora de Nueva York. Por defecto 06:00-10:00 NY = 12:00-16:00 Madrid: mediodía de Londres, datos de las 14:30 y primera media hora de NY. En la prueba de 130 operaciones esa franja perdió 1.091 $ en 26 operaciones. Las operaciones ya abiertas siguen con su gestión; las órdenes pendientes se cancelan.")
 bloq2_on   = input.bool(true, "Tampoco de", group=g_s, inline="bloq2")
-bloq2_h    = input.session("1500-1900", "", group=g_s, inline="bloq2", tooltip="Hora de Nueva York. Por defecto 15:00-19:00 NY = 21:00-01:00 Madrid: no se abren operaciones de noche, después del cierre de NY (lo abierto a las 22:00 ya se cierra con la regla de fin de sesión). Para la tarde de NY (20:00-22:00 Madrid) se puede usar 14:00-16:00.")
+bloq2_h    = input.session("1400-1900", "", group=g_s, inline="bloq2", tooltip="Hora de Nueva York. Por defecto 14:00-19:00 NY = 20:00-01:00 Madrid: no se abren operaciones de noche, después del cierre de NY (lo abierto a las 22:00 ya se cierra con la regla de fin de sesión). Para la tarde de NY (20:00-22:00 Madrid) se puede usar 14:00-16:00.")
 bloq3_on   = input.bool(false, "Tampoco de", group=g_s, inline="bloq3")
 bloq3_h    = input.session("0200-0300", "", group=g_s, inline="bloq3", tooltip="Hora de Nueva York. 02:00-03:00 NY = 08:00-09:00 Madrid: en la prueba perdió 165 $ en 10 operaciones (40 % de acierto).")
 bloq4_on   = input.bool(false, "Tampoco de", group=g_s, inline="bloq4")
@@ -53,7 +53,7 @@ vent_manip = input.int(50, "Velas máximas entre la manipulación y el CHoCH", m
 min_rr     = input.float(1.5, "Riesgo/beneficio mínimo", minval=0.5, step=0.1, group=g_s)
 sl_buf     = input.float(0.1, "Margen del SL más allá de la manipulación (× ATR)", minval=0, step=0.05, group=g_s)
 vence_lim  = input.int(5, "Velas para que el precio vuelva a la entrada (si no, se cancela)", minval=1, maxval=50, group=g_s)
-max_dia    = input.int(11, "Máx. operaciones por día", minval=1, maxval=30, group=g_s, tooltip="Con 'Prioridad al setup' activada, este máximo es solo para las entradas por FVG respetado; el setup tiene su propio cupo.")
+max_dia    = input.int(10, "Máx. operaciones por día", minval=1, maxval=30, group=g_s, tooltip="Con 'Prioridad al setup' activada, este máximo es solo para las entradas por FVG respetado; el setup tiene su propio cupo.")
 prio_setup = input.bool(true, "Prioridad al setup", group=g_s, inline="prio", tooltip="El setup tiene su propio cupo diario (las entradas por FVG no se lo quitan) y, si cuando salta un setup hay abierta una operación de FVG, esta se cierra ('Cede al setup') y se entra en el setup. Mientras una orden del setup espera a llenarse no se abren entradas por FVG.")
 max_dia_setup = input.int(10, "Setups por día", minval=1, maxval=30, group=g_s, inline="prio")
 
@@ -69,7 +69,7 @@ max_velas_op = input.int(0, "Cerrar la operación tras … velas abierta (0 = no
 cerrar_ses = input.bool(true, "No dejar nada abierto al terminar la sesión de Nueva York (16:00 NY = 22:00 Madrid)", group=g_rg, tooltip="En la última vela antes de las 16:00 NY se cierra la operación abierta y se cancela la orden pendiente. Esa vela ya no da señales.")
 min_fin_ny = input.int(30, "No abrir operaciones en los últimos … minutos de NY (0 = no)", minval=0, maxval=120, group=g_rg, tooltip="Por defecto, de 15:30 a 16:00 NY (21:30-22:00 Madrid) no se abren operaciones nuevas: no les da tiempo a desarrollarse y se cierran solas al final de la sesión.")
 parar_sl   = input.bool(true, "Dejar de operar hasta el día siguiente tras varios SL seguidos", group=g_rg, inline="psl")
-n_sl_seg   = input.int(2, "SL seguidos", minval=1, maxval=10, group=g_rg, inline="psl", tooltip="Cuenta solo las operaciones que terminan en su SL. Una operación ganadora o cerrada en break even corta la racha. Al empezar el día (18:00 NY) la cuenta vuelve a cero.")
+n_sl_seg   = input.int(3, "SL seguidos", minval=1, maxval=10, group=g_rg, inline="psl", tooltip="Cuenta solo las operaciones que terminan en su SL. Una operación ganadora o cerrada en break even corta la racha. Al empezar el día (18:00 NY) la cuenta vuelve a cero.")
 fondeo     = input.bool(false, "Evaluación de fondeo: ganancia máxima por día", group=g_rg, inline="fondeo")
 max_gan_dia = input.float(425, "$", minval=50, step=25, group=g_rg, inline="fondeo", tooltip="Para las reglas de consistencia de las cuentas de fondeo. El TP de cada operación se acerca lo necesario para que, si se cumple, la ganancia del día (operaciones cerradas, con comisiones) no pase de esta cifra. Cuando a la ganancia del día le quedan menos de 25 $ para el tope, no se abren más operaciones hasta el día siguiente. Las pérdidas no cambian.")
 max_perd_dia = input.float(300, "Pérdida máxima por día ($, 0 = sin límite)", minval=0, step=25, group=g_rg, tooltip="Cuenta lo perdido hoy (operaciones cerradas y la abierta). No se abre una operación si su SL, con comisiones y deslizamiento, haría pasar la pérdida del día de este límite. Si aun así se llega al límite (hueco de precio), se cierra todo y no se opera más ese día.")
@@ -82,7 +82,7 @@ usar_vix   = input.bool(true, "El rango de hoy no ha pasado el movimiento espera
 vix_sym    = input.symbol("CBOE:VIX", "Índice de volatilidad (para el Nasdaq también vale CBOE:VXN)", group=g_f)
 
 g_r        = "Rangos"
-usar_rango  = input.bool(false, "No operar dentro de un rango", group=g_r, tooltip="Activado: dentro de un rango no hay señales y se cancelan las órdenes pendientes. Desactivado: los rangos no se tienen en cuenta.")
+usar_rango  = input.bool(true, "No operar dentro de un rango", group=g_r, tooltip="Activado: dentro de un rango no hay señales y se cancelan las órdenes pendientes. Desactivado: los rangos no se tienen en cuenta.")
 rango_velas = input.int(30, "Velas que se miran para detectar el rango", minval=10, maxval=200, group=g_r)
 rango_atr   = input.float(3.0, "Es rango si su altura no pasa de (× ATR)", minval=1.0, step=0.5, group=g_r)
 rango_rot   = input.int(4, "Y el precio cruza su mitad al menos (veces)", minval=2, maxval=20, group=g_r)
@@ -113,7 +113,7 @@ fr_bias    = input.bool(true, "Solo a favor del bias de H1 (y que H4 no vaya en 
 fr_estr    = input.bool(false, "Solo a favor de la estructura swing del gráfico", group=g_fr, inline="estr", tooltip="El bias de H1 tarda en girar. Si en el gráfico el precio ya ha roto un alto de swing (estructura alcista), no se vende en FVG bajistas aunque H1 siga bajista, y al revés con las compras. Se usan pivotes swing (por defecto 10 velas a cada lado), no los internos, para que un pequeño retroceso no cambie la estructura.")
 estr_len   = input.int(10, "Velas", minval=3, maxval=30, group=g_fr, inline="estr")
 fr_min_atr = input.float(0.15, "Tamaño mínimo del FVG (× ATR)", minval=0, step=0.05, group=g_fr)
-fr_vida    = input.int(50, "El FVG deja de valer tras … velas", minval=5, maxval=500, group=g_fr)
+fr_vida    = input.int(18, "El FVG deja de valer tras … velas", minval=5, maxval=500, group=g_fr)
 fr_conf    = input.bool(false, "Esperar una vela de confirmación", group=g_fr, tooltip="No se entra en la vela que respeta el FVG sino en la siguiente, y solo si esta cierra a favor (por encima del cierre anterior en compras, por debajo en ventas) sin volver a meterse en el FVG. Filtra las entradas que se dan la vuelta al momento y saltan el SL en la misma vela o en la siguiente.")
 fr_vol_min = input.float(0.65, "Volumen mínimo de la vela de entrada (× media de 20 velas, 0 = no mirar)", minval=0, step=0.05, group=g_fr, tooltip="En la prueba de M5 (5 oct-27 nov) los FVG respetados con la vela de entrada por debajo de 0,65 veces el volumen medio (V0.5-V0.6 en la lista de operaciones) dieron 11 operaciones, 7 SL y -472 $. Con volumen bajo el rechazo del FVG no tiene fuerza. El número V de cada entrada en la lista de operaciones es este mismo volumen relativo.")
 
@@ -143,7 +143,7 @@ g_v        = "Visual"
 col_c      = input.color(#00A651, "Compra", group=g_v)
 col_v      = input.color(#E4002B, "Venta", group=g_v)
 ver_lineas = input.bool(true, "Dibujar entrada, SL y TP de cada señal", group=g_v)
-ver_imp_no = input.string("Solo impulsos válidos", "Explicar por qué no entra un impulso", options=["Solo impulsos válidos", "Todos los movimientos bruscos", "No"], group=g_v, tooltip="Etiqueta gris con los motivos cuando no entra un impulso. Solo impulsos válidos: el movimiento cumple todo lo del impulso (recorrido, cierre, volumen y rotura) y lo frena algún filtro (horario, bias, operación abierta, franja…). Todos los movimientos bruscos: también los que no llegan a ser impulso (salen muchas etiquetas). Solo es visual.")
+ver_imp_no = input.string("No", "Explicar por qué no entra un impulso", options=["Solo impulsos válidos", "Todos los movimientos bruscos", "No"], group=g_v, tooltip="Etiqueta gris con los motivos cuando no entra un impulso. Solo impulsos válidos: el movimiento cumple todo lo del impulso (recorrido, cierre, volumen y rotura) y lo frena algún filtro (horario, bias, operación abierta, franja…). Todos los movimientos bruscos: también los que no llegan a ser impulso (salen muchas etiquetas). Solo es visual.")
 sep_etq    = input.float(2.0, "Separación de la etiqueta respecto a las velas (× ATR)", minval=0.5, step=0.5, group=g_v)
 
 g_ct       = "Automatización CrossTrade (Tradovate)"
