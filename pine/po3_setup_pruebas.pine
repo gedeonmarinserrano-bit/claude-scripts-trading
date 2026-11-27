@@ -128,6 +128,7 @@ imp_modo   = input.string("Retroceso", "Entrada", options=["Retroceso", "A merca
 imp_ret    = input.float(30, "%", minval=5, maxval=80, step=5, group=g_imp, inline="impent")
 imp_tp     = input.float(5.75, "TP (R)", minval=0.5, step=0.25, group=g_imp)
 imp_bias   = input.bool(true, "Solo a favor del bias de H1", group=g_imp)
+imp_fuerte = input.float(0, "Sin filtro de bias si el impulso recorre al menos … × ATR (0 = no)", minval=0, step=0.25, group=g_imp, tooltip="Un impulso muy fuerte suele ser el propio giro del mercado, y en ese momento el bias de H1 todavía va en contra (ejemplo: la caída del 19 nov a las 16:15). Con un valor, por ejemplo 3, los impulsos que recorran al menos 3 veces el ATR entran aunque el bias de H1 no acompañe. 0 = desactivado: siempre se exige el bias si la casilla de arriba está marcada.")
 imp_estr   = input.bool(false, "Solo a favor de la estructura swing del gráfico", group=g_imp, tooltip="La misma estructura swing que usa el FVG respetado (ajuste 'Velas' de ese apartado): no se compra un impulso alcista si la estructura es bajista ni al revés. Quita muchas rupturas falsas que se dan la vuelta en una o dos velas.")
 imp_h_on   = input.bool(true, "Solo en estos horarios (hora de Madrid)", group=g_imp, tooltip="En la prueba de M5 (oct-nov) los impulsos de 03:00-08:00 y 15:00-19:00 de Madrid dieron casi todo el beneficio con pocos SL; los de 00:00-03:00 y 08:00-12:00 acumularon la mayoría de los SL.")
 imp_h1     = input.session("0200-0800", "Horario 1", group=g_imp, inline="imph")
@@ -804,6 +805,9 @@ imp_detect(bool compra) =>
     [ok and cierre_ok and rot_ok, ext]
 [imp_c, imp_ext_c] = imp_detect(true)
 [imp_v, imp_ext_v] = imp_detect(false)
+// Impulso muy fuerte: no necesita el bias de H1
+imp_fuerte_c = imp_fuerte > 0 and imp_c and close - imp_ext_c >= imp_fuerte * imp_atr_ref
+imp_fuerte_v = imp_fuerte > 0 and imp_v and imp_ext_v - close >= imp_fuerte * imp_atr_ref
 puede_b = operable and cerrada and not dentro_rango and not (cerrar_ses and fin_ny) and not ult_ny and not parado_sl and not en_bloq and not tope_dia
 // Orden del setup esperando a llenarse: con prioridad, no se pisa con una entrada por FVG
 setup_pend = prio_setup and op_setup and strategy.position_size == 0 and not na(orden_bar)
@@ -818,8 +822,8 @@ senal_fv = usar_fr and puede and not senal_c and not senal_v and not senal_fc an
 // sin haber llegado a los SL de impulso del día
 imp_hora_ok = not imp_h_on or not na(time(timeframe.period, imp_h1, "Europe/Madrid")) or not na(time(timeframe.period, imp_h2, "Europe/Madrid"))
 imp_dia_ok  = imp_max_sl == 0 or imp_sl_hoy < imp_max_sl
-senal_ic = usar_imp and puede and not senal_c and not senal_v and not senal_fc and not senal_fv and dir_op != "Solo ventas" and en_horario and imp_c and (not imp_bias or bias_c) and (not imp_estr or tend_sw == 1) and imp_hora_ok and imp_dia_ok
-senal_iv = usar_imp and puede and not senal_c and not senal_v and not senal_fc and not senal_fv and not senal_ic and dir_op != "Solo compras" and en_horario and imp_v and (not imp_bias or bias_v) and (not imp_estr or tend_sw == -1) and imp_hora_ok and imp_dia_ok
+senal_ic = usar_imp and puede and not senal_c and not senal_v and not senal_fc and not senal_fv and dir_op != "Solo ventas" and en_horario and imp_c and (not imp_bias or bias_c or imp_fuerte_c) and (not imp_estr or tend_sw == 1) and imp_hora_ok and imp_dia_ok
+senal_iv = usar_imp and puede and not senal_c and not senal_v and not senal_fc and not senal_fv and not senal_ic and dir_op != "Solo compras" and en_horario and imp_v and (not imp_bias or bias_v or imp_fuerte_v) and (not imp_estr or tend_sw == -1) and imp_hora_ok and imp_dia_ok
 
 // Objetivo: la liquidez más cercana en la dirección de la operación que dé el riesgo/beneficio mínimo;
 // si no hay ninguna, 2R
