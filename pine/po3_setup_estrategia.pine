@@ -41,27 +41,27 @@ dir_op     = input.string("Compras y ventas", "Operar", options=["Compras y vent
 horario    = input.string("Todo el horario de mercado", "Horario de las señales", options=["Todo el horario de mercado", "Solo apertura de Nueva York (15:30-17:00 Madrid)"], group=g_s)
 bloq_on    = input.bool(true, "No abrir operaciones de", group=g_s, inline="bloq")
 bloq_h     = input.session("0600-1000", "", group=g_s, inline="bloq", tooltip="Hora de Nueva York. Por defecto 06:00-10:00 NY = 12:00-16:00 Madrid: mediodía de Londres, datos de las 14:30 y primera media hora de NY. En la prueba de 130 operaciones esa franja perdió 1.091 $ en 26 operaciones. Las operaciones ya abiertas siguen con su gestión; las órdenes pendientes se cancelan.")
-bloq2_on   = input.bool(false, "Tampoco de", group=g_s, inline="bloq2")
-bloq2_h    = input.session("1400-1600", "", group=g_s, inline="bloq2", tooltip="Hora de Nueva York. 14:00-16:00 NY = 20:00-22:00 Madrid, la tarde de Nueva York: en la prueba de 110 operaciones (28 sep-23 nov) perdió 571 $ en 11 operaciones. Igual que la franja de arriba: no se abren operaciones y se cancelan las órdenes pendientes.")
+bloq2_on   = input.bool(true, "Tampoco de", group=g_s, inline="bloq2")
+bloq2_h    = input.session("1500-1900", "", group=g_s, inline="bloq2", tooltip="Hora de Nueva York. Por defecto 15:00-19:00 NY = 21:00-01:00 Madrid: no se abren operaciones de noche, después del cierre de NY (lo abierto a las 22:00 ya se cierra con la regla de fin de sesión). Para la tarde de NY (20:00-22:00 Madrid) se puede usar 14:00-16:00.")
 bloq3_on   = input.bool(false, "Tampoco de", group=g_s, inline="bloq3")
 bloq3_h    = input.session("0200-0300", "", group=g_s, inline="bloq3", tooltip="Hora de Nueva York. 02:00-03:00 NY = 08:00-09:00 Madrid: en la prueba perdió 165 $ en 10 operaciones (40 % de acierto).")
 bloq4_on   = input.bool(false, "Tampoco de", group=g_s, inline="bloq4")
 bloq4_h    = input.session("1800-1900", "", group=g_s, inline="bloq4", tooltip="Hora de Nueva York. 18:00-19:00 NY = 00:00-01:00 Madrid, apertura de Asia: en la prueba perdió 240 $ en 5 operaciones. Ojo: durante las semanas de cambio de hora de marzo y octubre-noviembre la diferencia con Madrid es de 5 horas, no 6.")
 punt_min   = input.int(4, "Puntuación mínima (de 6)", minval=4, maxval=6, group=g_s, tooltip="Bias, horario, manipulación y CHoCH son siempre obligatorios (4 puntos; con todo el horario de mercado, el horario se cumple siempre). Los filtros y la SMT suman uno cada uno. Dentro de un rango nunca hay señal.")
-piv_len    = input.int(3, "Sensibilidad de los pivotes (velas a cada lado)", minval=2, maxval=10, group=g_s)
-vent_manip = input.int(20, "Velas máximas entre la manipulación y el CHoCH", minval=3, maxval=60, group=g_s)
+piv_len    = input.int(5, "Sensibilidad de los pivotes (velas a cada lado)", minval=2, maxval=10, group=g_s)
+vent_manip = input.int(50, "Velas máximas entre la manipulación y el CHoCH", minval=3, maxval=60, group=g_s)
 min_rr     = input.float(1.5, "Riesgo/beneficio mínimo", minval=0.5, step=0.1, group=g_s)
 sl_buf     = input.float(0.1, "Margen del SL más allá de la manipulación (× ATR)", minval=0, step=0.05, group=g_s)
-vence_lim  = input.int(10, "Velas para que el precio vuelva a la entrada (si no, se cancela)", minval=1, maxval=50, group=g_s)
-max_dia    = input.int(10, "Máx. operaciones por día", minval=1, maxval=10, group=g_s, tooltip="Con 'Prioridad al setup' activada, este máximo es solo para las entradas por FVG respetado; el setup tiene su propio cupo.")
+vence_lim  = input.int(5, "Velas para que el precio vuelva a la entrada (si no, se cancela)", minval=1, maxval=50, group=g_s)
+max_dia    = input.int(11, "Máx. operaciones por día", minval=1, maxval=30, group=g_s, tooltip="Con 'Prioridad al setup' activada, este máximo es solo para las entradas por FVG respetado; el setup tiene su propio cupo.")
 prio_setup = input.bool(true, "Prioridad al setup", group=g_s, inline="prio", tooltip="El setup tiene su propio cupo diario (las entradas por FVG no se lo quitan) y, si cuando salta un setup hay abierta una operación de FVG, esta se cierra ('Cede al setup') y se entra en el setup. Mientras una orden del setup espera a llenarse no se abren entradas por FVG.")
-max_dia_setup = input.int(2, "Setups por día", minval=1, maxval=10, group=g_s, inline="prio")
+max_dia_setup = input.int(10, "Setups por día", minval=1, maxval=30, group=g_s, inline="prio")
 
 // Gestión del riesgo: limitar las pérdidas grandes
 g_rg       = "Gestión del riesgo"
 max_sl_atr = input.float(0, "SL máximo (× ATR): si el SL queda más lejos no se opera (0 = sin límite)", minval=0, step=0.25, group=g_rg)
 max_sl_pts = input.float(0, "SL máximo en puntos (0 = sin límite)", minval=0, step=1, group=g_rg)
-tp_max_r   = input.float(10, "TP máximo (R): si la liquidez está más lejos, el TP se pone aquí (0 = sin límite)", minval=0, step=0.5, group=g_rg)
+tp_max_r   = input.float(3, "TP máximo (R): si la liquidez está más lejos, el TP se pone aquí (0 = sin límite)", minval=0, step=0.5, group=g_rg)
 be_r       = input.float(1.0, "Mover el SL a la entrada (break even) al ir ganando … R (0 = no)", minval=0, step=0.25, group=g_rg, tooltip="Para las entradas por FVG respetado. El setup tiene su propio valor justo debajo.")
 be_setup   = input.float(0.5, "Break even del setup (R, 0 = no)", minval=0, step=0.1, group=g_rg, tooltip="El SL del setup va detrás del extremo de la manipulación y suele ser más ancho, así que muchas operaciones que acaban en SL llegan antes a ir ganando 0,5-0,8R. Con un valor menor que 1 (por ejemplo 0,7) el SL pasa antes a la entrada.")
 be_ticks   = input.int(20, "Break even con beneficio (ticks por encima de la entrada, 0 = en la entrada)", minval=0, maxval=40, group=g_rg, tooltip="Al pasar a break even el SL no se pone justo en la entrada sino unos ticks a favor, para cubrir comisión y deslizamiento y cerrar con una pequeña ganancia. En el MNQ 1 tick = 0,25 puntos = 0,50 $; 8 ticks = 2 puntos = 4 $. Las operaciones que hoy salen en BE con -1,5 $ pasarían a ser pequeñas ganadoras.")
@@ -71,18 +71,18 @@ min_fin_ny = input.int(30, "No abrir operaciones en los últimos … minutos de 
 parar_sl   = input.bool(true, "Dejar de operar hasta el día siguiente tras varios SL seguidos", group=g_rg, inline="psl")
 n_sl_seg   = input.int(2, "SL seguidos", minval=1, maxval=10, group=g_rg, inline="psl", tooltip="Cuenta solo las operaciones que terminan en su SL. Una operación ganadora o cerrada en break even corta la racha. Al empezar el día (18:00 NY) la cuenta vuelve a cero.")
 fondeo     = input.bool(false, "Evaluación de fondeo: ganancia máxima por día", group=g_rg, inline="fondeo")
-max_gan_dia = input.float(450, "$", minval=50, step=25, group=g_rg, inline="fondeo", tooltip="Para las reglas de consistencia de las cuentas de fondeo. El TP de cada operación se acerca lo necesario para que, si se cumple, la ganancia del día (operaciones cerradas, con comisiones) no pase de esta cifra. Cuando a la ganancia del día le quedan menos de 25 $ para el tope, no se abren más operaciones hasta el día siguiente. Las pérdidas no cambian.")
+max_gan_dia = input.float(425, "$", minval=50, step=25, group=g_rg, inline="fondeo", tooltip="Para las reglas de consistencia de las cuentas de fondeo. El TP de cada operación se acerca lo necesario para que, si se cumple, la ganancia del día (operaciones cerradas, con comisiones) no pase de esta cifra. Cuando a la ganancia del día le quedan menos de 25 $ para el tope, no se abren más operaciones hasta el día siguiente. Las pérdidas no cambian.")
 max_perd_dia = input.float(300, "Pérdida máxima por día ($, 0 = sin límite)", minval=0, step=25, group=g_rg, tooltip="Cuenta lo perdido hoy (operaciones cerradas y la abierta). No se abre una operación si su SL, con comisiones y deslizamiento, haría pasar la pérdida del día de este límite. Si aun así se llega al límite (hueco de precio), se cierra todo y no se opera más ese día.")
 
 g_f        = "Filtros (suman un punto si se cumplen todos los activados)"
 usar_h4    = input.bool(true, "H4 no puede ir en contra", group=g_f)
 usar_desc  = input.bool(true, "Comprar en descuento y vender en premium", group=g_f)
 usar_atr   = input.bool(true, "El rango de hoy no ha pasado el ATR diario", group=g_f)
-usar_vix   = input.bool(false, "El rango de hoy no ha pasado el movimiento esperado (VIX / 16)", group=g_f)
+usar_vix   = input.bool(true, "El rango de hoy no ha pasado el movimiento esperado (VIX / 16)", group=g_f)
 vix_sym    = input.symbol("CBOE:VIX", "Índice de volatilidad (para el Nasdaq también vale CBOE:VXN)", group=g_f)
 
 g_r        = "Rangos"
-usar_rango  = input.bool(true, "No operar dentro de un rango", group=g_r, tooltip="Activado: dentro de un rango no hay señales y se cancelan las órdenes pendientes. Desactivado: los rangos no se tienen en cuenta.")
+usar_rango  = input.bool(false, "No operar dentro de un rango", group=g_r, tooltip="Activado: dentro de un rango no hay señales y se cancelan las órdenes pendientes. Desactivado: los rangos no se tienen en cuenta.")
 rango_velas = input.int(30, "Velas que se miran para detectar el rango", minval=10, maxval=200, group=g_r)
 rango_atr   = input.float(3.0, "Es rango si su altura no pasa de (× ATR)", minval=1.0, step=0.5, group=g_r)
 rango_rot   = input.int(4, "Y el precio cruza su mitad al menos (veces)", minval=2, maxval=20, group=g_r)
@@ -110,11 +110,30 @@ usar_fvg50 = input.bool(true, "Toque del 50 % de un FVG de M15 o H1", group=g_m)
 g_fr       = "Entrada por FVG respetado"
 usar_fr    = input.bool(true, "Entrar cuando un FVG se respeta", group=g_fr, tooltip="Primer regreso del precio a un FVG del gráfico: la mecha entra en el hueco y la vela cierra fuera, a favor del FVG (sin cerrar dentro ni al otro lado). Entrada a mercado, SL al otro lado del FVG y TP en la siguiente liquidez.")
 fr_bias    = input.bool(true, "Solo a favor del bias de H1 (y que H4 no vaya en contra)", group=g_fr)
-fr_estr    = input.bool(true, "Solo a favor de la estructura swing del gráfico", group=g_fr, inline="estr", tooltip="El bias de H1 tarda en girar. Si en el gráfico el precio ya ha roto un alto de swing (estructura alcista), no se vende en FVG bajistas aunque H1 siga bajista, y al revés con las compras. Se usan pivotes swing (por defecto 10 velas a cada lado), no los internos, para que un pequeño retroceso no cambie la estructura.")
+fr_estr    = input.bool(false, "Solo a favor de la estructura swing del gráfico", group=g_fr, inline="estr", tooltip="El bias de H1 tarda en girar. Si en el gráfico el precio ya ha roto un alto de swing (estructura alcista), no se vende en FVG bajistas aunque H1 siga bajista, y al revés con las compras. Se usan pivotes swing (por defecto 10 velas a cada lado), no los internos, para que un pequeño retroceso no cambie la estructura.")
 estr_len   = input.int(10, "Velas", minval=3, maxval=30, group=g_fr, inline="estr")
 fr_min_atr = input.float(0.15, "Tamaño mínimo del FVG (× ATR)", minval=0, step=0.05, group=g_fr)
-fr_vida    = input.int(100, "El FVG deja de valer tras … velas", minval=5, maxval=500, group=g_fr)
+fr_vida    = input.int(50, "El FVG deja de valer tras … velas", minval=5, maxval=500, group=g_fr)
 fr_conf    = input.bool(false, "Esperar una vela de confirmación", group=g_fr, tooltip="No se entra en la vela que respeta el FVG sino en la siguiente, y solo si esta cierra a favor (por encima del cierre anterior en compras, por debajo en ventas) sin volver a meterse en el FVG. Filtra las entradas que se dan la vuelta al momento y saltan el SL en la misma vela o en la siguiente.")
+fr_vol_min = input.float(0.65, "Volumen mínimo de la vela de entrada (× media de 20 velas, 0 = no mirar)", minval=0, step=0.05, group=g_fr, tooltip="En la prueba de M5 (5 oct-27 nov) los FVG respetados con la vela de entrada por debajo de 0,65 veces el volumen medio (V0.5-V0.6 en la lista de operaciones) dieron 11 operaciones, 7 SL y -472 $. Con volumen bajo el rechazo del FVG no tiene fuerza. El número V de cada entrada en la lista de operaciones es este mismo volumen relativo.")
+
+g_imp      = "Entrada por impulso (subidas y bajadas bruscas)"
+usar_imp   = input.bool(true, "Entrar en los impulsos", group=g_imp, tooltip="Movimientos bruscos que no son tendencia: una o pocas velas grandes, todas del mismo color, que recorren mucho más que el ATR, cierran cerca de su extremo, con volumen alto y rompiendo el alto o bajo de las últimas velas. Se entra a favor del impulso (por defecto en el retroceso al 50 %), con el SL al otro lado del impulso y el TP a un número fijo de R. No hace falta bias, manipulación ni estructura; sí se respetan las franjas sin operar, los rangos, la pérdida máxima, los SL seguidos y el cupo diario (el mismo que las entradas por FVG).")
+imp_n      = input.int(2, "Velas que forman el impulso (como máximo)", minval=1, maxval=4, group=g_imp)
+imp_atr    = input.float(1.5, "Recorrido mínimo del impulso (× ATR)", minval=1, step=0.25, group=g_imp)
+imp_cierre = input.float(0.3, "La última vela cierra en su … final (0,3 = en el 30 % más cercano al extremo)", minval=0.1, maxval=0.5, step=0.05, group=g_imp)
+imp_vol    = input.float(1.2, "Volumen mínimo (× la media de 20 velas, 0 = no mirar)", minval=0, step=0.1, group=g_imp)
+imp_rot    = input.int(12, "Tiene que romper el alto/bajo de las últimas … velas (0 = no)", minval=0, maxval=200, group=g_imp)
+imp_modo   = input.string("Retroceso", "Entrada", options=["Retroceso", "A mercado"], group=g_imp, inline="impent", tooltip="Retroceso: orden límite en el % del impulso que pongas al lado, medido desde su cierre (30 % = poco retroceso, se llena más; 50 % = la mitad, mejor precio pero muchas no se llenan). Si no se llena en las velas de 'Velas para que el precio vuelva a la entrada', se cancela. A mercado: al cierre de la vela del impulso; entra siempre, pero con el SL más lejos.")
+imp_ret    = input.float(30, "%", minval=5, maxval=80, step=5, group=g_imp, inline="impent")
+imp_tp     = input.float(5.75, "TP (R)", minval=0.5, step=0.25, group=g_imp)
+imp_bias   = input.bool(true, "Solo a favor del bias de H1", group=g_imp)
+imp_fuerte = input.float(0, "Sin filtro de bias si el impulso recorre al menos … × ATR (0 = no)", minval=0, step=0.25, group=g_imp, tooltip="Un impulso muy fuerte suele ser el propio giro del mercado, y en ese momento el bias de H1 todavía va en contra (ejemplo: la caída del 19 nov a las 16:15). Con un valor, por ejemplo 3, los impulsos que recorran al menos 3 veces el ATR entran aunque el bias de H1 no acompañe. 0 = desactivado: siempre se exige el bias si la casilla de arriba está marcada.")
+imp_estr   = input.bool(false, "Solo a favor de la estructura swing del gráfico", group=g_imp, tooltip="La misma estructura swing que usa el FVG respetado (ajuste 'Velas' de ese apartado): no se compra un impulso alcista si la estructura es bajista ni al revés. Quita muchas rupturas falsas que se dan la vuelta en una o dos velas.")
+imp_h_on   = input.bool(true, "Solo en estos horarios (hora de Madrid)", group=g_imp, tooltip="En la prueba de M5 (oct-nov) los impulsos de 03:00-08:00 y 15:00-19:00 de Madrid dieron casi todo el beneficio con pocos SL; los de 00:00-03:00 y 08:00-12:00 acumularon la mayoría de los SL.")
+imp_h1     = input.session("0200-0800", "Horario 1", group=g_imp, inline="imph")
+imp_h2     = input.session("1400-1900", "Horario 2", group=g_imp, inline="imph")
+imp_max_sl = input.int(1, "Sin más impulsos ese día tras … SL de impulso (0 = sin límite)", minval=0, maxval=10, group=g_imp)
 
 g_smt      = "SMT (punto extra)"
 usar_smt   = input.bool(true, "Sumar un punto si hay SMT con el otro índice", group=g_smt)
@@ -124,6 +143,7 @@ g_v        = "Visual"
 col_c      = input.color(#00A651, "Compra", group=g_v)
 col_v      = input.color(#E4002B, "Venta", group=g_v)
 ver_lineas = input.bool(true, "Dibujar entrada, SL y TP de cada señal", group=g_v)
+ver_imp_no = input.string("Solo impulsos válidos", "Explicar por qué no entra un impulso", options=["Solo impulsos válidos", "Todos los movimientos bruscos", "No"], group=g_v, tooltip="Etiqueta gris con los motivos cuando no entra un impulso. Solo impulsos válidos: el movimiento cumple todo lo del impulso (recorrido, cierre, volumen y rotura) y lo frena algún filtro (horario, bias, operación abierta, franja…). Todos los movimientos bruscos: también los que no llegan a ser impulso (salen muchas etiquetas). Solo es visual.")
 sep_etq    = input.float(2.0, "Separación de la etiqueta respecto a las velas (× ATR)", minval=0.5, step=0.5, group=g_v)
 
 g_ct       = "Automatización CrossTrade (Tradovate)"
@@ -594,11 +614,15 @@ if nuevo_dia
 // SL seguidos de hoy: se revisan las operaciones que se acaban de cerrar
 var int sl_seg = 0
 var int n_cerr = 0
+var int imp_sl_hoy = 0   // SL de entradas por impulso hoy
 if nuevo_dia
     sl_seg := 0
+    imp_sl_hoy := 0
 if strategy.closedtrades > n_cerr
     for i = n_cerr to strategy.closedtrades - 1
         sl_seg := strategy.closedtrades.exit_comment(i) == "SL" ? sl_seg + 1 : 0
+        if str.startswith(strategy.closedtrades.entry_comment(i), "Impulso") and strategy.closedtrades.exit_comment(i) == "SL"
+            imp_sl_hoy += 1
     n_cerr := strategy.closedtrades
 parado_sl = parar_sl and sl_seg >= n_sl_seg
 
@@ -747,6 +771,58 @@ man_ok_v = not na(mv_bar) and bar_index - mv_bar <= vent_manip + 1
 
 punt_c = (bias_c ? 1 : 0) + (en_horario ? 1 : 0) + (man_ok_c ? 1 : 0) + (conf_c ? 1 : 0) + (filtros_c ? 1 : 0) + (smt_c ? 1 : 0)
 punt_v = (bias_v ? 1 : 0) + (en_horario ? 1 : 0) + (man_ok_v ? 1 : 0) + (conf_v ? 1 : 0) + (filtros_v ? 1 : 0) + (smt_v ? 1 : 0)
+// Impulso: las últimas imp_n velas (o menos) del mismo color recorren al menos imp_atr × ATR (el ATR de
+// antes del impulso, para que el propio impulso no lo infle), la última cierra cerca de su extremo, con
+// volumen alto, y se rompe el alto/bajo de las imp_rot velas anteriores
+imp_atr_ref = atr[imp_n]
+imp_vol_ref = ta.sma(volume, 20)[imp_n]
+// Volumen relativo de la vela de la señal (volumen / media de las 20 anteriores). Se apunta en el nombre de
+// cada entrada (" · V1.4") para poder estudiar en el CSV con qué volumen salen los SL
+vol_rel  = volume / ta.sma(volume, 20)[1]
+vol_txt  = " · V" + str.tostring(vol_rel, "0.0")
+imp_rot_h   = ta.highest(high, math.max(imp_rot, 1))[imp_n]
+imp_rot_l   = ta.lowest(low, math.max(imp_rot, 1))[imp_n]
+// Busca, de 1 a imp_n velas hacia atrás, un tramo de velas todas del mismo color que recorra lo suficiente.
+// Devuelve si hay impulso y el extremo donde empezó (el bajo en compras, el alto en ventas).
+imp_detect(bool compra) =>
+    bool ok = false
+    float ext = na
+    bool mismo = true
+    float e = compra ? low : high
+    float vsum = 0.0
+    for k = 1 to imp_n
+        j = k - 1
+        mismo := mismo and (compra ? close[j] > open[j] : close[j] < open[j])
+        e := compra ? math.min(e, low[j]) : math.max(e, high[j])
+        vsum += volume[j]
+        rec = compra ? close - e : e - close
+        vol_ok = imp_vol == 0 or vsum / k >= imp_vol * imp_vol_ref
+        if not ok and mismo and rec >= imp_atr * imp_atr_ref and vol_ok
+            ok := true
+            ext := e
+    rango_v = high - low
+    cierre_ok = rango_v > 0 and (compra ? high - close <= imp_cierre * rango_v : close - low <= imp_cierre * rango_v)
+    rot_ok = imp_rot == 0 or (compra ? close > imp_rot_h : close < imp_rot_l)
+    [ok and cierre_ok and rot_ok, ext]
+[imp_c, imp_ext_c] = imp_detect(true)
+// Candidato "geométrico" (solo velas del mismo color y recorrido), para explicar por qué no entra
+imp_cand(bool compra) =>
+    bool ok = false
+    bool mismo = true
+    float e = compra ? low : high
+    for k = 1 to imp_n
+        j = k - 1
+        mismo := mismo and (compra ? close[j] > open[j] : close[j] < open[j])
+        e := compra ? math.min(e, low[j]) : math.max(e, high[j])
+        if mismo and (compra ? close - e : e - close) >= imp_atr * imp_atr_ref
+            ok := true
+    ok
+imp_cand_c = imp_cand(true)
+imp_cand_v = imp_cand(false)
+[imp_v, imp_ext_v] = imp_detect(false)
+// Impulso muy fuerte: no necesita el bias de H1
+imp_fuerte_c = imp_fuerte > 0 and imp_c and close - imp_ext_c >= imp_fuerte * imp_atr_ref
+imp_fuerte_v = imp_fuerte > 0 and imp_v and imp_ext_v - close >= imp_fuerte * imp_atr_ref
 puede_b = operable and cerrada and not dentro_rango and not (cerrar_ses and fin_ny) and not ult_ny and not parado_sl and not en_bloq and not tope_dia
 // Orden del setup esperando a llenarse: con prioridad, no se pisa con una entrada por FVG
 setup_pend = prio_setup and op_setup and strategy.position_size == 0 and not na(orden_bar)
@@ -755,8 +831,59 @@ puede  = puede_b and strategy.position_size == 0 and ops_hoy < max_dia and not s
 puede_s = (prio_setup ? puede_b and (strategy.position_size == 0 or not op_setup) and ops_setup < max_dia_setup : puede_b and strategy.position_size == 0 and ops_hoy < max_dia and not setup_pend) and not (rq_setup and en_rango_ind)
 senal_c = puede_s and dir_op != "Solo ventas" and bias_c and en_horario and man_ok_c and conf_c and punt_c >= punt_min
 senal_v = puede_s and dir_op != "Solo compras" and bias_v and en_horario and man_ok_v and conf_v and punt_v >= punt_min and not senal_c
-senal_fc = usar_fr and puede and not senal_c and not senal_v and dir_op != "Solo ventas" and en_horario and fc_ok and (not fr_bias or bias_c) and (not fr_estr or tend_sw == 1)
-senal_fv = usar_fr and puede and not senal_c and not senal_v and not senal_fc and dir_op != "Solo compras" and en_horario and fv_ok and (not fr_bias or bias_v) and (not fr_estr or tend_sw == -1)
+senal_fc = usar_fr and puede and not senal_c and not senal_v and dir_op != "Solo ventas" and en_horario and (fr_vol_min == 0 or vol_rel >= fr_vol_min) and fc_ok and (not fr_bias or bias_c) and (not fr_estr or tend_sw == 1)
+senal_fv = usar_fr and puede and not senal_c and not senal_v and not senal_fc and dir_op != "Solo compras" and en_horario and (fr_vol_min == 0 or vol_rel >= fr_vol_min) and fv_ok and (not fr_bias or bias_v) and (not fr_estr or tend_sw == -1)
+// Impulso: solo si en esa vela no hay setup ni FVG respetado, en su horario, a favor de la estructura y
+// sin haber llegado a los SL de impulso del día
+imp_hora_ok = not imp_h_on or not na(time(timeframe.period, imp_h1, "Europe/Madrid")) or not na(time(timeframe.period, imp_h2, "Europe/Madrid"))
+imp_dia_ok  = imp_max_sl == 0 or imp_sl_hoy < imp_max_sl
+senal_ic = usar_imp and puede and not senal_c and not senal_v and not senal_fc and not senal_fv and dir_op != "Solo ventas" and en_horario and imp_c and (not imp_bias or bias_c or imp_fuerte_c) and (not imp_estr or tend_sw == 1) and imp_hora_ok and imp_dia_ok
+senal_iv = usar_imp and puede and not senal_c and not senal_v and not senal_fc and not senal_fv and not senal_ic and dir_op != "Solo compras" and en_horario and imp_v and (not imp_bias or bias_v or imp_fuerte_v) and (not imp_estr or tend_sw == -1) and imp_hora_ok and imp_dia_ok
+// Por qué no entra un impulso (solo visual)
+imp_motivos(bool compra) =>
+    string r = ""
+    rango_v = high - low
+    if not (compra ? imp_c : imp_v)
+        if rango_v > 0 and (compra ? high - close > imp_cierre * rango_v : close - low > imp_cierre * rango_v)
+            r += ", cierre"
+        if imp_rot > 0 and (compra ? close <= imp_rot_h : close >= imp_rot_l)
+            r += ", no rompe " + str.tostring(imp_rot) + " velas"
+        if imp_vol > 0 and vol_rel < imp_vol
+            r += ", volumen V" + str.tostring(vol_rel, "0.0")
+    if not imp_hora_ok
+        r += ", horario"
+    if imp_bias and not (compra ? bias_c or imp_fuerte_c : bias_v or imp_fuerte_v)
+        r += ", bias H1"
+    if imp_estr and tend_sw != (compra ? 1 : -1)
+        r += ", estructura"
+    if not imp_dia_ok
+        r += ", ya hubo SL de impulso"
+    if strategy.position_size != 0
+        r += ", operación abierta"
+    if ops_hoy >= max_dia
+        r += ", cupo diario"
+    if en_bloq
+        r += ", franja bloqueada"
+    if parado_sl
+        r += ", SL seguidos"
+    if tope_dia
+        r += ", tope fondeo"
+    if dentro_rango or en_rango_ind
+        r += ", rango"
+    if (cerrar_ses and fin_ny) or ult_ny
+        r += ", fin de sesión"
+    if setup_pend
+        r += ", setup pendiente"
+    if senal_c or senal_v or senal_fc or senal_fv
+        r += ", otra entrada"
+    if dir_op == (compra ? "Solo ventas" : "Solo compras") or not en_horario
+        r += ", dirección/horario de señales"
+    str.length(r) > 2 ? str.substring(r, 2) : "?"
+if ver_imp_no != "No" and usar_imp and cerrada and operable
+    if (ver_imp_no == "Todos los movimientos bruscos" ? imp_cand_c and not imp_cand_c[1] : imp_c and not imp_c[1]) and not senal_ic
+        label.new(bar_index, low - 0.5 * atr, "✕ impulso ▲: " + imp_motivos(true), style=label.style_label_up, color=color.new(color.gray, 30), textcolor=color.white, size=size.tiny)
+    if (ver_imp_no == "Todos los movimientos bruscos" ? imp_cand_v and not imp_cand_v[1] : imp_v and not imp_v[1]) and not senal_iv
+        label.new(bar_index, high + 0.5 * atr, "✕ impulso ▼: " + imp_motivos(false), style=label.style_label_down, color=color.new(color.gray, 30), textcolor=color.white, size=size.tiny)
 
 // Objetivo: la liquidez más cercana en la dirección de la operación que dé el riesgo/beneficio mínimo;
 // si no hay ninguna, 2R
@@ -783,17 +910,22 @@ dibujar(bool compra, float ent, float sl, float tp, string txt) =>
     extremo = compra ? bajo10 : alto10
     y = compra ? extremo - sep_etq * atr : extremo + sep_etq * atr
     line.new(bar_index, compra ? low : high, bar_index, y, color=color.new(col, 40), style=line.style_dotted)
-    label.new(bar_index, y, txt, style=compra ? label.style_label_up : label.style_label_down, color=col, textcolor=color.white, size=size.small)
+    lbl = label.new(bar_index, y, txt, style=compra ? label.style_label_up : label.style_label_down, color=col, textcolor=color.white, size=size.small)
     if ver_lineas
         line.new(bar_index, ent, bar_index + 20, ent, color=color.new(#1565C0, 0), width=2)
         line.new(bar_index, sl, bar_index + 20, sl, color=color.new(col_v, 0), style=line.style_dashed)
         line.new(bar_index, tp, bar_index + 20, tp, color=color.new(col_c, 0), style=line.style_dashed)
+    lbl
 
 // Datos de la operación en curso, para el break even
 var float op_tp = na
 var float op_r  = na
 var bool  op_be = false
 var float op_ber = na   // break even de la operación en curso (setup o FVG)
+// Etiqueta de la última señal y operaciones cerradas en ese momento: si su orden se cancela sin llenarse,
+// la etiqueta se pone gris con "no entró"
+var label ult_lbl = na
+var int   ult_ct  = 0
 
 if senal_c
     ent = na(mc_fvg) ? close : math.min(mc_fvg, close)
@@ -811,7 +943,7 @@ if senal_c
         rr = (tp - ent) / riesgo
         if prio_setup and strategy.position_size != 0
             strategy.close_all(comment="Cede al setup", immediately=true, alert_message=ct_cerrar)
-        strategy.entry("Compra", strategy.long, limit=na(mc_fvg) ? na : ent, comment="Setup " + str.tostring(punt_c) + "/6", alert_message=ct_entrada(true, sl, tp))
+        strategy.entry("Compra", strategy.long, limit=na(mc_fvg) ? na : ent, comment="Setup " + str.tostring(punt_c) + "/6" + vol_txt, alert_message=ct_entrada(true, sl, tp))
         strategy.exit("Salida compra", "Compra", stop=sl, limit=tp, comment_loss="SL", comment_profit="TP", alert_message=ct_cerrar)
         op_tp := tp
         op_r  := riesgo
@@ -823,7 +955,8 @@ if senal_c
         else
             ops_hoy += 1
         op_setup := true
-        dibujar(true, ent, sl, tp, "▲ SETUP " + str.tostring(punt_c) + "/6\nBarrido " + mc_txt + (smt_c ? " + SMT" : "") + "\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
+        ult_lbl := dibujar(true, ent, sl, tp, "▲ SETUP " + str.tostring(punt_c) + "/6\nBarrido " + mc_txt + (smt_c ? " + SMT" : "") + "\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
+        ult_ct := strategy.closedtrades
         alert("▲ Setup de compra " + str.tostring(punt_c) + "/6 en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick) + " (" + tp_nom + ")", alert.freq_once_per_bar_close)
         mc_bar := na
 
@@ -842,7 +975,7 @@ if senal_v
         rr = (ent - tp) / riesgo
         if prio_setup and strategy.position_size != 0
             strategy.close_all(comment="Cede al setup", immediately=true, alert_message=ct_cerrar)
-        strategy.entry("Venta", strategy.short, limit=na(mv_fvg) ? na : ent, comment="Setup " + str.tostring(punt_v) + "/6", alert_message=ct_entrada(false, sl, tp))
+        strategy.entry("Venta", strategy.short, limit=na(mv_fvg) ? na : ent, comment="Setup " + str.tostring(punt_v) + "/6" + vol_txt, alert_message=ct_entrada(false, sl, tp))
         strategy.exit("Salida venta", "Venta", stop=sl, limit=tp, comment_loss="SL", comment_profit="TP", alert_message=ct_cerrar)
         op_tp := tp
         op_r  := riesgo
@@ -854,7 +987,8 @@ if senal_v
         else
             ops_hoy += 1
         op_setup := true
-        dibujar(false, ent, sl, tp, "▼ SETUP " + str.tostring(punt_v) + "/6\nBarrido " + mv_txt + (smt_v ? " + SMT" : "") + "\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
+        ult_lbl := dibujar(false, ent, sl, tp, "▼ SETUP " + str.tostring(punt_v) + "/6\nBarrido " + mv_txt + (smt_v ? " + SMT" : "") + "\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
+        ult_ct := strategy.closedtrades
         alert("▼ Setup de venta " + str.tostring(punt_v) + "/6 en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick) + " (" + tp_nom + ")", alert.freq_once_per_bar_close)
         mv_bar := na
 
@@ -871,7 +1005,7 @@ if senal_fc
         tp_nom := tp_f != tp ? "tope del día" : tp_nom
         tp := tp_f
         rr = (tp - ent) / riesgo
-        strategy.entry("Compra", strategy.long, comment="FVG respetado", alert_message=ct_entrada(true, sl, tp))
+        strategy.entry("Compra", strategy.long, comment="FVG respetado" + vol_txt, alert_message=ct_entrada(true, sl, tp))
         strategy.exit("Salida compra", "Compra", stop=sl, limit=tp, comment_loss="SL", comment_profit="TP", alert_message=ct_cerrar)
         op_tp := tp
         op_r  := riesgo
@@ -880,7 +1014,8 @@ if senal_fc
         orden_bar := bar_index
         ops_hoy += 1
         op_setup := false
-        dibujar(true, ent, sl, tp, "▲ FVG RESPETADO\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
+        ult_lbl := dibujar(true, ent, sl, tp, "▲ FVG RESPETADO\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
+        ult_ct := strategy.closedtrades
         alert("▲ FVG respetado, compra en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick) + " (" + tp_nom + ")", alert.freq_once_per_bar_close)
 
 if senal_fv
@@ -895,7 +1030,7 @@ if senal_fv
         tp_nom := tp_f != tp ? "tope del día" : tp_nom
         tp := tp_f
         rr = (ent - tp) / riesgo
-        strategy.entry("Venta", strategy.short, comment="FVG respetado", alert_message=ct_entrada(false, sl, tp))
+        strategy.entry("Venta", strategy.short, comment="FVG respetado" + vol_txt, alert_message=ct_entrada(false, sl, tp))
         strategy.exit("Salida venta", "Venta", stop=sl, limit=tp, comment_loss="SL", comment_profit="TP", alert_message=ct_cerrar)
         op_tp := tp
         op_r  := riesgo
@@ -904,8 +1039,53 @@ if senal_fv
         orden_bar := bar_index
         ops_hoy += 1
         op_setup := false
-        dibujar(false, ent, sl, tp, "▼ FVG RESPETADO\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
+        ult_lbl := dibujar(false, ent, sl, tp, "▼ FVG RESPETADO\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
+        ult_ct := strategy.closedtrades
         alert("▼ FVG respetado, venta en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick) + " (" + tp_nom + ")", alert.freq_once_per_bar_close)
+
+// Entrada por impulso: a favor del movimiento brusco, en un retroceso (orden límite) o a mercado; SL al otro
+// lado del impulso y TP a imp_tp R
+if senal_ic
+    a_merc = imp_modo == "A mercado"
+    ent = a_merc ? close : math.round_to_mintick(close - imp_ret / 100 * (close - imp_ext_c))
+    sl = imp_ext_c - sl_buf * atr
+    riesgo = ent - sl
+    if riesgo > 0 and (max_sl_atr == 0 or riesgo <= max_sl_atr * atr) and (max_sl_pts == 0 or riesgo <= max_sl_pts) and cabe_riesgo(riesgo)
+        tp = tope_tp(true, ent, ent + imp_tp * riesgo)
+        rr = (tp - ent) / riesgo
+        strategy.entry("Compra", strategy.long, limit=a_merc ? na : ent, comment="Impulso" + vol_txt, alert_message=ct_entrada(true, sl, tp))
+        strategy.exit("Salida compra", "Compra", stop=sl, limit=tp, comment_loss="SL", comment_profit="TP", alert_message=ct_cerrar)
+        op_tp := tp
+        op_r  := riesgo
+        op_be := false
+        op_ber := be_r
+        orden_bar := bar_index
+        ops_hoy += 1
+        op_setup := false
+        ult_lbl := dibujar(true, ent, sl, tp, "▲ IMPULSO\nTP " + str.tostring(rr, "#.#") + "R")
+        ult_ct := strategy.closedtrades
+        alert("▲ Impulso, compra en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick), alert.freq_once_per_bar_close)
+
+if senal_iv
+    a_merc = imp_modo == "A mercado"
+    ent = a_merc ? close : math.round_to_mintick(close + imp_ret / 100 * (imp_ext_v - close))
+    sl = imp_ext_v + sl_buf * atr
+    riesgo = sl - ent
+    if riesgo > 0 and (max_sl_atr == 0 or riesgo <= max_sl_atr * atr) and (max_sl_pts == 0 or riesgo <= max_sl_pts) and cabe_riesgo(riesgo)
+        tp = tope_tp(false, ent, ent - imp_tp * riesgo)
+        rr = (ent - tp) / riesgo
+        strategy.entry("Venta", strategy.short, limit=a_merc ? na : ent, comment="Impulso" + vol_txt, alert_message=ct_entrada(false, sl, tp))
+        strategy.exit("Salida venta", "Venta", stop=sl, limit=tp, comment_loss="SL", comment_profit="TP", alert_message=ct_cerrar)
+        op_tp := tp
+        op_r  := riesgo
+        op_be := false
+        op_ber := be_r
+        orden_bar := bar_index
+        ops_hoy += 1
+        op_setup := false
+        ult_lbl := dibujar(false, ent, sl, tp, "▼ IMPULSO\nTP " + str.tostring(rr, "#.#") + "R")
+        ult_ct := strategy.closedtrades
+        alert("▼ Impulso, venta en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick), alert.freq_once_per_bar_close)
 
 // Break even: cuando la operación va ganando be_r veces el riesgo, el SL pasa al precio de entrada.
 // Cierre por tiempo: si lleva max_velas_op velas abierta, se cierra.
@@ -925,6 +1105,10 @@ if strategy.position_size != 0 and cerrada
 if strategy.position_size == 0 and not na(orden_bar) and (bar_index - orden_bar > vence_lim or ((dentro_rango or en_bloq) and bar_index > orden_bar))
     strategy.cancel("Compra")
     strategy.cancel("Venta")
+    if not na(ult_lbl) and strategy.opentrades == 0 and strategy.closedtrades == ult_ct
+        label.set_text(ult_lbl, label.get_text(ult_lbl) + "\n✕ no entró")
+        label.set_color(ult_lbl, color.gray)
+    ult_lbl := na
     orden_bar := na
 
 // Fin de la sesión de Nueva York: en su última vela se cierra lo abierto al cierre de esa misma vela
@@ -932,6 +1116,10 @@ if strategy.position_size == 0 and not na(orden_bar) and (bar_index - orden_bar 
 if cerrar_ses and fin_ny
     strategy.cancel("Compra")
     strategy.cancel("Venta")
+    if not na(ult_lbl) and strategy.opentrades == 0 and strategy.closedtrades == ult_ct
+        label.set_text(ult_lbl, label.get_text(ult_lbl) + "\n✕ no entró")
+        label.set_color(ult_lbl, color.gray)
+    ult_lbl := na
     orden_bar := na
     if strategy.position_size != 0
         strategy.close_all(comment="Cierre fin sesión NY", immediately=true, alert_message=ct_cerrar)
