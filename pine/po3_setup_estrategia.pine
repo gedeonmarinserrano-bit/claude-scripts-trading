@@ -133,6 +133,9 @@ imp_estr   = input.bool(false, "Solo a favor de la estructura swing del gráfico
 imp_h_on   = input.bool(true, "Solo en estos horarios (hora de Madrid)", group=g_imp, tooltip="En la prueba de M5 (oct-nov) los impulsos de 03:00-08:00 y 15:00-19:00 de Madrid dieron casi todo el beneficio con pocos SL; los de 00:00-03:00 y 08:00-12:00 acumularon la mayoría de los SL.")
 imp_h1     = input.session("0200-0800", "Horario 1", group=g_imp, inline="imph")
 imp_h2     = input.session("1400-1900", "Horario 2", group=g_imp, inline="imph")
+imp_trail  = input.bool(false, "Trailing stop en los impulsos: a partir de", group=g_imp, inline="imptr", tooltip="Para recoger ganancias en los impulsos que van muy a favor pero no llegan al TP. Cuando la operación ha ido ganando al menos lo que pongas en 'a partir de' (en R), el SL sigue al máximo alcanzado (mínimo en ventas) a la distancia de 'a … R'. Solo sube (baja en ventas), nunca retrocede. El TP se mantiene. En real lo ejecuta TradingView con el cierre (flatten) de CrossTrade, como el break even: en Tradovate no verás moverse la línea del SL.")
+imp_tr_ini = input.float(2, "R", minval=0.5, step=0.25, group=g_imp, inline="imptr")
+imp_tr_dis = input.float(1, "a … R del máximo", minval=0.25, step=0.25, group=g_imp, inline="imptr")
 imp_max_sl = input.int(1, "Sin más impulsos ese día tras … SL de impulso (0 = sin límite)", minval=0, maxval=10, group=g_imp)
 
 g_smt      = "SMT (punto extra)"
@@ -922,6 +925,9 @@ var float op_tp = na
 var float op_r  = na
 var bool  op_be = false
 var float op_ber = na   // break even de la operación en curso (setup o FVG)
+var bool  op_imp = false  // la operación en curso es un impulso
+var float op_stop = na    // SL actual de la operación
+var float op_ext = na     // máximo (compras) o mínimo (ventas) alcanzado desde la entrada
 // Etiqueta de la última señal y operaciones cerradas en ese momento: si su orden se cancela sin llenarse,
 // la etiqueta se pone gris con "no entró"
 var label ult_lbl = na
@@ -955,6 +961,8 @@ if senal_c
         else
             ops_hoy += 1
         op_setup := true
+        op_imp := false
+        op_stop := sl
         ult_lbl := dibujar(true, ent, sl, tp, "▲ SETUP " + str.tostring(punt_c) + "/6\nBarrido " + mc_txt + (smt_c ? " + SMT" : "") + "\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
         ult_ct := strategy.closedtrades
         alert("▲ Setup de compra " + str.tostring(punt_c) + "/6 en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick) + " (" + tp_nom + ")", alert.freq_once_per_bar_close)
@@ -987,6 +995,8 @@ if senal_v
         else
             ops_hoy += 1
         op_setup := true
+        op_imp := false
+        op_stop := sl
         ult_lbl := dibujar(false, ent, sl, tp, "▼ SETUP " + str.tostring(punt_v) + "/6\nBarrido " + mv_txt + (smt_v ? " + SMT" : "") + "\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
         ult_ct := strategy.closedtrades
         alert("▼ Setup de venta " + str.tostring(punt_v) + "/6 en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick) + " (" + tp_nom + ")", alert.freq_once_per_bar_close)
@@ -1014,6 +1024,8 @@ if senal_fc
         orden_bar := bar_index
         ops_hoy += 1
         op_setup := false
+        op_imp := false
+        op_stop := sl
         ult_lbl := dibujar(true, ent, sl, tp, "▲ FVG RESPETADO\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
         ult_ct := strategy.closedtrades
         alert("▲ FVG respetado, compra en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick) + " (" + tp_nom + ")", alert.freq_once_per_bar_close)
@@ -1039,6 +1051,8 @@ if senal_fv
         orden_bar := bar_index
         ops_hoy += 1
         op_setup := false
+        op_imp := false
+        op_stop := sl
         ult_lbl := dibujar(false, ent, sl, tp, "▼ FVG RESPETADO\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
         ult_ct := strategy.closedtrades
         alert("▼ FVG respetado, venta en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick) + " (" + tp_nom + ")", alert.freq_once_per_bar_close)
@@ -1062,6 +1076,8 @@ if senal_ic
         orden_bar := bar_index
         ops_hoy += 1
         op_setup := false
+        op_imp := true
+        op_stop := sl
         ult_lbl := dibujar(true, ent, sl, tp, "▲ IMPULSO\nTP " + str.tostring(rr, "#.#") + "R")
         ult_ct := strategy.closedtrades
         alert("▲ Impulso, compra en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick), alert.freq_once_per_bar_close)
@@ -1083,6 +1099,8 @@ if senal_iv
         orden_bar := bar_index
         ops_hoy += 1
         op_setup := false
+        op_imp := true
+        op_stop := sl
         ult_lbl := dibujar(false, ent, sl, tp, "▼ IMPULSO\nTP " + str.tostring(rr, "#.#") + "R")
         ult_ct := strategy.closedtrades
         alert("▼ Impulso, venta en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick), alert.freq_once_per_bar_close)
@@ -1096,9 +1114,21 @@ if strategy.position_size != 0 and cerrada
     if ber > 0 and not op_be and not na(op_r) and (largo ? high - entp >= ber * op_r : entp - low >= ber * op_r)
         op_be := true
         be_px = largo ? entp + be_ticks * syminfo.mintick : entp - be_ticks * syminfo.mintick
+        op_stop := be_px
         strategy.exit(largo ? "Salida compra" : "Salida venta", largo ? "Compra" : "Venta", stop=be_px, limit=op_tp, comment_loss="BE", comment_profit="TP", alert_message=ct_cerrar)
+    // Trailing de los impulsos: el SL sigue al máximo (mínimo) a imp_tr_dis R, desde que se ha ido ganando imp_tr_ini R
+    op_ext := na(op_ext) ? (largo ? high : low) : (largo ? math.max(op_ext, high) : math.min(op_ext, low))
+    if imp_trail and op_imp and not na(op_r) and (largo ? op_ext - entp : entp - op_ext) >= imp_tr_ini * op_r
+        tr_px = math.round_to_mintick(largo ? op_ext - imp_tr_dis * op_r : op_ext + imp_tr_dis * op_r)
+        if na(op_stop) or (largo ? tr_px > op_stop : tr_px < op_stop)
+            op_stop := tr_px
+            op_be := true
+            strategy.exit(largo ? "Salida compra" : "Salida venta", largo ? "Compra" : "Venta", stop=tr_px, limit=op_tp, comment_loss="Trailing", comment_profit="TP", alert_message=ct_cerrar)
     if max_velas_op > 0 and bar_index - strategy.opentrades.entry_bar_index(0) >= max_velas_op
         strategy.close_all(comment="Tiempo máximo", alert_message=ct_cerrar)
+
+if strategy.position_size == 0
+    op_ext := na
 
 // Orden límite que no se llena a tiempo, o pendiente cuando el precio entra en rango o en la franja sin
 // operar: se cancela
