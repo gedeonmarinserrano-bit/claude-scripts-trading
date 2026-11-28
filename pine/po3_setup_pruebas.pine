@@ -159,6 +159,7 @@ mom_tr_ini = input.float(2, "R", minval=0.5, step=0.25, group=g_mom, inline="mom
 mom_tr_dis = input.float(1, "a … R del máximo", minval=0.25, step=0.25, group=g_mom, inline="momtr")
 mom_max    = input.int(3, "Máx. operaciones Momentum por día", minval=1, maxval=20, group=g_mom)
 mom_max_sl = input.int(1, "Sin más Momentum ese día tras … SL (0 = sin límite)", minval=0, maxval=10, group=g_mom)
+ver_mom_no = input.bool(true, "Explicar por qué no entra un Momentum (etiqueta gris)", group=g_mom, tooltip="Cuando hay un movimiento que cumple la detección del módulo y no entra, sale una etiqueta gris con el motivo. Solo es visual.")
 mom_prio   = input.bool(false, "Puede cerrar una operación de FVG o impulso abierta para entrar", group=g_mom, tooltip="Desmarcado: si ya hay una operación abierta, el Momentum no entra. Marcado: cierra la de FVG o impulso (nunca la del setup) y entra.")
 
 g_smt      = "SMT (punto extra)"
@@ -908,6 +909,49 @@ otra_senal = senal_c or senal_v or senal_fc or senal_fv or senal_ic or senal_iv
 senal_mc = puede_m and not otra_senal and dir_op != "Solo ventas" and mom_c and (not mom_bias or bias_c) and not (strategy.position_size > 0)
 senal_mv = puede_m and not otra_senal and not senal_mc and dir_op != "Solo compras" and mom_v and (not mom_bias or bias_v) and not (strategy.position_size < 0)
 
+// Por qué no entra un Momentum (solo visual)
+mom_riesgo(bool compra) =>
+    ext = compra ? mom_ext_c : mom_ext_v
+    sl = mom_sl_m == "Inicio del movimiento" ? (compra ? ext - sl_buf * atr : ext + sl_buf * atr) : (compra ? close - mom_sl_atr * atr : close + mom_sl_atr * atr)
+    compra ? close - sl : sl - close
+mom_motivos(bool compra) =>
+    string r = ""
+    if not mom_on
+        r += ", módulo desactivado"
+    if not mom_hora_ok
+        r += ", horario"
+    if mom_bloq and en_bloq
+        r += ", franja bloqueada"
+    if mom_hoy >= mom_max
+        r += ", cupo Momentum"
+    if mom_max_sl > 0 and mom_sl_hoy >= mom_max_sl
+        r += ", ya hubo SL de Momentum"
+    if not mom_hueco or (compra ? strategy.position_size > 0 : strategy.position_size < 0)
+        r += ", operación abierta"
+    if otra_senal
+        r += ", entra otra señal (impulso/FVG/setup)"
+    if setup_pend
+        r += ", setup pendiente"
+    if mom_bias and not (compra ? bias_c : bias_v)
+        r += ", bias H1"
+    if dir_op == (compra ? "Solo ventas" : "Solo compras")
+        r += ", dirección"
+    if (cerrar_ses and fin_ny) or ult_ny
+        r += ", fin de sesión"
+    if tope_dia
+        r += ", tope fondeo"
+    rg = mom_riesgo(compra)
+    if not cabe_riesgo(rg)
+        r += ", SL de " + str.tostring(rg, "#") + " pts pasa la pérdida máx. del día"
+    if (max_sl_atr > 0 and rg > max_sl_atr * atr) or (max_sl_pts > 0 and rg > max_sl_pts)
+        r += ", SL máximo"
+    str.length(r) > 2 ? str.substring(r, 2) : "?"
+if ver_mom_no and operable and cerrada
+    if mom_c and not mom_c[1] and (not senal_mc or not cabe_riesgo(mom_riesgo(true)))
+        label.new(bar_index, low - 0.8 * atr, "✕ momentum ▲: " + mom_motivos(true), style=label.style_label_up, color=color.new(color.purple, 40), textcolor=color.white, size=size.tiny)
+    if mom_v and not mom_v[1] and (not senal_mv or not cabe_riesgo(mom_riesgo(false)))
+        label.new(bar_index, high + 0.8 * atr, "✕ momentum ▼: " + mom_motivos(false), style=label.style_label_down, color=color.new(color.purple, 40), textcolor=color.white, size=size.tiny)
+
 // Por qué no entra un impulso (solo visual)
 imp_motivos(bool compra) =>
     string r = ""
@@ -1190,8 +1234,7 @@ if senal_mc or senal_mv
         rr = math.abs(tp - ent) / riesgo
         if strategy.position_size != 0
             strategy.close_all(comment="Cede a Momentum", immediately=true, alert_message=ct_cerrar)
-        strategy.cancel("Compra")
-        strategy.cancel("Venta")
+        strategy.cancel(compra ? "Venta" : "Compra")
         strategy.entry(compra ? "Compra" : "Venta", compra ? strategy.long : strategy.short, comment="Momentum" + vol_txt, alert_message=ct_entrada(compra, sl, tp))
         strategy.exit(compra ? "Salida compra" : "Salida venta", compra ? "Compra" : "Venta", stop=sl, limit=tp, comment_loss="SL", comment_profit="TP", alert_message=ct_cerrar)
         op_tp := tp
