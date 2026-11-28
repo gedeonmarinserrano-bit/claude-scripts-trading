@@ -150,7 +150,7 @@ mom_bloq   = input.bool(true, "Respetar las franjas 'No abrir operaciones de' / 
 mom_h_on   = input.bool(true, "Solo en estos horarios (hora de Madrid)", group=g_mom)
 mom_h1     = input.session("0200-0800", "Horario 1", group=g_mom, inline="momh")
 mom_h2     = input.session("1400-1900", "Horario 2", group=g_mom, inline="momh")
-mom_sl_m   = input.string("Inicio del movimiento", "SL", options=["Inicio del movimiento", "× ATR desde la entrada"], group=g_mom, inline="momsl")
+mom_sl_m   = input.string("× ATR desde la entrada", "SL", options=["Inicio del movimiento", "× ATR desde la entrada"], group=g_mom, inline="momsl")
 mom_sl_atr = input.float(1.5, "× ATR", minval=0.25, step=0.25, group=g_mom, inline="momsl")
 mom_tp     = input.float(3, "TP (R)", minval=0.5, step=0.25, group=g_mom)
 mom_be     = input.float(1, "Break even al ir ganando … R (0 = no)", minval=0, step=0.25, group=g_mom)
