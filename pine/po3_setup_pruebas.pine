@@ -138,30 +138,6 @@ imp_tr_ini = input.float(2, "R", minval=0.5, step=0.25, group=g_imp, inline="imp
 imp_tr_dis = input.float(1, "a … R del máximo", minval=0.25, step=0.25, group=g_imp, inline="imptr")
 imp_max_sl = input.int(1, "Sin más impulsos ese día tras … SL de impulso (0 = sin límite)", minval=0, maxval=10, group=g_imp)
 
-g_mom      = "Módulo Momentum (independiente)"
-mom_on     = input.bool(false, "Activar el módulo Momentum", group=g_mom, tooltip="Módulo aparte para movimientos bruscos con reglas propias: no usa el bias, el rango, el volumen, el horario de señales, el cupo diario, los SL seguidos ni la franja 12-16 de la estrategia (salvo que lo marques abajo). Solo comparte la pérdida máxima del día, el tope de fondeo, el cierre de fin de sesión de NY y la regla de una sola posición a la vez (Tradovate junta todo el MNQ en una posición). Entra a mercado al cierre de la vela. Sus operaciones salen como 'Momentum' en la lista.")
-mom_n      = input.int(3, "Velas que forman el movimiento (como máximo)", minval=1, maxval=6, group=g_mom)
-mom_atr    = input.float(2.0, "Recorrido mínimo (× ATR)", minval=0.5, step=0.25, group=g_mom)
-mom_cierre = input.float(0.3, "La última vela cierra en su … final", minval=0.05, maxval=1, step=0.05, group=g_mom, tooltip="0,3 = el cierre está en el 30 % de la vela más cerca de su extremo (máximo en compras, mínimo en ventas).")
-mom_rot    = input.int(12, "Tiene que romper el alto/bajo de las últimas … velas (0 = no)", minval=0, maxval=200, group=g_mom)
-mom_vol    = input.float(0, "Volumen mínimo (× media de 20 velas, 0 = no mirar)", minval=0, step=0.1, group=g_mom)
-mom_bias   = input.bool(false, "Solo a favor del bias de H1", group=g_mom)
-mom_bloq   = input.bool(true, "Respetar las franjas 'No abrir operaciones de' / 'Tampoco de'", group=g_mom)
-mom_h_on   = input.bool(true, "Solo en estos horarios (hora de Madrid)", group=g_mom)
-mom_h1     = input.session("0200-0800", "Horario 1", group=g_mom, inline="momh")
-mom_h2     = input.session("1400-1900", "Horario 2", group=g_mom, inline="momh")
-mom_sl_m   = input.string("× ATR desde la entrada", "SL", options=["Inicio del movimiento", "× ATR desde la entrada"], group=g_mom, inline="momsl")
-mom_sl_atr = input.float(1.5, "× ATR", minval=0.25, step=0.25, group=g_mom, inline="momsl")
-mom_tp     = input.float(3, "TP (R)", minval=0.5, step=0.25, group=g_mom)
-mom_be     = input.float(1, "Break even al ir ganando … R (0 = no)", minval=0, step=0.25, group=g_mom)
-mom_trail  = input.bool(false, "Trailing stop: a partir de", group=g_mom, inline="momtr")
-mom_tr_ini = input.float(2, "R", minval=0.5, step=0.25, group=g_mom, inline="momtr")
-mom_tr_dis = input.float(1, "a … R del máximo", minval=0.25, step=0.25, group=g_mom, inline="momtr")
-mom_max    = input.int(3, "Máx. operaciones Momentum por día", minval=1, maxval=20, group=g_mom)
-mom_max_sl = input.int(1, "Sin más Momentum ese día tras … SL (0 = sin límite)", minval=0, maxval=10, group=g_mom)
-ver_mom_no = input.bool(true, "Explicar por qué no entra un Momentum (etiqueta gris)", group=g_mom, tooltip="Cuando hay un movimiento que cumple la detección del módulo y no entra, sale una etiqueta gris con el motivo. Solo es visual.")
-mom_prio   = input.bool(false, "Puede cerrar una operación de FVG o impulso abierta para entrar", group=g_mom, tooltip="Desmarcado: si ya hay una operación abierta, el Momentum no entra. Marcado: cierra la de FVG o impulso (nunca la del setup) y entra.")
-
 g_smt      = "SMT (punto extra)"
 usar_smt   = input.bool(true, "Sumar un punto si hay SMT con el otro índice", group=g_smt)
 smt_sym    = input.symbol("CME_MINI:MES1!", "Comparar con", group=g_smt)
@@ -634,7 +610,6 @@ var int ops_hoy = 0
 var int ops_setup = 0
 var int orden_bar = na
 var bool op_setup = false   // la última operación (abierta o pendiente) es del setup
-var bool  op_mom = false  // la operación en curso es del módulo Momentum
 if nuevo_dia
     ops_hoy := 0
     ops_setup := 0
@@ -643,20 +618,14 @@ if nuevo_dia
 var int sl_seg = 0
 var int n_cerr = 0
 var int imp_sl_hoy = 0   // SL de entradas por impulso hoy
-var int mom_hoy = 0      // operaciones Momentum hoy
-var int mom_sl_hoy = 0   // SL de Momentum hoy
 if nuevo_dia
     sl_seg := 0
     imp_sl_hoy := 0
-    mom_hoy := 0
-    mom_sl_hoy := 0
 if strategy.closedtrades > n_cerr
     for i = n_cerr to strategy.closedtrades - 1
         sl_seg := strategy.closedtrades.exit_comment(i) == "SL" ? sl_seg + 1 : 0
         if str.startswith(strategy.closedtrades.entry_comment(i), "Impulso") and strategy.closedtrades.exit_comment(i) == "SL"
             imp_sl_hoy += 1
-        if str.startswith(strategy.closedtrades.entry_comment(i), "Momentum") and strategy.closedtrades.exit_comment(i) == "SL"
-            mom_sl_hoy += 1
     n_cerr := strategy.closedtrades
 parado_sl = parar_sl and sl_seg >= n_sl_seg
 
@@ -873,85 +842,6 @@ imp_hora_ok = not imp_h_on or not na(time(timeframe.period, imp_h1, "Europe/Madr
 imp_dia_ok  = imp_max_sl == 0 or imp_sl_hoy < imp_max_sl
 senal_ic = usar_imp and puede and not senal_c and not senal_v and not senal_fc and not senal_fv and dir_op != "Solo ventas" and en_horario and imp_c and (not imp_bias or bias_c or imp_fuerte_c) and (not imp_estr or tend_sw == 1) and imp_hora_ok and imp_dia_ok
 senal_iv = usar_imp and puede and not senal_c and not senal_v and not senal_fc and not senal_fv and not senal_ic and dir_op != "Solo compras" and en_horario and imp_v and (not imp_bias or bias_v or imp_fuerte_v) and (not imp_estr or tend_sw == -1) and imp_hora_ok and imp_dia_ok
-// MÓDULO MOMENTUM: detección y condiciones propias
-mom_atr_ref = atr[mom_n]
-mom_vol_ref = ta.sma(volume, 20)[mom_n]
-mom_rot_h   = ta.highest(high, math.max(mom_rot, 1))[mom_n]
-mom_rot_l   = ta.lowest(low, math.max(mom_rot, 1))[mom_n]
-mom_detect(bool compra) =>
-    bool ok = false
-    float ext = na
-    bool mismo = true
-    float e = compra ? low : high
-    float vsum = 0.0
-    for k = 1 to mom_n
-        j = k - 1
-        mismo := mismo and (compra ? close[j] > open[j] : close[j] < open[j])
-        e := compra ? math.min(e, low[j]) : math.max(e, high[j])
-        vsum += volume[j]
-        rec = compra ? close - e : e - close
-        vol_ok = mom_vol == 0 or vsum / k >= mom_vol * mom_vol_ref
-        if not ok and mismo and rec >= mom_atr * mom_atr_ref and vol_ok
-            ok := true
-            ext := e
-    rango_v = high - low
-    cierre_ok = rango_v > 0 and (compra ? high - close <= mom_cierre * rango_v : close - low <= mom_cierre * rango_v)
-    rot_ok = mom_rot == 0 or (compra ? close > mom_rot_h : close < mom_rot_l)
-    [ok and cierre_ok and rot_ok, ext]
-[mom_c, mom_ext_c] = mom_detect(true)
-[mom_v, mom_ext_v] = mom_detect(false)
-mom_hora_ok = not mom_h_on or not na(time(timeframe.period, mom_h1, "Europe/Madrid")) or not na(time(timeframe.period, mom_h2, "Europe/Madrid"))
-mom_dia_ok  = mom_hoy < mom_max and (mom_max_sl == 0 or mom_sl_hoy < mom_max_sl)
-// Una sola posición: vacía, o (con prioridad) una de FVG o impulso que se cierra para entrar
-mom_hueco   = strategy.position_size == 0 or (mom_prio and not op_setup and not op_mom)
-puede_m = mom_on and operable and cerrada and not (cerrar_ses and fin_ny) and not ult_ny and not tope_dia and not (mom_bloq and en_bloq) and not setup_pend and mom_hueco and mom_hora_ok and mom_dia_ok
-otra_senal = senal_c or senal_v or senal_fc or senal_fv or senal_ic or senal_iv
-senal_mc = puede_m and not otra_senal and dir_op != "Solo ventas" and mom_c and (not mom_bias or bias_c) and not (strategy.position_size > 0)
-senal_mv = puede_m and not otra_senal and not senal_mc and dir_op != "Solo compras" and mom_v and (not mom_bias or bias_v) and not (strategy.position_size < 0)
-
-// Por qué no entra un Momentum (solo visual)
-mom_riesgo(bool compra) =>
-    ext = compra ? mom_ext_c : mom_ext_v
-    sl = mom_sl_m == "Inicio del movimiento" ? (compra ? ext - sl_buf * atr : ext + sl_buf * atr) : (compra ? close - mom_sl_atr * atr : close + mom_sl_atr * atr)
-    compra ? close - sl : sl - close
-mom_motivos(bool compra) =>
-    string r = ""
-    if not mom_on
-        r += ", módulo desactivado"
-    if not mom_hora_ok
-        r += ", horario"
-    if mom_bloq and en_bloq
-        r += ", franja bloqueada"
-    if mom_hoy >= mom_max
-        r += ", cupo Momentum"
-    if mom_max_sl > 0 and mom_sl_hoy >= mom_max_sl
-        r += ", ya hubo SL de Momentum"
-    if not mom_hueco or (compra ? strategy.position_size > 0 : strategy.position_size < 0)
-        r += ", operación abierta"
-    if otra_senal
-        r += ", entra otra señal (impulso/FVG/setup)"
-    if setup_pend
-        r += ", setup pendiente"
-    if mom_bias and not (compra ? bias_c : bias_v)
-        r += ", bias H1"
-    if dir_op == (compra ? "Solo ventas" : "Solo compras")
-        r += ", dirección"
-    if (cerrar_ses and fin_ny) or ult_ny
-        r += ", fin de sesión"
-    if tope_dia
-        r += ", tope fondeo"
-    rg = mom_riesgo(compra)
-    if not cabe_riesgo(rg)
-        r += ", SL de " + str.tostring(rg, "#") + " pts pasa la pérdida máx. del día"
-    if (max_sl_atr > 0 and rg > max_sl_atr * atr) or (max_sl_pts > 0 and rg > max_sl_pts)
-        r += ", SL máximo"
-    str.length(r) > 2 ? str.substring(r, 2) : "?"
-if ver_mom_no and operable and cerrada
-    if mom_c and not mom_c[1] and (not senal_mc or not cabe_riesgo(mom_riesgo(true)))
-        label.new(bar_index, low - 0.8 * atr, "✕ momentum ▲: " + mom_motivos(true), style=label.style_label_up, color=color.new(color.purple, 40), textcolor=color.white, size=size.tiny)
-    if mom_v and not mom_v[1] and (not senal_mv or not cabe_riesgo(mom_riesgo(false)))
-        label.new(bar_index, high + 0.8 * atr, "✕ momentum ▼: " + mom_motivos(false), style=label.style_label_down, color=color.new(color.purple, 40), textcolor=color.white, size=size.tiny)
-
 // Por qué no entra un impulso (solo visual)
 imp_motivos(bool compra) =>
     string r = ""
@@ -1071,7 +961,6 @@ if senal_c
         else
             ops_hoy += 1
         op_setup := true
-        op_mom := false
         op_imp := false
         op_stop := sl
         ult_lbl := dibujar(true, ent, sl, tp, "▲ SETUP " + str.tostring(punt_c) + "/6\nBarrido " + mc_txt + (smt_c ? " + SMT" : "") + "\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
@@ -1106,7 +995,6 @@ if senal_v
         else
             ops_hoy += 1
         op_setup := true
-        op_mom := false
         op_imp := false
         op_stop := sl
         ult_lbl := dibujar(false, ent, sl, tp, "▼ SETUP " + str.tostring(punt_v) + "/6\nBarrido " + mv_txt + (smt_v ? " + SMT" : "") + "\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
@@ -1136,7 +1024,6 @@ if senal_fc
         orden_bar := bar_index
         ops_hoy += 1
         op_setup := false
-        op_mom := false
         op_imp := false
         op_stop := sl
         ult_lbl := dibujar(true, ent, sl, tp, "▲ FVG RESPETADO\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
@@ -1164,7 +1051,6 @@ if senal_fv
         orden_bar := bar_index
         ops_hoy += 1
         op_setup := false
-        op_mom := false
         op_imp := false
         op_stop := sl
         ult_lbl := dibujar(false, ent, sl, tp, "▼ FVG RESPETADO\nTP " + tp_nom + " · RR " + str.tostring(rr, "#.#"))
@@ -1190,7 +1076,6 @@ if senal_ic
         orden_bar := bar_index
         ops_hoy += 1
         op_setup := false
-        op_mom := false
         op_imp := true
         op_stop := sl
         ult_lbl := dibujar(true, ent, sl, tp, "▲ IMPULSO\nTP " + str.tostring(rr, "#.#") + "R")
@@ -1214,42 +1099,11 @@ if senal_iv
         orden_bar := bar_index
         ops_hoy += 1
         op_setup := false
-        op_mom := false
         op_imp := true
         op_stop := sl
         ult_lbl := dibujar(false, ent, sl, tp, "▼ IMPULSO\nTP " + str.tostring(rr, "#.#") + "R")
         ult_ct := strategy.closedtrades
         alert("▼ Impulso, venta en " + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick), alert.freq_once_per_bar_close)
-
-// MÓDULO MOMENTUM: entrada a mercado al cierre de la vela
-if senal_mc or senal_mv
-    compra = senal_mc
-    ext = compra ? mom_ext_c : mom_ext_v
-    ent = close
-    sl = mom_sl_m == "Inicio del movimiento" ? (compra ? ext - sl_buf * atr : ext + sl_buf * atr) : (compra ? close - mom_sl_atr * atr : close + mom_sl_atr * atr)
-    sl := math.round_to_mintick(sl)
-    riesgo = compra ? ent - sl : sl - ent
-    if riesgo > 0 and (max_sl_atr == 0 or riesgo <= max_sl_atr * atr) and (max_sl_pts == 0 or riesgo <= max_sl_pts) and cabe_riesgo(riesgo)
-        tp = tope_tp(compra, ent, compra ? ent + mom_tp * riesgo : ent - mom_tp * riesgo)
-        rr = math.abs(tp - ent) / riesgo
-        if strategy.position_size != 0
-            strategy.close_all(comment="Cede a Momentum", immediately=true, alert_message=ct_cerrar)
-        strategy.cancel(compra ? "Venta" : "Compra")
-        strategy.entry(compra ? "Compra" : "Venta", compra ? strategy.long : strategy.short, comment="Momentum" + vol_txt, alert_message=ct_entrada(compra, sl, tp))
-        strategy.exit(compra ? "Salida compra" : "Salida venta", compra ? "Compra" : "Venta", stop=sl, limit=tp, comment_loss="SL", comment_profit="TP", alert_message=ct_cerrar)
-        op_tp := tp
-        op_r  := riesgo
-        op_be := false
-        op_ber := mom_be
-        orden_bar := bar_index
-        mom_hoy += 1
-        op_setup := false
-        op_imp := false
-        op_mom := true
-        op_stop := sl
-        ult_lbl := dibujar(compra, ent, sl, tp, (compra ? "▲" : "▼") + " MOMENTUM\nTP " + str.tostring(rr, "#.#") + "R")
-        ult_ct := strategy.closedtrades
-        alert((compra ? "▲ Momentum, compra en " : "▼ Momentum, venta en ") + syminfo.ticker + ": entrada " + str.tostring(ent, format.mintick) + ", SL " + str.tostring(sl, format.mintick) + ", TP " + str.tostring(tp, format.mintick), alert.freq_once_per_bar_close)
 
 // Break even: cuando la operación va ganando be_r veces el riesgo, el SL pasa al precio de entrada.
 // Cierre por tiempo: si lleva max_velas_op velas abierta, se cierra.
@@ -1264,11 +1118,8 @@ if strategy.position_size != 0 and cerrada
         strategy.exit(largo ? "Salida compra" : "Salida venta", largo ? "Compra" : "Venta", stop=be_px, limit=op_tp, comment_loss="BE", comment_profit="TP", alert_message=ct_cerrar)
     // Trailing de los impulsos: el SL sigue al máximo (mínimo) a imp_tr_dis R, desde que se ha ido ganando imp_tr_ini R
     op_ext := na(op_ext) ? (largo ? high : low) : (largo ? math.max(op_ext, high) : math.min(op_ext, low))
-    tr_on  = (imp_trail and op_imp) or (mom_trail and op_mom)
-    tr_ini = op_mom ? mom_tr_ini : imp_tr_ini
-    tr_dis = op_mom ? mom_tr_dis : imp_tr_dis
-    if tr_on and not na(op_r) and (largo ? op_ext - entp : entp - op_ext) >= tr_ini * op_r
-        tr_px = math.round_to_mintick(largo ? op_ext - tr_dis * op_r : op_ext + tr_dis * op_r)
+    if imp_trail and op_imp and not na(op_r) and (largo ? op_ext - entp : entp - op_ext) >= imp_tr_ini * op_r
+        tr_px = math.round_to_mintick(largo ? op_ext - imp_tr_dis * op_r : op_ext + imp_tr_dis * op_r)
         if na(op_stop) or (largo ? tr_px > op_stop : tr_px < op_stop)
             op_stop := tr_px
             op_be := true
